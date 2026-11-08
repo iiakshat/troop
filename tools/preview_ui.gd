@@ -33,7 +33,9 @@ func _initialize() -> void:
 func _setup() -> void:
 	var game: Node = root.get_node("Game")
 	game.save_path = ""
-	if String(_args.get("state", "demo")) != "fresh":
+	if String(_args.get("state", "demo")) == "fresh":
+		game.boot({})
+	else:
 		_demo_state(game)
 	var bg := ColorRect.new()
 	bg.color = Color("1c4fb8")
