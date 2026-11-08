@@ -859,6 +859,8 @@ func _pass_obstacles() -> void:
 				var n := int(ob.get("fall", 0))
 				if ob.has("fall_pct"):
 					n = int(floor(squad.total() * int(ob["fall_pct"]) / 100.0))
+				# The hero always hops over: a pothole costs troops but never ends the level.
+				n = mini(n, squad.total() - 1)
 				var lost := _hurt(n, "pothole", ob["id"], false)
 				out.append({"type": "pothole_pass", "id": ob["id"], "lane": ob["lane"], "lost": lost, "ob": ob})
 				out.append({"type": "obstacle_hit", "ob": ob, "lost": lost})

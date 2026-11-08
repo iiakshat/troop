@@ -540,7 +540,7 @@ def offer_kinds(rng: random.Random, level: int, n: int, ctx: dict) -> list[str]:
         pool.append(("foe_strip", 1.5))
     if level >= 8:
         pool.append(("foe_div", 0.7))
-    if level >= 9:
+    if level >= 11:
         pool.append(("turncoat", 0.7))
     kinds: list[str] = []
     # At least one growth offer in every row.

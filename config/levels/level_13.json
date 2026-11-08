@@ -16,6 +16,7 @@
     {"at": 168, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 3}, {"lane": 1, "op": "pct", "v": -30, "inc": 10, "step": 10.3, "max": 30}]},
     {"at": 168, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 55, "dmg": 3},
     {"at": 194, "type": "gates", "gates": [{"lane": 0, "op": "pct", "v": 30}, {"lane": 1, "op": "num", "v": -18, "step": 5.2, "max": 16, "inc": 1}, {"lane": 2, "op": "weapon", "id": "smg"}]},
+    {"at": 226, "type": "hint", "id": "gang_split", "icon": "gang_split"},
     {"at": 228, "type": "wave", "groups": [{"enemy": "thug", "n": 108}, {"enemy": "knifer", "n": 300, "gap": 8}]},
     {"at": 252, "type": "hint", "id": "swat", "icon": "swat"},
     {"at": 256, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 40}, {"lane": 1, "op": "foe_div", "k": 2}, {"lane": 2, "op": "num", "v": 32}]},

@@ -5,6 +5,7 @@ extends SceneTree
 ##
 ##   godot --headless --path . --script res://tests/tune.gd -- [levels=A-B | level=N]
 ##       [list=1,5,9] [routes=100] [beam=6] [upgrades=k,s,q] [out=path.json] [calibrate=1] [verbose=1]
+##       [k=0.5 (evaluate with every gang scaled)]
 ##
 ## calibrate=1 searches, per level, the scale for every gang's size (bosses: hp) that makes
 ## the sampled win rate match the level's `target_win`, while the best route still wins
@@ -28,6 +29,7 @@ func _initialize() -> void:
 	var out_path := ""
 	var calibrate := false
 	var only: Array = []
+	var k_eval := 1.0
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("level="):
 			lo = int(a.substr(6))
@@ -52,6 +54,8 @@ func _initialize() -> void:
 			calibrate = true
 		elif a == "verbose=1":
 			verbose = true
+		elif a.begins_with("k="):
+			k_eval = float(a.substr(2))
 	units = Config.units()
 	var t0 := Time.get_ticks_msec()
 	var report: Array = []
@@ -60,7 +64,7 @@ func _initialize() -> void:
 		only = range(lo, hi + 1)
 	for n in only:
 		var level := Config.level(n)
-		var r: Dictionary = calibrate_level(n, level) if calibrate else evaluate(n, level, 1.0)
+		var r: Dictionary = calibrate_level(n, level) if calibrate else evaluate(n, level, k_eval)
 		r["target_ratio"] = float(level.get("target_ratio", -1.0))
 		report.append(r)
 		print("%5d | %4d | %4d/%-5d | %5.0f%% | %-11s | %4d/%-4d %3.0f%% | %5d | %6.1f | %.3f / %.3f" % [

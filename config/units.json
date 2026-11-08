@@ -38,7 +38,7 @@
     "grenadier":  { "name": "Grenadiers","unlock": 27, "hp": 3, "armour": 0, "speed": 2.5,  "power": 1, "cols": 6, "row_gap": 1.1, "stop_at": 26.0, "shoot_every": 2.0, "shot_dmg": 3 }
   },
   "obstacles": {
-    "_note": "Defaults; a level event may override any key. pothole: unshootable, falling in costs `fall` troops (or `fall_pct` % of the squad). barricade: shoot its hp away or crash into it (dmg troops) and lose the next gate in that lane. car: shoot it away or crash (dmg). barrel: shoot it to arm it; it blows up the next gang whose front reaches it.",
+    "_note": "Defaults; a level event may override any key. pothole: unshootable, falling in costs `fall` troops (or `fall_pct` % of the squad); the hero always hops over, so it never ends the level. barricade: shoot its hp away or crash into it (dmg troops) and lose the next gate in that lane. car: shoot it away or crash (dmg). barrel: shoot it to arm it; it blows up the next gang whose front reaches it.",
     "pothole":   { "fall": 4 },
     "barricade": { "hp": 12, "dmg": 6, "block_reach": 45.0 },
     "car":       { "hp": 40, "dmg": 8 },

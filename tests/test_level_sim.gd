@@ -395,6 +395,10 @@ func test_pothole_costs_troops_in_its_lane_only() -> void:
 	eq(_run(lvl, [0])["troops"], 11, "left lane: no hole")
 	eq(_run(lvl, [1])["troops"], 8, "middle: fell in, -3")
 	eq(_run(lvl, [2])["troops"], 6, "right: -50% rounded down")
+	var deep := {"events": [{"at": 30, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 9}, {"at": 60, "type": "finish"}]}
+	var alone := _run(deep, [1])
+	eq(alone["state"], "strike", "the hero hops over: a pothole never ends the level")
+	eq(alone["troops"], 1, "hero alone")
 	var sim := LevelSim.new(lvl, units)
 	sim.set_lane(1)
 	var seen := _step_until(sim, func(): return sim.state != "run")
