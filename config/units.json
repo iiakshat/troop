@@ -5,7 +5,8 @@
     "fire_range": 45.0,
     "spawn_distance": 95.0,
     "contact_z": -1.2,
-    "melee_tick": 0.22
+    "melee_tick": 0.22,
+    "max_squad": 150
   },
   "allies": {
     "hero":      { "name": "Hero",      "dmg": 1, "rate": 3.0, "pierce": false, "proj": "knife" },

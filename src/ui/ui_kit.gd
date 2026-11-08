@@ -23,16 +23,26 @@ const BUTTON_TEX := {
 static var _icons: Dictionary = {}
 
 
+## Glossy full-colour icon (assets/icons/gloss, AI-painted) when there is one, else the
+## white game-icons.net SVG (UI glyphs like pause, close, retry).
 static func icon_texture(name: String) -> Texture2D:
 	if not _icons.has(name):
-		_icons[name] = load("res://assets/icons/%s.svg" % name)
+		var gloss := "res://assets/icons/gloss/%s.png" % name
+		_icons[name] = load(gloss) if ResourceLoader.exists(gloss) else load("res://assets/icons/%s.svg" % name)
 	return _icons[name]
 
 
-## White (or tinted) icon at `size` px.
+static func is_gloss(name: String) -> bool:
+	return ResourceLoader.exists("res://assets/icons/gloss/%s.png" % name)
+
+
+## Icon at `size` px. White SVG glyphs take `tint`; glossy icons keep their colours
+## (only the tint's alpha applies, for fading).
 static func icon(name: String, size := 64, tint := Color.WHITE) -> TextureRect:
 	var t := TextureRect.new()
 	t.texture = icon_texture(name)
+	if is_gloss(name):
+		tint = Color(1, 1, 1, tint.a)
 	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	t.custom_minimum_size = Vector2(size, size)

@@ -3,7 +3,8 @@ extends Node3D
 ## One row of pickups across the road, one per lane.
 ## - Troop pickups (+N constables, +N inspectors) are drawn as the actual people waiting
 ##   in the lane (LevelView pushes them into the crowds) with a small "+N" tag over them.
-## - Everything else (x2, -8, -40%, ÷2 gang, pistol, bomb) is a compact floating sign.
+## - Everything else is a compact floating sign: maths as numbers (x2, -8, -40%), effects as
+##   glossy icons (gang split, broken armour, pistol, SMG, bomb, turncoat), never words.
 ## A red sign shot past zero turns into a troop group: the negative becomes an advantage.
 
 const GREEN := Color(0.18, 0.78, 0.42)
@@ -28,7 +29,7 @@ func setup(r: Dictionary, font: Font, lane_x: Array) -> GateRowView:
 		# Coloured pad on the road marks the lane's offer.
 		var pad := MeshInstance3D.new()
 		var pm := PlaneMesh.new()
-		pm.size = Vector2(2.9, 2.6)
+		pm.size = Vector2(2.6, 2.6)
 		pad.mesh = pm
 		pad.position = Vector3(0, 0.03, 0)
 		var pad_mat := StandardMaterial3D.new()
@@ -42,7 +43,7 @@ func setup(r: Dictionary, font: Font, lane_x: Array) -> GateRowView:
 		root.add_child(sign)
 		var panel := MeshInstance3D.new()
 		var qm := QuadMesh.new()
-		qm.size = Vector2(2.5, 1.6)
+		qm.size = Vector2(2.3, 1.5)
 		panel.mesh = qm
 		var mat := StandardMaterial3D.new()
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -53,6 +54,12 @@ func setup(r: Dictionary, font: Font, lane_x: Array) -> GateRowView:
 		var label := _label(font, 150, 0.011)
 		label.position = Vector3(0, 0, 0.05)
 		sign.add_child(label)
+		var icon := Sprite3D.new()
+		icon.pixel_size = 1.25 / 320.0
+		icon.shaded = false
+		icon.render_priority = 3
+		icon.position = Vector3(0, 0, 0.06)
+		sign.add_child(icon)
 
 		var tag := _label(font, 120, 0.011)
 		tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -61,7 +68,7 @@ func setup(r: Dictionary, font: Font, lane_x: Array) -> GateRowView:
 		root.add_child(tag)
 
 		_panels[lane] = {"gate": gate, "root": root, "sign": sign, "mat": mat, "label": label,
-			"tag": tag, "pad_mat": pad_mat, "flash": 0.0, "pop": 0.0}
+			"icon": icon, "tag": tag, "pad_mat": pad_mat, "flash": 0.0, "pop": 0.0}
 		refresh(gate)
 	return self
 
@@ -88,8 +95,22 @@ func refresh(gate: Dictionary, ticked := false) -> void:
 	(p["sign"] as Node3D).visible = not troops
 	(p["tag"] as Label3D).visible = troops
 	(p["tag"] as Label3D).text = info["text"]
-	(p["label"] as Label3D).text = info["text"]
-	(p["label"] as Label3D).font_size = 150 if String(info["text"]).length() <= 4 else 84
+	var label: Label3D = p["label"]
+	var icon: Sprite3D = p["icon"]
+	label.text = info["text"]
+	label.font_size = 150 if String(info["text"]).length() <= 4 else 84
+	var icon_name := String(info.get("icon", ""))
+	icon.visible = icon_name != ""
+	if icon.visible:
+		icon.texture = UiKit.icon_texture(icon_name)
+		# Icon alone sits in the middle; with a number they share the sign.
+		var solo := String(info["text"]) == ""
+		icon.position.x = 0.0 if solo else -0.6
+		icon.pixel_size = (1.35 if solo else 1.05) / 320.0
+		label.position.x = 0.0 if solo else 0.55
+		label.font_size = 130
+	else:
+		label.position.x = 0.0
 	var c: Color = info["color"]
 	(p["mat"] as StandardMaterial3D).albedo_color = Color(c, 0.85)
 	(p["pad_mat"] as StandardMaterial3D).albedo_color = Color(c, 0.35)
@@ -146,13 +167,15 @@ static func describe(g: Dictionary) -> Dictionary:
 			var v := int(g["v"])
 			return {"text": ("+%d%%" % v) if v >= 0 else ("-%d%%" % -v), "color": GREEN if v >= 0 else RED}
 		"foe_div":
-			return {"text": "GANG ÷%d" % int(g["k"]), "color": BLUE}
+			return {"text": "÷%d" % int(g["k"]), "icon": "gang_split", "color": BLUE}
 		"foe_strip":
-			return {"text": "NO ARMOUR", "color": BLUE}
+			return {"text": "", "icon": "armour_break", "color": BLUE}
+		"turncoat":
+			return {"text": "%d" % int(g.get("n", 1)), "icon": "turncoat", "color": BLUE}
 		"weapon":
-			return {"text": String(g["id"]).to_upper(), "color": GOLD}
+			return {"text": "", "icon": String(g["id"]), "color": GOLD}
 		"power":
-			return {"text": "+%d %s" % [int(g.get("n", 1)), String(g["id"]).to_upper()], "color": GOLD}
+			return {"text": "+%d" % int(g.get("n", 1)), "icon": String(g["id"]), "color": GOLD}
 	return {"text": "?", "color": Color.GRAY}
 
 

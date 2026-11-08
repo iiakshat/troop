@@ -1,0 +1,8 @@
+A game icon sheet: exactly 16 icons in a precise 4 x 4 grid of equal square cells, on a perfectly flat solid pure magenta background (#FF00FF) everywhere, with no cell borders, no gradients and no shadows on the background. Each icon sits centred in its cell with generous empty magenta margin around it and never touches another icon.
+
+Style for every icon: premium glossy 3D mobile game icon like Brawl Stars or Clash Royale. Chunky rounded shapes, bold saturated colours, strong soft highlights and gloss, a thick dark navy outline around the whole silhouette, viewed slightly from the front at a 3/4 angle. No text, no letters, no numbers anywhere. Do not use magenta or pink inside any icon.
+
+Row 1: a shiny gold coin with an embossed star; a faceted emerald green gem; a gold trophy cup; a fat gold star.
+Row 2: a glowing blue energy shield; a round black bomb with a lit sparking fuse; a throwing knife with a steel blade and red handle pointing up-right; a black pistol.
+Row 3: a compact black submachine gun; a gold police badge shaped like a six-point star; a brown detective fedora hat with a magnifying glass; a black SWAT tactical helmet with a dark visor.
+Row 4: a small blue-and-white police station building with a blue roof light; a bulging brown money sack tied with a rope with gold coins spilling; a cracked broken steel armour helmet; a red angry gang skull split cleanly into two halves.

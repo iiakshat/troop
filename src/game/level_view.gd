@@ -12,7 +12,7 @@ signal strike_ready
 signal tutorial(active: bool)
 signal finished(result: Dictionary)
 
-const LANE_X := [-3.2, 0.0, 3.2]
+const LANE_X := [-2.8, 0.0, 2.8]
 const ALLY_CAP := 72
 const HORDE_CAP := 180
 const DT := 1.0 / 60.0
@@ -64,7 +64,9 @@ var _obstacles: Dictionary = {}  # id -> {ob, node}
 var _anim_t := 0.0             # animation clock (seconds)
 
 const RUN_SPEED := 1.7         # the baked walk cycle played faster reads as a run
-const SHOOT_YAW := 0.45        # the shoot clip aims to the right; turn the body so the gun points ahead
+const CORPSE_CAP := 260        # bodies lying on the road (oldest go first)
+const FALL_TIME := 0.32        # seconds to topple flat
+const BODY_TIME := 1.1         # seconds a body lies on the road before dissolving
 
 
 func setup(level: Dictionary, upgrades: Dictionary, w: World, f: Fx, fnt: Font, is_demo := false) -> LevelView:
@@ -80,7 +82,7 @@ func setup(level: Dictionary, upgrades: Dictionary, w: World, f: Fx, fnt: Font, 
 
 func _ready() -> void:
 	for k in ALLY_KINDS + ENEMY_KINDS:
-		var cap := ALLY_CAP + 40 if k in ALLY_KINDS else HORDE_CAP * 3
+		var cap := (ALLY_CAP if k in ALLY_KINDS else HORDE_CAP * 3) + CORPSE_CAP
 		var c := Crowd.new().setup(k, cap)
 		add_child(c)
 		_crowds[k] = c
@@ -519,15 +521,22 @@ func _sync_allies(source: Vector3) -> void:
 		_allies[i]["slot"] = i
 
 
+## Figure scale for a crowd of n shown figures: full size up to 20, down to 78% at 80+,
+## so a huge army reads as a dense mob instead of a pile-up.
+static func crowd_scale(n: int) -> float:
+	return lerpf(1.0, 0.78, clampf((n - 20) / 60.0, 0.0, 1.0))
+
+
 func _slot_pos(slot: int, n: int) -> Vector3:
 	var lift := -7.0 if demo else 0.0  # lobby: squad further up the street, above the menu
 	if slot == 0:
 		return Vector3(_squad_x, 0, -0.5 + lift)
 	var i := slot - 1
-	var r := 0.4 * sqrt(i + 0.7)
+	var k := crowd_scale(n)
+	var r := 0.4 * k * sqrt(i + 0.7)
 	var a := i * 2.39996
-	var radius := 0.4 * sqrt(maxf(n, 1))
-	return Vector3(_squad_x + cos(a) * r * 1.25, 0, 0.5 + radius * 0.6 + sin(a) * r * 0.65 + lift)
+	var radius := 0.4 * k * sqrt(maxf(n, 1))
+	return Vector3(_squad_x + cos(a) * r * 1.35, 0, 0.3 + radius * 0.45 + sin(a) * r * 0.5 + lift)
 
 
 # ---------------------------------------------------------------- visuals
@@ -547,6 +556,7 @@ func _update_visuals(d: float) -> void:
 
 	# Allies
 	var n := _allies.size()
+	var ally_k := crowd_scale(_allies.size())
 	for a in _allies:
 		var target := _slot_pos(int(a["slot"]), n)
 		var pos: Vector3 = a["pos"]
@@ -576,12 +586,11 @@ func _update_visuals(d: float) -> void:
 			var clip := "punch" if _hero_throw_t >= 0.0 else "idle"
 			(_crowds["hero"] as Crowd).push(Transform3D(basis, pos), clip, maxf(_hero_throw_t, 0.0) if clip == "punch" else _anim_t)
 		elif aim > 0.0:
-			basis = basis * Basis(Vector3.UP, SHOOT_YAW)
-			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis, pos), "shoot", _anim_t + ph, float(a["flash"]))
+			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis.scaled(Vector3.ONE * ally_k), pos), "shoot", _anim_t + ph, float(a["flash"]))
 		elif moving:
-			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis, pos), "run", (_anim_t + ph) * RUN_SPEED, float(a["flash"]))
+			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis.scaled(Vector3.ONE * ally_k), pos), "run", (_anim_t + ph) * RUN_SPEED, float(a["flash"]))
 		else:
-			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis, pos), "idle", _anim_t + ph, float(a["flash"]))
+			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis.scaled(Vector3.ONE * ally_k), pos), "idle", _anim_t + ph, float(a["flash"]))
 
 	# Enemies
 	for id in _hordes:
@@ -599,11 +608,9 @@ func _update_visuals(d: float) -> void:
 		var speed := 1.0 if h["stopped"] else RUN_SPEED * clampf(float(h["vrel"]) / 10.0, 0.8, 1.6)
 		var flash := float(hv["shoot_flash"])
 		hv["shoot_flash"] = maxf(flash - d, 0.0)
-		var face := Basis(Vector3.UP, PI)
+		var face := Basis(Vector3.UP, PI).scaled(Vector3.ONE * crowd_scale(offs.size()))
 		if hv["kind"] == "boss":
 			face = face.scaled(Vector3.ONE * 2.2)
-		if h["stopped"]:
-			face = face * Basis(Vector3.UP, SHOOT_YAW)
 		for o in offs:
 			crowd.push(Transform3D(face, _fig_pos(hv, o)), clip, (_anim_t + o.y * 3.0) * speed, flash * 2.0)
 		var lab: Label3D = hv["label"]
@@ -644,20 +651,31 @@ func _update_visuals(d: float) -> void:
 			continue
 		(_crowds[c["kind"]] as Crowd).push(Transform3D(Basis(Vector3.UP, PI), p), "punch", float(c["t"]) * 1.4)
 		i += 1
+	# Dead bodies: topple backwards flat onto the road, then ride the street past the squad
+	# and off the bottom of the screen.
+	while _dying.size() > CORPSE_CAP:
+		_dying.pop_front()
 	i = 0
 	while i < _dying.size():
 		var dd: Dictionary = _dying[i]
 		dd["t"] = float(dd["t"]) + d
 		var t := float(dd["t"])
-		if t > 1.3:
-			_dying.remove_at(i)
-			continue
 		var p: Vector3 = dd["pos"]
 		p.z += sim.S * d * (1.0 if _state == "play" or _state == "done" else 0.0)
 		dd["pos"] = p
-		var sink := maxf(t - 1.0, 0.0) * 3.0
-		var flash := maxf(0.0, 1.0 - t * 5.0)
-		(_crowds[dd["kind"]] as Crowd).push(Transform3D(dd["basis"] as Basis, p - Vector3(0, sink, 0)), "die", t * 2.2, flash)
+		if t > BODY_TIME + 0.5 or p.z > 4.0:
+			_dying.remove_at(i)
+			continue
+		if not dd.has("spin"):
+			dd["spin"] = randf_range(-0.5, 0.5)
+		var k := clampf(t / FALL_TIME, 0.0, 1.0)
+		var fall := (k * k) * PI * 0.5                        # accelerate like a falling body
+		var bounce := sin(clampf((t - FALL_TIME) / 0.25, 0.0, 1.0) * PI) * 0.12
+		var basis: Basis = (dd["basis"] as Basis) * Basis(Vector3.UP, float(dd["spin"])) * Basis(Vector3.RIGHT, -(fall - bounce))
+		var flash := maxf(0.0, 1.0 - t * 6.0)
+		if t > BODY_TIME:
+			flash = -clampf((t - BODY_TIME) / 0.5, 0.0, 1.0)  # dissolve away
+		(_crowds[dd["kind"]] as Crowd).push(Transform3D(basis, p + Vector3(0, 0.05, 0)), "hit", minf(t, 0.15), flash)
 		i += 1
 
 	for k in _crowds:

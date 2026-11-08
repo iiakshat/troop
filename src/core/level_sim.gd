@@ -70,6 +70,7 @@ func _init(level: Dictionary, units_cfg: Dictionary, upgrades: Dictionary = {}) 
 	var hero: Dictionary = stats["hero"]
 	hero["dmg"] = float(hero["dmg"]) + float(upgrades.get("knife", 0))
 	hero["rate"] = float(hero["rate"]) + 0.5 * float(upgrades.get("speed", 0))
+	squad.cap = int(w.get("max_squad", 0)) + int(upgrades.get("capacity", 0))
 	squad.add("constable", int(upgrades.get("squad", 0)))
 
 	var ch: Dictionary = level.get("charges", {})

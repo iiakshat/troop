@@ -7,11 +7,14 @@ extends RefCounted
 ## - ×k makes total() exactly k times bigger: every recruit brings k-1 more of the same
 ##   rank, and the hero (who can't be copied) brings k-1 constables.
 ## - Losses take the lowest rank first; the hero falls last, and that ends the level.
+## - The squad never grows past `cap` (shown as a bar under the counter); gains that would
+##   overflow it are dropped, lowest rank first.
 
 const LOSS_ORDER := ["constable", "inspector", "swat", "hero"]
 
 var counts: Dictionary = {"hero": 1, "constable": 0, "inspector": 0, "swat": 0}
 var hero_weapon: String = ""
+var cap := 0   # 0 = no limit
 
 
 func total() -> int:
@@ -31,6 +34,8 @@ func hero_alive() -> bool:
 
 func add(rank: String, n: int) -> int:
 	n = maxi(n, 0)
+	if cap > 0:
+		n = mini(n, maxi(cap - total(), 0))
 	counts[rank] = count(rank) + n
 	return n
 
@@ -43,7 +48,14 @@ func multiply(k: int) -> int:
 		if rank != "hero":
 			counts[rank] = count(rank) * k
 	counts["constable"] = count("constable") + count("hero") * (k - 1)
+	_clamp()
 	return total() - before
+
+
+## Trims overflow above `cap`, lowest rank first.
+func _clamp() -> void:
+	if cap > 0 and total() > cap:
+		lose(total() - cap)
 
 
 ## Removes up to n troops, lowest rank first. Returns how many were actually lost.
@@ -114,4 +126,5 @@ func duplicate_squad() -> Squad:
 	var s := Squad.new()
 	s.counts = counts.duplicate()
 	s.hero_weapon = hero_weapon
+	s.cap = cap
 	return s

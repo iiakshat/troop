@@ -68,3 +68,14 @@ func test_armour_and_pierce() -> void:
 	eq(s.dps(stats, {}, 1), 6.0, "armour 1 halves pistols and knife")
 	s.add("inspector", 1)
 	eq(s.dps(stats, {}, 1), 9.0, "inspector pierces")
+
+
+func test_cap_limits_growth() -> void:
+	var s := _squad(10)
+	s.cap = 30
+	eq(s.add("constable", 50), 19, "only room for 19 more")
+	eq(s.total(), 30, "full")
+	s.lose(10)
+	s.multiply(3)
+	eq(s.total(), 30, "x3 of 20 stops at the cap")
+	eq(s.count("hero"), 1, "hero kept")

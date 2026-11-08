@@ -118,9 +118,9 @@ func _camera() -> void:
 	camera.fov = 56.0
 	camera.near = 0.5
 	camera.far = 220.0
-	camera.position = Vector3(0, 6.4, 6.4)
+	camera.position = Vector3(0, 7.0, 7.4)
 	add_child(camera)
-	camera.look_at(Vector3(0, 0.6, -10.0), Vector3.UP)
+	camera.look_at(Vector3(0, 0.5, -9.0), Vector3.UP)
 	_cam_base = camera.transform
 	camera.current = true
 

@@ -10,6 +10,7 @@ signal pause_pressed
 var _progress: ProgressBar
 var _troops: HBoxContainer
 var _troops_pop := 0.0
+var _cap_bar: ProgressBar
 var _power_buttons: Dictionary = {}
 var _banner: Label
 var _banner_t := 0.0
@@ -58,8 +59,28 @@ func _ready() -> void:
 	_progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top.add_child(_progress)
 	_troops = UiKit.pill("person", "1", Color("8fd0ff"))
-	_troops.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	top.add_child(_troops)
+	# Troop counter with the squad's capacity bar under it.
+	var tcol := VBoxContainer.new()
+	tcol.add_theme_constant_override("separation", 4)
+	tcol.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	tcol.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top.add_child(tcol)
+	tcol.add_child(_troops)
+	_cap_bar = ProgressBar.new()
+	_cap_bar.show_percentage = false
+	_cap_bar.custom_minimum_size = Vector2(0, 16)
+	_cap_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var cbg := StyleBoxFlat.new()
+	cbg.bg_color = Color(0.05, 0.12, 0.3, 0.6)
+	cbg.set_corner_radius_all(8)
+	cbg.set_border_width_all(3)
+	cbg.border_color = UiKit.INK
+	var cfill := StyleBoxFlat.new()
+	cfill.bg_color = Color("8fd0ff")
+	cfill.set_corner_radius_all(6)
+	_cap_bar.add_theme_stylebox_override("background", cbg)
+	_cap_bar.add_theme_stylebox_override("fill", cfill)
+	tcol.add_child(_cap_bar)
 
 	_banner = UiKit.label("", 92, UiKit.RED, 18)
 	_banner.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
@@ -112,6 +133,14 @@ func set_progress(p: float) -> void:
 func set_troops(n: int) -> void:
 	UiKit.pill_set(_troops, str(n))
 	_troops_pop = 1.0
+	_cap_bar.value = n
+	# Full squad: the bar turns gold.
+	(_cap_bar.get_theme_stylebox("fill") as StyleBoxFlat).bg_color = UiKit.GOLD if n >= _cap_bar.max_value else Color("8fd0ff")
+
+
+func set_capacity(cap: int) -> void:
+	_cap_bar.max_value = maxi(cap, 1)
+	_cap_bar.visible = cap > 0
 
 
 func set_charges(charges: Dictionary) -> void:

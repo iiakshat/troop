@@ -83,6 +83,7 @@ func _start_level(n: int) -> void:
 	view.banner.connect(hud.show_banner)
 	view.charges_changed.connect(hud.set_charges)
 	view.squad_changed.connect(hud.set_troops)
+	hud.set_capacity(view.sim.squad.cap)
 	hud.set_troops(view.sim.squad.total())
 	view.tutorial.connect(hud.set_tutorial)
 	view.strike_ready.connect(hud.enter_finale)
