@@ -1,5 +1,5 @@
 {
-  "_note": "All combat numbers. dmg = damage per hit, rate = hits per second. Armour halves every hit per point unless the attacker pierces. multi = enemies hit per shot (only vs one-hit kills); splash = enemies each shot hits (never more than the gang holds). target toughest = shoots the toughest gang in range (bosses first) instead of the nearest. unlock = first level where the rank/enemy appears (tools/gen_levels.py reads it). shield = riot-shield hp per unit, soaked before any kill (piercing fire passes). cols/row_gap = gang formation. stop_at = holds that distance and attacks; shoot_range = attacks while still walking (bosses). Gunfire: every shoot_every s each living shooter kills shot_dmg troops. Molotov: every throw_every s the group lobs a firebomb into the lane the squad is in; it lands flight s later and burns `burn` troops per living thrower if the squad is still in that lane. Sniper foe: every shoot_every s, after an `aim` s laser, each living sniper kills shot_dmg. SHIELD blocks all ranged hits and melee.",
+  "_note": "All combat numbers. dmg = damage per hit, rate = hits per second. Armour halves every hit per point unless the attacker pierces. multi = enemies hit per shot (only vs one-hit kills); splash = enemies each shot hits (never more than the gang holds). target toughest = shoots the toughest gang in range (bosses first) instead of the nearest; one_per_shot = a shot never kills more than the one enemy it hits (damage capped at that enemy's hp). unlock = first level where the rank/enemy appears (tools/gen_levels.py reads it). shield = riot-shield hp per unit, soaked before any kill (piercing fire passes). cols/row_gap = gang formation. stop_at = holds that distance and attacks; shoot_range = attacks while still walking (bosses). Gunfire: every shoot_every s each living shooter kills shot_dmg troops. Molotov: every throw_every s the group lobs a firebomb into the lane the squad is in; it lands flight s later and burns `burn` troops per living thrower if the squad is still in that lane. Sniper foe: every shoot_every s, after an `aim` s laser, each living sniper kills shot_dmg. SHIELD blocks all ranged hits and melee.",
   "world": {
     "scroll_speed": 8.0,
     "scroll_accel": 12.0,
@@ -18,7 +18,7 @@
     "sergeant":  { "name": "Sergeant",  "unlock": 4,  "dmg": 2,  "rate": 1.6,  "pierce": false, "proj": "pellet" },
     "inspector": { "name": "Inspector", "unlock": 7,  "dmg": 3,  "rate": 1.6,  "pierce": true,  "proj": "bullet_big" },
     "swat":      { "name": "SWAT",      "unlock": 13, "dmg": 1,  "rate": 3.2,  "pierce": false, "multi": 2, "proj": "bullet" },
-    "sniper":    { "name": "Sniper",    "unlock": 21, "dmg": 16, "rate": 0.4,  "pierce": true,  "target": "toughest", "proj": "sniper_round" },
+    "sniper":    { "name": "Sniper",    "unlock": 21, "dmg": 16, "rate": 0.4,  "pierce": true,  "target": "toughest", "one_per_shot": true, "proj": "sniper_round" },
     "commando":  { "name": "Commando",  "unlock": 31, "dmg": 2,  "rate": 0.96, "pierce": false, "splash": 5, "proj": "rocket" }
   },
   "hero_weapons": {

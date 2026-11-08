@@ -159,7 +159,7 @@ func _fit_win(base: Dictionary, routes: Array, target: float, kf: float) -> floa
 ## kf (final wave only, on top of k) that leaves the best route about `want` of its peak.
 func _fit_ratio(base: Dictionary, k: float, want: float) -> float:
 	var lo := log(0.4)
-	var hi := log(8.0)
+	var hi := log(20.0)
 	for i in 8:
 		var mid := (lo + hi) * 0.5
 		var r := _ratio(best_route(scaled_level(base, k, exp(mid)), true)["result"])

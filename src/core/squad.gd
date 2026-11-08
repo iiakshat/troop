@@ -150,10 +150,15 @@ static func _counts_for(unit: Dictionary, which: int) -> bool:
 	return true
 
 
-static func hit_value(unit: Dictionary, armour: int, hp := 1.0, enemies := 1 << 30) -> float:
+## Damage per second of one `unit` against enemies with `hp` and `armour`. A unit with
+## `"one_per_shot": true` (the sniper) can't kill more than the one enemy it hits: its
+## damage per shot is capped at that enemy's hp, unless `nominal` (the Codex value line).
+static func hit_value(unit: Dictionary, armour: int, hp := 1.0, enemies := 1 << 30, nominal := false) -> float:
 	var dmg := float(unit.get("dmg", 1))
 	if not bool(unit.get("pierce", false)):
 		dmg = dmg / float(1 + maxi(armour, 0))
+	if not nominal and bool(unit.get("one_per_shot", false)):
+		dmg = minf(dmg, maxf(hp, 0.0))
 	var multi := float(unit.get("multi", 1))
 	if multi > 1.0 and hp > dmg:
 		multi = 1.0
@@ -163,15 +168,18 @@ static func hit_value(unit: Dictionary, armour: int, hp := 1.0, enemies := 1 << 
 
 
 ## How many constables one of `rank` is worth in damage per second, from config.
-## Defaults compare against a crowd of 1-hp, unarmoured enemies (the Codex "= N" line);
-## pass hp/armour/enemies for a specific target, e.g. a boss: (stats, "sniper", 360, 1, 1).
-static func value_vs_constable(stats: Dictionary, rank: String, hp := 1.0, armour := 0, enemies := 1 << 30) -> float:
+## With hp = 0 (default) it is the nominal Codex "= N" line: a crowd of unarmoured enemies,
+## every rank at its best (bursts and splash count, a sniper round's full damage counts).
+## Pass hp/armour/enemies for a specific target, e.g. a boss: (stats, "sniper", 360, 1, 1).
+static func value_vs_constable(stats: Dictionary, rank: String, hp := 0.0, armour := 0, enemies := 1 << 30) -> float:
 	if not stats.has(rank) or not stats.has("constable"):
 		return 0.0
-	var base := hit_value(stats["constable"], armour, hp, enemies)
+	var nominal := hp <= 0.0
+	var h := 1.0 if nominal else hp
+	var base := hit_value(stats["constable"], armour, h, enemies, nominal)
 	if base <= 0.0:
 		return 0.0
-	return hit_value(stats[rank], armour, hp, enemies) / base
+	return hit_value(stats[rank], armour, h, enemies, nominal) / base
 
 
 func duplicate_squad() -> Squad:

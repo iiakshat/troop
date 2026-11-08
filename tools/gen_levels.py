@@ -205,10 +205,12 @@ class Sq:
         return self.dps(0, 1.0, 1 << 30) / float(ALLIES["constable"]["rate"])
 
 
-def hit_value(unit: dict, armour: int, hp: float, enemies: int) -> float:
+def hit_value(unit: dict, armour: int, hp: float, enemies: int, nominal: bool = False) -> float:
     dmg = float(unit.get("dmg", 1))
     if not unit.get("pierce", False):
         dmg = dmg / float(1 + max(armour, 0))
+    if not nominal and unit.get("one_per_shot", False):
+        dmg = min(dmg, max(hp, 0.0))
     multi = float(unit.get("multi", 1))
     if multi > 1.0 and hp > dmg:
         multi = 1.0
@@ -499,8 +501,9 @@ def offer(rng: random.Random, kind: str, sq: Sq, lane: int, level: int, ctx: dic
 
 
 def sq_value(rank: str) -> float:
-    base = hit_value(ALLIES["constable"], 0, 1.0, 1 << 30)
-    return hit_value(ALLIES[rank], 0, 1.0, 1 << 30) / base
+    """Nominal value line (Squad.value_vs_constable with defaults)."""
+    base = hit_value(ALLIES["constable"], 0, 1.0, 1 << 30, True)
+    return hit_value(ALLIES[rank], 0, 1.0, 1 << 30, True) / base
 
 
 def apply_gate(sq: Sq, g: dict) -> None:

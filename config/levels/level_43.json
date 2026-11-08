@@ -35,11 +35,11 @@
     {"at": 459, "type": "gates", "gates": [{"lane": 1, "op": "pct", "v": 50}, {"lane": 2, "op": "recruit", "unit": "sniper", "n": 10}]},
     {"at": 459, "type": "obstacle", "kind": "pothole", "lane": 0, "fall": 32},
     {"at": 493, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "riot", "n": 160, "gap": 6}]},
-    {"at": 522, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 110}]},
-    {"at": 522, "type": "obstacle", "kind": "pothole", "lane": 2, "fall": 40},
-    {"at": 522, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 615, "dmg": 28},
+    {"at": 522, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 115}]},
+    {"at": 522, "type": "obstacle", "kind": "pothole", "lane": 2, "fall": 45},
+    {"at": 522, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 555, "dmg": 30},
     {"at": 556, "type": "wave", "groups": [{"enemy": "biker", "n": 90}]},
-    {"at": 584, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "commando", "n": 9}, {"lane": 1, "op": "pct", "v": -50, "inc": 10, "step": 104.4, "max": 30}, {"lane": 2, "op": "pct", "v": -30, "inc": 10, "step": 139.1, "max": 30}]},
+    {"at": 584, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "commando", "n": 9}, {"lane": 1, "op": "pct", "v": -50, "inc": 10, "step": 88.8, "max": 30}, {"lane": 2, "op": "pct", "v": -30, "inc": 10, "step": 118.3, "max": 30}]},
     {"at": 618, "type": "wave", "groups": [{"enemy": "knifer", "n": 300}, {"enemy": "sniper_foe", "n": 24, "gap": 14}], "label": "GANG WAR"},
     {"at": 654, "type": "finish"}
   ]
