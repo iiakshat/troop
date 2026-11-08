@@ -29,13 +29,14 @@ A 2.5D arithmetic army game for Android (portrait, offline). The squad stays put
   - Bright-cartoon icon UI, recorded CC0 SFX and music.
   - One-time icon hints.
   - 28 tests pass; every level plays end to end headless (autoplay + finale).
-- **Build blocker:** GitHub Actions is refused for the whole account ("locked due to a billing issue"). No APK until the owner fixes billing. Alternative: install the Android SDK and Java into `../_tools` and build locally (needs the owner's OK).
+- **APKs are built locally** (owner's choice, 2026-11-08): GitHub Actions is refused for the whole account ("locked due to a billing issue"), so `build_apk.bat` builds on the laptop. The CI workflow stays in the repo for when billing is fixed (each push currently fails there, which is harmless).
 - **Not done:** analytics, ads, store listing, real-device performance check on low-end phones, package ID, name check. Gunshots are still synthesised (CC0 firearm library is 194 MB, not pulled).
 - **v0.1 (earlier):** first playable, 3 levels, procedural box characters.
 
 ## Commands
 
 - Play on PC: double-click `play.bat` (arrows or A/D or swipe to change lane, S = shield, B = bomb). `play.bat -- lobby=1` opens the menu; `-- coins=2000` unlocks everything for testing.
+- Android APK: `build_apk.bat` runs the tests, exports `build/troop-debug.apk` at low CPU priority, and installs it on a USB-connected phone if there is one (`build_apk.bat noinstall` skips that). One-time setup: `python -I tools/setup_android.py` installs only adb, apksigner (build-tools 36), a Java 17 runtime into `../_tools` (~280 MB), the Godot Android templates (only those files, ~220 MB) and a debug keystore, and points Godot's editor settings at them. No Android Studio, NDK or Gradle.
 - Re-bake characters after editing `config/characters.json`: `$G --headless --path . --script res://tools/bake_vat.gd [-- only=hero]`; preview: `$G --path . res://tools/preview_chars.tscn -- clip=run`.
 - Godot: `../_tools/godot/Godot_v4.7.2-stable_win64_console.exe` (call it `$G`).
 - Import: `$G --headless --path . --import`
@@ -57,4 +58,4 @@ A 2.5D arithmetic army game for Android (portrait, offline). The squad stays put
 - The arithmetic must stay exact (see DECISIONS.md). Never fake an outcome.
 - No floating words on game objects (owner). Numbers on pickups and gangs only.
 - Original assets only; log anything new in `ASSETS.md`.
-- Git: local config is iiakshat / jakshat569@gmail.com. Remote `iiakshat/troop` (public). Work on `dev` only; CI fast-forwards `main` after a green build. Push with the token in `.env` via a per-command auth header.
+- Git: local config is iiakshat / jakshat569@gmail.com. Remote `iiakshat/troop` (public). Work on `dev` only; after a green local `build_apk.bat`, fast-forward `main` to `dev` and push both. Push with the token in `.env` via a per-command auth header.

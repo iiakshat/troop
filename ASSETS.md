@@ -21,6 +21,7 @@ Research notes, verified URLs and checks are in `docs/ASSET_SOURCES.md`. Everyth
 | `assets/audio/knife*, coin_bag` | Kenney, *50 RPG sound effects*, OGA RPGsounds_Kenney.zip | CC0 1.0 |
 | `assets/audio/music_fight.ogg` | XCVG, *fight_looped*, OGA fight_looped.ogg | CC0 1.0 |
 | Gunshots, hits, explosions and other synth sounds | Synthesised at startup in `src/autoload/sfx.gd` | Our own |
+| `icon.svg` (app icon) | Our own composition around the game-icons.net knife icon (`assets/icons/knife.svg`) | CC BY 3.0 (credited in-game) + our own |
 | Bottles (lathe meshes + glass shader), bullets, particles, road and building shaders | Code in `src/finale/`, `src/game/` | Our own |
 
 Add a row before adding any new asset. Prefer CC0. Anything CC BY must also go into `SettingsPanel.CREDITS`.
