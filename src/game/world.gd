@@ -121,31 +121,47 @@ func _ground() -> void:
 		add_child(lot)
 
 
+const ENV := "res://assets/env/"
+const FRONT := ["building-a", "building-b", "building-c", "building-d", "building-e", "building-f", "building-g", "building-h",
+	"building-skyscraper-a", "building-skyscraper-c", "building-skyscraper-e"]
+const BACK := ["low-detail-building-a", "low-detail-building-b", "low-detail-building-c", "low-detail-building-f",
+	"low-detail-building-g", "low-detail-building-h", "low-detail-building-l", "low-detail-building-m"]
+
+static var _scenes: Dictionary = {}
+
+
+## Instances a Kenney/KayKit model (cached PackedScene), scaled uniformly.
+static func model(path: String, scale := 1.0) -> Node3D:
+	if not _scenes.has(path):
+		_scenes[path] = load(ENV + path)
+	var n: Node3D = (_scenes[path] as PackedScene).instantiate()
+	n.scale = Vector3.ONE * scale
+	return n
+
+
 func _buildings() -> void:
-	var bmat := ShaderMaterial.new()
-	bmat.shader = load("res://src/game/building.gdshader")
+	# Two rows per side: storefronts on the street, tall low-detail blocks behind.
 	for side in [-1, 1]:
 		var z := NEAR_Z
 		while z > FAR_Z:
-			var w := _rng.randf_range(7.0, 12.0)
-			var h := _rng.randf_range(7.0, 24.0)
-			var d := _rng.randf_range(7.0, 10.0)
-			var b := MeshInstance3D.new()
-			var bm := BoxMesh.new()
-			bm.size = Vector3(d, h, w - 0.8)
-			b.mesh = bm
-			var mat := bmat.duplicate() as ShaderMaterial
-			mat.set_shader_parameter("base", Color(BUILDING_COLORS[_rng.randi() % BUILDING_COLORS.size()]))
-			mat.set_shader_parameter("size", bm.size)
-			b.material_override = mat
-			b.position = Vector3(side * (ROAD_HALF + 3.6 + d * 0.5), h * 0.5, z - w * 0.5)
+			var name: String = FRONT[_rng.randi() % FRONT.size()]
+			var sky := name.contains("skyscraper")
+			var k := 7.0 if sky else 9.0
+			var width := (1.36 if sky else 1.0) * k
+			var b := model("commercial/%s.glb" % name, k)
+			b.rotation.y = PI * 0.5 * -side
+			b.position = Vector3(side * (ROAD_HALF + 3.4 + width * 0.5), 0, z - width * 0.5)
 			add_child(b)
 			_movers.append(b)
-			# Roof trim
-			var trim := _box(Vector3(d + 0.3, 0.4, w - 0.5), Color(BUILDING_COLORS[_rng.randi() % BUILDING_COLORS.size()]).darkened(0.25))
-			trim.position = Vector3(0, h * 0.5 + 0.2, 0)
-			b.add_child(trim)
-			z -= w
+			z -= width + 0.4
+		z = NEAR_Z - 3.0
+		while z > FAR_Z:
+			var back := model("commercial/%s.glb" % BACK[_rng.randi() % BACK.size()], 16.0)
+			back.rotation.y = PI * 0.5 * -side
+			back.position = Vector3(side * (ROAD_HALF + 3.4 + 18.0), 0, z - 4.0)
+			add_child(back)
+			_movers.append(back)
+			z -= 8.5
 
 
 func _props() -> void:
@@ -154,44 +170,22 @@ func _props() -> void:
 		var i := 0
 		while z > FAR_Z:
 			var prop: Node3D
-			if i % 2 == 0:
-				prop = _lamp(side)
-			else:
-				prop = _tree()
-			prop.position = Vector3(side * (ROAD_HALF + 2.6), 0.2, z)
+			match i % 4:
+				0:
+					prop = model("roads/light-square.glb" if side < 0 else "roads/light-curved.glb", 8.0)
+					prop.rotation.y = PI * 0.5 * side
+				1:
+					prop = model("bits/bush.gltf", 6.5)
+				2:
+					prop = model("bits/firehydrant.gltf" if (i / 4) % 2 == 0 else "bits/trash_A.gltf", 4.0)
+				3:
+					prop = model("bits/bench.gltf", 4.0)
+					prop.rotation.y = PI * 0.5 * side
+			prop.position = Vector3(side * (ROAD_HALF + 1.0 + (0.0 if i % 4 == 0 else 1.2)), 0.2, z)
 			add_child(prop)
 			_movers.append(prop)
-			z -= 9.0
+			z -= 6.5
 			i += 1
-
-
-func _lamp(side: int) -> Node3D:
-	var n := Node3D.new()
-	var pole := _box(Vector3(0.16, 4.6, 0.16), Color("4a4f57"))
-	pole.position = Vector3(0, 2.3, 0)
-	n.add_child(pole)
-	var arm := _box(Vector3(1.3, 0.12, 0.14), Color("4a4f57"))
-	arm.position = Vector3(-side * 0.6, 4.55, 0)
-	n.add_child(arm)
-	var head := _box(Vector3(0.5, 0.18, 0.3), Color("fff3c4"))
-	head.position = Vector3(-side * 1.2, 4.45, 0)
-	n.add_child(head)
-	return n
-
-
-func _tree() -> Node3D:
-	var n := Node3D.new()
-	var trunk := _box(Vector3(0.28, 1.6, 0.28), Color("6b4a2b"))
-	trunk.position = Vector3(0, 0.8, 0)
-	n.add_child(trunk)
-	var g := Color("4f9a4a").lerp(Color("2f7a3c"), _rng.randf())
-	var c1 := _box(Vector3(1.6, 1.4, 1.6), g)
-	c1.position = Vector3(0, 2.2, 0)
-	n.add_child(c1)
-	var c2 := _box(Vector3(1.0, 0.9, 1.0), g.lightened(0.12))
-	c2.position = Vector3(0.1, 3.1, 0.1)
-	n.add_child(c2)
-	return n
 
 
 static func _box(size: Vector3, color: Color) -> MeshInstance3D:

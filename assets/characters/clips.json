@@ -1,0 +1,39 @@
+{
+	"_rows": 78,
+	"die": {
+		"frames": 20,
+		"length": 2.5,
+		"loop": false,
+		"row": 58
+	},
+	"hit": {
+		"frames": 8,
+		"length": 0.625,
+		"loop": false,
+		"row": 50
+	},
+	"idle": {
+		"frames": 16,
+		"length": 4.16666666666667,
+		"loop": true,
+		"row": 16
+	},
+	"punch": {
+		"frames": 10,
+		"length": 0.75,
+		"loop": false,
+		"row": 40
+	},
+	"run": {
+		"frames": 16,
+		"length": 1.25,
+		"loop": true,
+		"row": 0
+	},
+	"shoot": {
+		"frames": 8,
+		"length": 0.541666666666667,
+		"loop": true,
+		"row": 32
+	}
+}

@@ -58,6 +58,10 @@ var _swiped := false
 var _last_total := 1
 var _shown_banner: Dictionary = {}
 var _obstacles: Dictionary = {}  # id -> {ob, node}
+var _anim_t := 0.0             # animation clock (seconds)
+
+const RUN_SPEED := 1.7         # the baked walk cycle played faster reads as a run
+const SHOOT_YAW := 0.45        # the shoot clip aims to the right; turn the body so the gun points ahead
 
 
 func setup(level: Dictionary, upgrades: Dictionary, w: World, f: Fx, fnt: Font, is_demo := false) -> LevelView:
@@ -398,7 +402,7 @@ func _on_melee(e: Dictionary) -> void:
 	var n := mini(int(ceil(int(e["enemies"]) / float(hv["per"]))), (hv["offs"] as Array).size())
 	for i in n:
 		var o: Vector3 = hv["offs"].pop_front()
-		_charging.append({"kind": hv["kind"], "pos": _fig_pos(hv, o), "phase": o.y, "shielded": e["shielded"]})
+		_charging.append({"kind": hv["kind"], "pos": _fig_pos(hv, o), "phase": o.y, "shielded": e["shielded"], "dx": clampf(o.x * 0.35, -1.6, 1.6)})
 	var lost := int(e["lost"])
 	world.shake(clampf(0.2 + lost * 0.02, 0.2, 0.9))
 	if e["shielded"]:
@@ -525,9 +529,8 @@ func _update_visuals(d: float) -> void:
 	var lane_target: float = LANE_X[sim.lane]
 	_squad_x = move_toward(_squad_x, lane_target, d * 24.0 if not demo else 1.0)
 	var target_pos = _target_point()
-	var running := 1.0 if (_state == "play" or _state == "done") else 0.0
-	if demo:
-		running = 1.0
+	_anim_t += d
+	var moving := demo or _state == "play" or _state == "done"
 
 	for k in _crowds:
 		(_crowds[k] as Crowd).begin()
@@ -553,7 +556,14 @@ func _update_visuals(d: float) -> void:
 			dir.y = 0
 			if dir.length() > 0.5:
 				basis = Basis.looking_at(dir.normalized(), Vector3.UP)
-		(_crowds[a["kind"]] as Crowd).push(Transform3D(basis, pos), Color(float(a["phase"]), float(a["flash"]), running, aim))
+		var ph := float(a["phase"]) * 3.0
+		if aim > 0.0:
+			basis = basis * Basis(Vector3.UP, SHOOT_YAW)
+			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis, pos), "shoot", _anim_t + ph, float(a["flash"]))
+		elif moving:
+			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis, pos), "run", (_anim_t + ph) * RUN_SPEED, float(a["flash"]))
+		else:
+			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis, pos), "idle", _anim_t + ph, float(a["flash"]))
 
 	# Enemies
 	for id in _hordes:
@@ -567,15 +577,17 @@ func _update_visuals(d: float) -> void:
 			_dying.append({"kind": hv["kind"], "pos": p, "t": 0.0, "basis": Basis(Vector3.UP, PI)})
 			fx.puff(p)
 		var crowd: Crowd = _crowds[hv["kind"]]
-		var run := 0.0 if h["stopped"] else 1.0
-		var aim := 1.0 if h["stopped"] else 0.0
+		var clip := "shoot" if h["stopped"] else "run"
+		var speed := 1.0 if h["stopped"] else RUN_SPEED * clampf(float(h["vrel"]) / 10.0, 0.8, 1.6)
 		var flash := float(hv["shoot_flash"])
 		hv["shoot_flash"] = maxf(flash - d, 0.0)
 		var face := Basis(Vector3.UP, PI)
 		if hv["kind"] == "boss":
 			face = face.scaled(Vector3.ONE * 2.2)
+		if h["stopped"]:
+			face = face * Basis(Vector3.UP, SHOOT_YAW)
 		for o in offs:
-			crowd.push(Transform3D(face, _fig_pos(hv, o)), Color(o.y, flash * 2.0, run, aim))
+			crowd.push(Transform3D(face, _fig_pos(hv, o)), clip, (_anim_t + o.y * 3.0) * speed, flash * 2.0)
 		var lab: Label3D = hv["label"]
 		var depth := (offs.back().z if not offs.is_empty() else 0.0) as float
 		lab.position = Vector3(0, 3.6 if hv["kind"] != "brute" else 4.6, float(h["z"]) - depth * 0.5)
@@ -597,37 +609,37 @@ func _update_visuals(d: float) -> void:
 				var a := j * 2.39996
 				var r := 0.42 * sqrt(j + 0.3) if cnt > 1 else 0.0
 				var p := Vector3(cx + cos(a) * r * 1.2, 0, rz + sin(a) * r * 0.8)
-				crowd.push(Transform3D(Basis(Vector3.UP, PI), p), Color(fmod(j * 0.37, 1.0), 0.0, 0.0, 0.0))
+				crowd.push(Transform3D(Basis(Vector3.UP, PI), p), "idle", _anim_t + j * 0.37)
 
 	# Charging (contact) and dying figures
 	var i := 0
 	while i < _charging.size():
 		var c: Dictionary = _charging[i]
-		var goal := Vector3(_squad_x, 0, -0.5 if c["shielded"] else 0.8)
-		var p: Vector3 = (c["pos"] as Vector3).move_toward(goal, d * 16.0)
+		var goal := Vector3(_squad_x + float(c.get("dx", 0.0)), 0, -0.6 if c["shielded"] else 0.2)
+		var p: Vector3 = (c["pos"] as Vector3).move_toward(goal, d * 12.0)
 		c["pos"] = p
-		if p.distance_to(goal) < (2.6 if c["shielded"] else 0.6):
+		c["t"] = float(c.get("t", 0.0)) + d
+		if p.distance_to(goal) < (2.6 if c["shielded"] else 0.8) or float(c["t"]) > 0.9:
 			fx.puff(p)
+			_dying.append({"kind": c["kind"], "pos": p, "t": 0.0, "basis": Basis(Vector3.UP, PI)})
 			_charging.remove_at(i)
 			continue
-		(_crowds[c["kind"]] as Crowd).push(Transform3D(Basis(Vector3.UP, PI), p), Color(float(c["phase"]), 0.0, 1.0, 0.0))
+		(_crowds[c["kind"]] as Crowd).push(Transform3D(Basis(Vector3.UP, PI), p), "punch", float(c["t"]) * 1.4)
 		i += 1
 	i = 0
 	while i < _dying.size():
 		var dd: Dictionary = _dying[i]
 		dd["t"] = float(dd["t"]) + d
 		var t := float(dd["t"])
-		if t > 0.9:
+		if t > 1.3:
 			_dying.remove_at(i)
 			continue
 		var p: Vector3 = dd["pos"]
 		p.z += sim.S * d * (1.0 if _state == "play" or _state == "done" else 0.0)
 		dd["pos"] = p
-		var ang := minf(t / 0.3, 1.0) * 1.45
-		var basis: Basis = (dd["basis"] as Basis) * Basis(Vector3.RIGHT, ang)
-		var sink := maxf(t - 0.55, 0.0) * 2.0
-		var flash := maxf(0.0, 1.0 - t * 4.0)
-		(_crowds[dd["kind"]] as Crowd).push(Transform3D(basis, p - Vector3(0, sink, 0)), Color(0.0, flash, 0.0, 0.0))
+		var sink := maxf(t - 1.0, 0.0) * 3.0
+		var flash := maxf(0.0, 1.0 - t * 5.0)
+		(_crowds[dd["kind"]] as Crowd).push(Transform3D(dd["basis"] as Basis, p - Vector3(0, sink, 0)), "die", t * 2.2, flash)
 		i += 1
 
 	for k in _crowds:
@@ -756,12 +768,9 @@ func _spawn_obstacle(ob: Dictionary) -> void:
 			band.position.y = 0.95
 			n.add_child(band)
 		"car":
-			var body := World._box(Vector3(2.2, 0.9, 4.0), Color("3a6fd6"))
-			body.position.y = 0.65
-			n.add_child(body)
-			var cab := World._box(Vector3(1.9, 0.7, 2.0), Color("9ec4ff"))
-			cab.position = Vector3(0, 1.4, 0.2)
-			n.add_child(cab)
+			var car := World.model(["cars/sedan.glb", "cars/taxi.glb", "cars/van.glb", "cars/suv.glb"][int(ob["id"]) % 4], 1.45)
+			car.rotation.y = PI * (0.5 if int(ob["id"]) % 2 == 0 else -0.5)
+			n.add_child(car)
 		_:
 			var bar := World._box(Vector3(2.8, 0.9, 0.4), Color("8a6a3f"))
 			bar.position.y = 0.6

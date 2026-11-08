@@ -1,0 +1,36 @@
+{
+  "_note": "Role recipes for tools/bake_vat.gd. base = FBX in art_src/characters. colors = material name -> hex (unlisted keep the source colour). weapon / offhand = simple meshes attached to the hand bones. height = metres after baking. Re-run the bake after any change.",
+  "height": 1.85,
+  "clips": [
+    { "name": "run",   "src": "Walk",            "frames": 16, "loop": true },
+    { "name": "idle",  "src": "Idle",            "frames": 16, "loop": true },
+    { "name": "shoot", "src": "Shoot_OneHanded", "frames": 8,  "loop": true },
+    { "name": "punch", "src": "Punch",           "frames": 10, "loop": false },
+    { "name": "hit",   "src": "RecieveHit",      "frames": 8,  "loop": false },
+    { "name": "die",   "src": "Defeat",          "frames": 20, "loop": false }
+  ],
+  "roles": {
+    "hero":      { "base": "Casual2_Male", "weapon": "knife",
+                   "colors": { "Skin": "e3b08a", "Shirt": "21c7b5", "Pants": "3d5f9e", "Belt": "3b2a20", "Hair": "3b2a20" } },
+    "constable": { "base": "Worker_Male", "weapon": "pistol",
+                   "colors": { "Skin": "c99772", "Shirt": "3a62b0", "Vest": "1d2f57", "Pants": "1d2f57", "Hat": "1d2f57" } },
+    "inspector": { "base": "Suit_Male", "weapon": "revolver",
+                   "colors": { "Skin": "b9875f", "Black": "22315a", "Shirt": "f2f2f2", "Details": "e0b23a", "Belt": "3b2a20", "Hair": "1d1d1d" } },
+    "swat":      { "base": "BlueSoldier_Male", "weapon": "rifle",
+                   "colors": { "Skin": "c48e6a", "Main": "1f2733", "Helmet": "141a22", "Black": "0f0f0f", "Grey": "3b4656" } },
+    "thug":      { "base": "Casual_Bald", "weapon": "bat",
+                   "colors": { "Skin": "d8a987", "Shirt": "b3282d", "Pants": "2a2a2a" } },
+    "knifer":    { "base": "Casual2_Male", "weapon": "knife",
+                   "colors": { "Skin": "c48e6a", "Shirt": "6b2d8f", "Pants": "262626", "Hair": "141414" } },
+    "gunman":    { "base": "Casual3_Male", "weapon": "pistol",
+                   "colors": { "Skin": "d0a080", "Shirt": "1e1e1e", "Pants": "3a3a3a", "Hair": "111111" } },
+    "brute":     { "base": "Soldier_Male", "weapon": "club", "scale": 1.35,
+                   "colors": { "Skin": "b07a58", "Main": "5a4632", "Helmet": "3a2d20", "DarkGreen": "2b2b2b", "Black": "1a1a1a" } },
+    "riot":      { "base": "BlueSoldier_Male", "weapon": "baton", "offhand": "shield",
+                   "colors": { "Skin": "c48e6a", "Main": "3a3a3a", "Helmet": "222222", "Grey": "5a5a5a" } },
+    "biker":     { "base": "Casual3_Male", "weapon": "chain",
+                   "colors": { "Skin": "d0a080", "Shirt": "2a2a2a", "Pants": "1a1a3a", "Hair": "6b1a1a" } },
+    "boss":      { "base": "Suit_Male", "weapon": "pistol",
+                   "colors": { "Skin": "d8a987", "Black": "151515", "Shirt": "b3282d", "Details": "f2c14e", "Hair": "111111" } }
+  }
+}
