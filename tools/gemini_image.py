@@ -13,7 +13,10 @@ MODEL = "gemini-3-pro-image"
 
 
 def key() -> str:
-    for line in (ROOT / ".env").read_text(encoding="utf-8").splitlines():
+    # Worktrees have no .env (it is git-ignored): TROOP_ENV may point at the main copy.
+    import os
+    env = Path(os.environ.get("TROOP_ENV", ROOT / ".env"))
+    for line in env.read_text(encoding="utf-8").splitlines():
         if line.startswith("GOOGLE_API_KEY="):
             return line.split("=", 1)[1].strip()
     raise SystemExit("GOOGLE_API_KEY missing from .env")
