@@ -9,7 +9,7 @@ extends RetentionPanel
 
 var reward: Dictionary = {}
 var _chest: TextureRect
-var _items: HBoxContainer
+var _items: HFlowContainer
 var _collect: Button
 var _stage: Control
 
@@ -39,10 +39,11 @@ func _ready() -> void:
 	_chest.offset_top = -140
 	_chest.offset_bottom = 120
 	_stage.add_child(_chest)
-	_items = HBoxContainer.new()
-	_items.alignment = BoxContainer.ALIGNMENT_CENTER
-	_items.add_theme_constant_override("separation", 12)
-	_items.custom_minimum_size = Vector2(0, 170)
+	_items = HFlowContainer.new()
+	_items.alignment = FlowContainer.ALIGNMENT_CENTER
+	_items.add_theme_constant_override("h_separation", 10)
+	_items.add_theme_constant_override("v_separation", 10)
+	_items.custom_minimum_size = Vector2(0, 150)
 	_items.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(_items)
 	var bottom := CenterContainer.new()
@@ -107,12 +108,12 @@ func _open_sequence() -> void:
 
 func _pop_item(it: Array) -> void:
 	var cell := card_box(Color("3b6fd1"), 8)
-	cell.custom_minimum_size = Vector2(132, 160)
+	cell.custom_minimum_size = Vector2(112, 146)
 	var v := VBoxContainer.new()
 	v.alignment = BoxContainer.ALIGNMENT_CENTER
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cell.add_child(v)
-	var ic := icon_safe(String(it[0]), 92)
+	var ic := icon_safe(String(it[0]), 80)
 	ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	v.add_child(ic)
 	if String(it[1]) != "":

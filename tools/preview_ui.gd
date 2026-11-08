@@ -6,7 +6,8 @@ extends SceneTree
 ##         result_loss | toast | ad (the blank placeholder ad)
 ## Extra args: frames=N (when to shoot, default 90), shots=a,b,c (several frames -> out_a.png..),
 ## tab=enemies (codex), spin=1 (press the spin button), claim=1 (press claim / collect),
-## state=fresh (a new player's save instead of the demo state).
+## state=fresh (a new player's save instead of the demo state), ad=1 (press the first ad button:
+## the placeholder ad shows its countdown, then the reward lands).
 
 var _args := {}
 var _frame := 0
@@ -135,6 +136,14 @@ func _on_frame() -> void:
 			var b: Variant = _panel.get("_spin_btn")
 			if b is Button:
 				(b as Button).pressed.emit()
+		if _args.has("ad"):
+			# Press the first rewarded-ad button (the blank placeholder ad opens; ads are not
+			# skipped here, so the real countdown runs).
+			root.get_node("Ads").skip_ads = false
+			for btn in _panel.find_children("*", "Button", true, false):
+				if btn.has_meta("row") and btn.visible:
+					(btn as Button).pressed.emit()
+					break
 		if _args.has("claim"):
 			for m in ["_on_claim", "_on_collect"]:
 				if _panel.has_method(m):
