@@ -1,14 +1,172 @@
 {
-  "_note": "Coins buy only police-station rooms and cosmetics (owner). Every room is open from the start and shows its effect as before > after numbers. Level coins come from the Bottle Shot finale (config/finale.json) x evidence-room bonus.",
+  "_note": "All meta-game numbers (coins, police station, city, daily, missions, spin, chests, boosters, ads). Logic: src/core/economy_math.gd (Economy), city.gd, daily.gd, missions.gd, spin.gd, rewards.gd, save_data.gd; Game wraps them. Design: early game is generous (district 1 pays for everything in it), then prices grow faster than income (~1.9x per district for what unlocks vs ~1.45x income), so coins feel scarcer deeper in and the optional x2 ads matter. Nothing is gated behind ads: every level is winnable without purchases.",
+
+  "price_round": {
+    "_note": "Prices built from formulas are rounded to clean numbers: below 100 to 5, below 1000 to 10, below 10000 to 50, else to 100.",
+    "steps": [[100, 5], [1000, 10], [10000, 50], [1000000000, 100]]
+  },
+
+  "level_coins": {
+    "_note": "Win coins = finale coins (config/finale.json, incl. evidence room) x mult(L). mult(L) = base + per_level x (L-1), x boss_mult on every boss_every-th level, x replay_mult when the level was already beaten. x2 rewarded ad doubles the final number.",
+    "base": 1.0,
+    "per_level": 0.03,
+    "boss_every": 10,
+    "boss_mult": 1.5,
+    "replay_mult": 0.5
+  },
+
+  "_station_note": "Cost of level k = base x growth^(k-1), rounded (price_round). req[k-1] = district that must be liberated before level k can be bought (0 = open from the start). Effects: knife +per damage, speed +per (sim: +0.5 throws/s each), squad +per starting constables, capacity +per squad cap, coins +per finale coin bonus, charges: shield ceil(lv/2), bomb floor(lv/2).",
   "station": {
-    "armory":   { "icon": "knife",      "max": 4, "costs": [80, 200, 450, 900],    "effect": "knife",    "per": 1 },
-    "range":    { "icon": "speed",      "max": 4, "costs": [70, 180, 400, 800],    "effect": "speed",    "per": 1 },
-    "training": { "icon": "badge",      "max": 4, "costs": [120, 280, 560, 1000],  "effect": "squad",    "per": 1 },
-    "barracks": { "icon": "station",    "max": 4, "costs": [150, 320, 650, 1200],  "effect": "capacity", "per": 25 },
-    "evidence": { "icon": "money",      "max": 3, "costs": [150, 350, 700],        "effect": "coins",    "per": 0.1 },
-    "garage":   { "icon": "police_car", "max": 2, "costs": [250, 600],             "effect": "charges",  "per": 1 }
+    "armory":   { "icon": "knife",      "max": 10, "base": 60,  "growth": 1.7, "req": [0, 0, 1, 1, 2, 2, 3, 3, 4, 4], "effect": "knife",    "per": 1 },
+    "range":    { "icon": "speed",      "max": 10, "base": 60,  "growth": 1.7, "req": [0, 0, 1, 1, 2, 2, 3, 3, 4, 4], "effect": "speed",    "per": 1 },
+    "training": { "icon": "badge",      "max": 10, "base": 90,  "growth": 1.7, "req": [0, 0, 1, 1, 2, 2, 3, 3, 4, 4], "effect": "squad",    "per": 1 },
+    "barracks": { "icon": "station",    "max": 6,  "base": 150, "growth": 2.0, "req": [0, 1, 2, 3, 4, 4],             "effect": "capacity", "per": 25 },
+    "evidence": { "icon": "money",      "max": 6,  "base": 200, "growth": 2.0,  "req": [0, 1, 2, 3, 4, 4],             "effect": "coins",    "per": 0.1 },
+    "garage":   { "icon": "police_car", "max": 4,  "base": 300, "growth": 3.0,  "req": [0, 1, 2, 4],                   "effect": "charges",  "per": 1 }
   },
   "station_order": ["armory", "range", "training", "barracks", "evidence", "garage"],
+
+  "city": {
+    "_note": "5 districts x 5 buildings. lv 0 = ruin, 1 = rebuilt, 2-4 = upgrades. cost/time/income are for lv 1; level k costs cost x upgrade_cost_mult[k-1], takes time x upgrade_time_mult[k-1] seconds (capped at max_build_seconds) and earns income x income_mult^(k-1) coins per hour. A district's buildings can be rebuilt once the district is reached; upgrades need it liberated (its boss beaten). Storage holds storage.base_hours of income, +hours_per_level per City Hall level. While a building upgrades it keeps earning at its old level.",
+    "district_levels": 10,
+    "max_level": 4,
+    "upgrade_cost_mult": [1.0, 2.2, 4.0, 7.0],
+    "upgrade_time_mult": [1.0, 1.5, 2.0, 2.5],
+    "income_mult": 1.6,
+    "max_build_seconds": 14400,
+    "max_parallel_builds": 2,
+    "upgrade_needs_liberation": true,
+    "storage": { "base_hours": 3, "city_hall": "city_hall", "hours_per_level": 1 },
+    "welcome_back": { "_note": "The welcome-back popup shows when at least min_coins wait in storage and the player was away min_away_seconds.", "min_coins": 20, "min_away_seconds": 600 },
+    "speedup_ad": { "_note": "A rewarded ad cuts a build timer by fraction of what is left, at least min_seconds (never past done).", "fraction": 0.5, "min_seconds": 600 },
+    "districts": [
+      { "id": 1, "name": "Downtown",   "buildings": ["cafe", "newsstand", "pharmacy", "bus_stop", "police_post"] },
+      { "id": 2, "name": "Market",     "buildings": ["fruit_market", "bakery", "barber", "cinema", "clinic"] },
+      { "id": 3, "name": "Docks",      "buildings": ["fish_market", "warehouse", "lighthouse", "diner", "ferry"] },
+      { "id": 4, "name": "Industrial", "buildings": ["factory", "power_station", "garage", "train_station", "fire_station"] },
+      { "id": 5, "name": "Uptown",     "buildings": ["hotel", "bank", "museum", "fountain_park", "city_hall"] }
+    ],
+    "buildings": {
+      "cafe":          { "district": 1, "cost": 100,  "time": 30,   "income": 12 },
+      "newsstand":     { "district": 1, "cost": 110,  "time": 40,   "income": 13 },
+      "pharmacy":      { "district": 1, "cost": 130,  "time": 50,   "income": 15 },
+      "bus_stop":      { "district": 1, "cost": 150,  "time": 60,   "income": 17 },
+      "police_post":   { "district": 1, "cost": 170,  "time": 75,   "income": 19 },
+      "fruit_market":  { "district": 2, "cost": 200,  "time": 90,   "income": 22 },
+      "bakery":        { "district": 2, "cost": 230,  "time": 120,  "income": 24 },
+      "barber":        { "district": 2, "cost": 270,  "time": 150,  "income": 28 },
+      "cinema":        { "district": 2, "cost": 310,  "time": 180,  "income": 31 },
+      "clinic":        { "district": 2, "cost": 350,  "time": 240,  "income": 34 },
+      "fish_market":   { "district": 3, "cost": 400,  "time": 300,  "income": 37 },
+      "warehouse":     { "district": 3, "cost": 470,  "time": 360,  "income": 43 },
+      "lighthouse":    { "district": 3, "cost": 540,  "time": 450,  "income": 48 },
+      "diner":         { "district": 3, "cost": 620,  "time": 570,  "income": 53 },
+      "ferry":         { "district": 3, "cost": 710,  "time": 720,  "income": 59 },
+      "factory":       { "district": 4, "cost": 810,  "time": 900,  "income": 66 },
+      "power_station": { "district": 4, "cost": 940,  "time": 1140, "income": 74 },
+      "garage":        { "district": 4, "cost": 1100, "time": 1440, "income": 84 },
+      "train_station": { "district": 4, "cost": 1250, "time": 1800, "income": 93 },
+      "fire_station":  { "district": 4, "cost": 1400, "time": 2280, "income": 101 },
+      "hotel":         { "district": 5, "cost": 1650, "time": 2880, "income": 116 },
+      "bank":          { "district": 5, "cost": 1900, "time": 3600, "income": 129 },
+      "museum":        { "district": 5, "cost": 2150, "time": 4500, "income": 142 },
+      "fountain_park": { "district": 5, "cost": 2500, "time": 5700, "income": 161 },
+      "city_hall":     { "district": 5, "cost": 2850, "time": 7200, "income": 178 }
+    }
+  },
+
+  "reward_scaling": {
+    "_note": "Coins in daily, mission, spin and chest rewards are multiplied by level_coins mult(L) of the player's current level (no boss or replay factor), so they stay worth having deeper in."
+  },
+
+  "daily": {
+    "_note": "7-day calendar. Claim once per calendar day. Claiming the day after the last claim moves on a day; missing a day starts again at day 1 (the panel shows this honestly). After day 7 the calendar starts over. chest = rolled from chests.",
+    "reset_on_miss": true,
+    "days": [
+      { "coins": 150 },
+      { "headstart": 1 },
+      { "coins": 250, "shield": 1 },
+      { "bomb": 1, "headstart": 1 },
+      { "coins": 400 },
+      { "shield": 1, "bomb": 1, "headstart": 1 },
+      { "chest": "daily" }
+    ]
+  },
+
+  "missions": {
+    "_note": "3 missions a day from the pool (distinct stats, only those with min_level <= current level). goal = random in [goal[0], goal[1]] rounded to step, then x (1 + per_level x (L-1)) and rounded to step again. Progress counts from the moment they are rolled. Finishing all 3 opens the bonus chest.",
+    "per_day": 3,
+    "bonus_chest": "missions",
+    "pool": [
+      { "id": "kill",        "stat": "kill",        "icon": "fist",         "goal": [300, 500], "step": 50, "per_level": 0.02, "coins": 120, "weight": 3, "min_level": 1 },
+      { "id": "kill_thug",   "stat": "kill_thug",   "icon": "thug",         "goal": [150, 300], "step": 25, "per_level": 0.02, "coins": 100, "weight": 2, "min_level": 1 },
+      { "id": "kill_gunman", "stat": "kill_gunman", "icon": "pistol",       "goal": [20, 40],   "step": 5,  "per_level": 0.02, "coins": 120, "weight": 1, "min_level": 3 },
+      { "id": "kill_brute",  "stat": "kill_brute",  "icon": "brute",        "goal": [10, 20],   "step": 5,  "per_level": 0.02, "coins": 150, "weight": 1, "min_level": 5 },
+      { "id": "bottle",      "stat": "bottle",      "icon": "bottle",       "goal": [8, 14],    "step": 1,  "per_level": 0.0,  "coins": 120, "weight": 3, "min_level": 1 },
+      { "id": "gold_bottle", "stat": "gold_bottle", "icon": "broken_bottle","goal": [2, 4],     "step": 1,  "per_level": 0.0,  "coins": 150, "weight": 2, "min_level": 2 },
+      { "id": "win",         "stat": "win",         "icon": "trophy",       "goal": [3, 5],     "step": 1,  "per_level": 0.0,  "coins": 150, "weight": 3, "min_level": 1 },
+      { "id": "stars3",      "stat": "stars3",      "icon": "star_icon",    "goal": [1, 3],     "step": 1,  "per_level": 0.0,  "coins": 180, "weight": 2, "min_level": 2, "reward": { "headstart": 1 } },
+      { "id": "city_coins",  "stat": "city_coins",  "icon": "coin",         "goal": [200, 400], "step": 50, "per_level": 0.04, "coins": 100, "weight": 2, "min_level": 2 },
+      { "id": "build",       "stat": "build",       "icon": "hammer",       "goal": [1, 2],     "step": 1,  "per_level": 0.0,  "coins": 120, "weight": 2, "min_level": 2 },
+      { "id": "bomb",        "stat": "bomb",        "icon": "bomb",         "goal": [2, 3],     "step": 1,  "per_level": 0.0,  "coins": 100, "weight": 2, "min_level": 3, "reward": { "bomb": 1 } },
+      { "id": "shield",      "stat": "shield",      "icon": "shield",       "goal": [2, 3],     "step": 1,  "per_level": 0.0,  "coins": 100, "weight": 2, "min_level": 3, "reward": { "shield": 1 } },
+      { "id": "upgrade",     "stat": "upgrade",     "icon": "station",      "goal": [1, 2],     "step": 1,  "per_level": 0.0,  "coins": 120, "weight": 1, "min_level": 2 }
+    ]
+  },
+
+  "spin": {
+    "_note": "Lucky spin: free_per_day free spins + ad_per_day spins after a rewarded ad. Each slice is drawn with angle proportional to its weight, and weight / total is exactly its chance.",
+    "free_per_day": 1,
+    "ad_per_day": 3,
+    "slices": [
+      { "icon": "coin",      "weight": 26, "reward": { "coins": 100 } },
+      { "icon": "headstart", "weight": 14, "reward": { "headstart": 1 } },
+      { "icon": "coin",      "weight": 18, "reward": { "coins": 200 } },
+      { "icon": "shield",    "weight": 12, "reward": { "shield": 1 } },
+      { "icon": "coin",      "weight": 10, "reward": { "coins": 400 } },
+      { "icon": "bomb",      "weight": 12, "reward": { "bomb": 1 } },
+      { "icon": "chest",     "weight": 5,  "reward": { "chest": "spin" } },
+      { "icon": "money",     "weight": 3,  "reward": { "coins": 1000 } }
+    ]
+  },
+
+  "stars": {
+    "_note": "A star chest opens every chest_every stars (best stars per level, summed).",
+    "chest_every": 15,
+    "chest": "star"
+  },
+
+  "chests": {
+    "_note": "coins = random in range, rounded to 10, x reward scaling. Each booster = random in its range; at least min_boosters in total. cosmetic_chance = chance of one cosmetic the player does not own yet (if they own all, cosmetic_coins instead).",
+    "daily":    { "icon": "chest",      "coins": [800, 1200], "headstart": [1, 2], "shield": [1, 2], "bomb": [1, 2], "min_boosters": 3, "cosmetic_chance": 0.35, "cosmetic_coins": 500 },
+    "star":     { "icon": "star_chest", "coins": [400, 700],  "headstart": [0, 1], "shield": [0, 1], "bomb": [0, 1], "min_boosters": 1, "cosmetic_chance": 0.2,  "cosmetic_coins": 300 },
+    "missions": { "icon": "chest",      "coins": [250, 400],  "headstart": [0, 1], "shield": [0, 1], "bomb": [0, 1], "min_boosters": 1, "cosmetic_chance": 0.0,  "cosmetic_coins": 0 },
+    "spin":     { "icon": "chest",      "coins": [500, 800],  "headstart": [0, 1], "shield": [0, 1], "bomb": [0, 1], "min_boosters": 1, "cosmetic_chance": 0.1,  "cosmetic_coins": 300 }
+  },
+
+  "boosters": {
+    "_note": "Consumable tokens used before a level. headstart = +troops constables at the start, shield / bomb = +charges power charges. ad_per_level = rewarded ads allowed per booster per level. start = tokens a new (or upgraded) save begins with, so players learn them.",
+    "order": ["headstart", "shield", "bomb"],
+    "headstart": { "icon": "headstart", "troops": 5 },
+    "shield":    { "icon": "shield",    "charges": 1 },
+    "bomb":      { "icon": "bomb",      "charges": 1 },
+    "ad_per_level": 1,
+    "start": { "headstart": 1, "shield": 1, "bomb": 1 }
+  },
+
+  "ads": {
+    "_note": "Stub only (no SDK yet). Interstitials: only between levels, from from_level, at most one per every_levels completed levels, at least min_seconds apart, never right after a rewarded ad or a revive offer, always closable.",
+    "stub_delay": 0.6,
+    "interstitial": { "from_level": 6, "every_levels": 2, "min_seconds": 45 },
+    "placements": ["x2_coins", "revive", "x2_offline", "spin", "booster_headstart", "booster_shield", "booster_bomb", "speedup"]
+  },
+
+  "analytics": {
+    "_note": "Local JSON-lines event log (no network). Rotated to events.old.log when it passes max_bytes.",
+    "enabled": true,
+    "max_bytes": 2097152
+  },
+
   "cosmetics": {
     "outfits": [
       { "id": "street",    "price": 0,   "shirt": "21c7b5", "pants": "3d5f9e" },
@@ -22,7 +180,7 @@
       { "id": "fire",  "price": 300,  "blade": "ff8a3d", "trail": "ff5a1f" },
       { "id": "ice",   "price": 300,  "blade": "a6e6ff", "trail": "6fd3ff" },
       { "id": "neon",  "price": 500,  "blade": "c86bff", "trail": "e05cff" },
-      { "id": "gold",  "price": 900,  "blade": "f2c14e", "trail": "ffd75a" }
+      { "id": "golden", "price": 900,  "blade": "f2c14e", "trail": "ffd75a" }
     ]
   },
   "hero_colors": { "shirt": "21c7b5", "pants": "3d5f9e" }
