@@ -1,7 +1,12 @@
-"""Cuts the Gemini icon sheets (art_src/gen/icons_a.png, icons_b.png; 4x4 grids on magenta)
-into transparent PNGs in assets/icons/gloss/<name>.png. UiKit prefers these over the SVGs.
-  python -I tools/slice_icons.py
+"""Cuts the Gemini icon sheets (art_src/gen/icons_*.png, grids on magenta) into transparent
+PNGs in assets/icons/gloss/<name>.png. UiKit prefers these over the SVGs.
+  python -I tools/slice_icons.py              # every sheet
+  python -I tools/slice_icons.py icons_c.png  # just one sheet
+
+icons_a/icons_b (4x4) are cut on exact cell lines. icons_c (5x5) was not painted on an exact
+grid, so each cell keeps the whole connected shapes whose centre lies in it ("loose" mode).
 """
+import sys
 from pathlib import Path
 import numpy as np
 from PIL import Image
@@ -13,14 +18,21 @@ OUT = ROOT / "assets" / "icons" / "gloss"
 SIZE = 320
 
 SHEETS = {
-    "icons_a.png": [["coin", "gem", "trophy", "star_icon"],
-                    ["shield", "bomb", "knife", "pistol"],
-                    ["smg", "badge", "inspector", "swat"],
-                    ["station", "money", "armour_break", "gang_split"]],
-    "icons_b.png": [["thug", "brute", "riot", "boss"],
-                    ["barrel", "bottle", "broken_bottle", "speed"],
-                    ["shirt", "knife_power", "turncoat", "lock"],
-                    ["chest", "fist", "police_car", "aim"]],
+    "icons_a.png": {"grid": [["coin", "gem", "trophy", "star_icon"],
+                             ["shield", "bomb", "knife", "pistol"],
+                             ["smg", "badge", "inspector", "swat"],
+                             ["station", "money", "armour_break", "gang_split"]]},
+    "icons_b.png": {"grid": [["thug", "brute", "riot", "boss"],
+                             ["barrel", "bottle", "broken_bottle", "speed"],
+                             ["shirt", "knife_power", "turncoat", "lock"],
+                             ["chest", "fist", "police_car", "aim"]]},
+    "icons_c.png": {"loose": True,
+                    "outline_only": {"star_chest"},  # drop the painted glow halo
+                    "grid": [["sergeant", "sniper", "commando", "molotov", "sniper_foe"],
+                             ["grenadier", "pothole", "barricade", "gift", "wheel"],
+                             ["missions", "star_chest", "clock", "hammer", "map_pin"],
+                             ["ad_play", "headstart", "boss_crown", "fire", "city_hall"],
+                             ["crown", "trophy_gold", "stars3", "district_lock", "heart"]]},
 }
 
 
@@ -63,6 +75,28 @@ def remove_specks(alpha, min_px=60):
     return alpha
 
 
+def outline_only(c, alpha):
+    """Keeps only what the thick navy outline encloses (removes glows painted around it)."""
+    lum = c.mean(axis=2)
+    dark = (lum < 80) & (alpha > 0.5)
+    inside = ndimage.binary_fill_holes(ndimage.binary_closing(dark, iterations=3))
+    inside = ndimage.binary_dilation(inside, iterations=2)
+    return alpha * inside
+
+
+def keep_centred(alpha, core):
+    """Loose mode: keeps the shapes whose centre lies inside `core` (y0, y1, x0, x1)."""
+    lab, n = ndimage.label(alpha > 0.5)
+    if n == 0:
+        return alpha
+    keep = np.zeros(n + 1, bool)
+    for i, (cy, cx) in enumerate(ndimage.center_of_mass(np.ones_like(alpha), lab, range(1, n + 1)), 1):
+        keep[i] = core[0] <= cy < core[1] and core[2] <= cx < core[3]
+    # soft edge pixels (alpha <= 0.5) follow the nearest kept shape
+    near = ndimage.binary_dilation(keep[lab], iterations=4)
+    return alpha * near
+
+
 def paint_out_text(c, alpha):
     """The SWAT helmet carries the word SWAT; cover near-white text pixels on the dome."""
     h, w = alpha.shape
@@ -74,7 +108,6 @@ def paint_out_text(c, alpha):
     text = lum > float(np.median(lum[dark])) + 35
     text = ndimage.binary_dilation(text, iterations=3)
     sub[text] = dome
-    # soften: blur the painted area a little into its surroundings
     return c
 
 
@@ -89,20 +122,37 @@ def save(c, alpha, name):
     canvas.resize((SIZE, SIZE), Image.LANCZOS).save(OUT / f"{name}.png")
 
 
+def cut(sheet, spec):
+    a = np.asarray(Image.open(GEN / sheet).convert("RGB")).astype(float)
+    H, W = a.shape[:2]
+    grid = spec["grid"]
+    rows, cols = len(grid), len(grid[0])
+    for r, row in enumerate(grid):
+        for col, name in enumerate(row):
+            y0, y1 = r * H // rows, (r + 1) * H // rows
+            x0, x1 = col * W // cols, (col + 1) * W // cols
+            if spec.get("loose"):
+                my, mx = (y1 - y0) // 6, (x1 - x0) // 6  # look a little into the neighbours
+                wy0, wy1, wx0, wx1 = max(0, y0 - my), min(H, y1 + my), max(0, x0 - mx), min(W, x1 + mx)
+                c, alpha = key_alpha(a[wy0:wy1, wx0:wx1].copy())
+                alpha = keep_centred(alpha, (y0 - wy0, y1 - wy0, x0 - wx0, x1 - wx0))
+            else:
+                c, alpha = key_alpha(a[y0:y1, x0:x1].copy())
+            alpha = remove_specks(drop_frames(alpha))
+            if name in spec.get("outline_only", ()):
+                alpha = outline_only(c, alpha)
+            if name == "swat":
+                c = paint_out_text(c, alpha)
+            save(c, alpha, name)
+            print("icon", name)
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    for sheet, grid in SHEETS.items():
-        a = np.asarray(Image.open(GEN / sheet).convert("RGB")).astype(float)
-        H, W = a.shape[:2]
-        for r, row in enumerate(grid):
-            for col, name in enumerate(row):
-                cell = a[r * H // 4:(r + 1) * H // 4, col * W // 4:(col + 1) * W // 4].copy()
-                c, alpha = key_alpha(cell)
-                alpha = remove_specks(drop_frames(alpha))
-                if name == "swat":
-                    c = paint_out_text(c, alpha)
-                save(c, alpha, name)
-                print("icon", name)
+    only = set(sys.argv[1:])
+    for sheet, spec in SHEETS.items():
+        if not only or sheet in only:
+            cut(sheet, spec)
 
 
 if __name__ == "__main__":
