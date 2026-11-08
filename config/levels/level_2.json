@@ -1,0 +1,34 @@
+{
+  "_design": "Brass. Teaches: Inspector (pierces armour), operation order (+10 then x2 beats x2 then +10), gunmen + SHIELD, ARMOUR OFF vs brutes. Most paths survive; the smart path crushes.",
+  "id": 2,
+  "name": "Brass",
+  "charges": { "shield": 1 },
+  "events": [
+    { "at": 22,  "type": "hint", "text": "INSPECTORS HIT HARD AND PIERCE ARMOUR", "dur": 3.0 },
+    { "at": 40,  "type": "gates", "slowmo": true, "gates": [
+      { "lane": 0, "op": "recruit", "unit": "inspector", "n": 1 },
+      { "lane": 1, "op": "num", "v": 3 },
+      { "lane": 2, "op": "num", "v": 5 } ] },
+    { "at": 68,  "type": "wave", "groups": [ { "enemy": "thug", "n": 12 } ] },
+    { "at": 76,  "type": "hint", "text": "ORDER MATTERS: ADD FIRST, THEN MULTIPLY", "dur": 3.5 },
+    { "at": 96,  "type": "gates", "gates": [
+      { "lane": 0, "op": "mul", "k": 2 },
+      { "lane": 2, "op": "num", "v": 10 } ] },
+    { "at": 122, "type": "gates", "gates": [
+      { "lane": 0, "op": "num", "v": 10 },
+      { "lane": 2, "op": "mul", "k": 2 } ] },
+    { "at": 156, "type": "wave", "groups": [
+      { "enemy": "thug", "n": 40 },
+      { "enemy": "gunman", "n": 6, "gap": 10 } ] },
+    { "at": 150, "type": "hint", "text": "GUNMEN! TAP SHIELD", "icon": "shield", "power": "shield", "dur": 3.0 },
+    { "at": 190, "type": "hint", "text": "BRUTES AHEAD: ARMOUR STOPS PISTOLS", "dur": 3.0 },
+    { "at": 200, "type": "gates", "slowmo": true, "gates": [
+      { "lane": 0, "op": "foe_strip" },
+      { "lane": 1, "op": "num", "v": -10, "step": 4, "max": 10 },
+      { "lane": 2, "op": "num", "v": 8 } ] },
+    { "at": 232, "type": "wave", "label": "BRUTE SQUAD", "groups": [
+      { "enemy": "thug", "n": 30 },
+      { "enemy": "brute", "n": 6, "gap": 6 } ] },
+    { "at": 256, "type": "finish" }
+  ]
+}

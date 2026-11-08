@@ -1,0 +1,468 @@
+class_name LevelSim
+extends RefCounted
+## The whole battle as numbers. No nodes, deterministic for a given dt, unit tested.
+## The view (src/game/level_view.gd) only reads this state and drains `out` events.
+##
+## Space: the squad stands at z = 0 and faces -z. Everything else spawns far ahead
+## (negative z) and comes towards it. Lanes are 0 (left), 1 (middle), 2 (right).
+##
+## Every level event has an `at`: the track distance at which it reaches the squad.
+## Gates and obstacles ride the road (scroll speed); gangs also run (scroll + their speed),
+## so they spawn earlier to arrive on time.
+##
+## Shooting rule (easy to explain to players): troops shoot the nearest gang in range;
+## when no gang is in range they shoot whatever is in their lane (red gates, barricades).
+
+var S: float            # scroll speed, m/s
+var fire_range: float
+var spawn_dist: float
+var contact_z: float
+
+var stats: Dictionary   # effective ally stats after upgrades
+var weapons: Dictionary
+var enemy_defs: Dictionary
+var powers: Dictionary
+
+var squad := Squad.new()
+var lane := 1
+var traveled := 0.0
+var time := 0.0
+var state := "run"      # run | strike | lost
+var lose_cause := ""
+var finish_at := 0.0
+
+var rows: Array = []        # gate rows on screen
+var obstacles: Array = []
+var hordes: Array = []
+var charges: Dictionary = {"shield": 0, "bomb": 0}
+var shield_t := 0.0
+var kills := 0
+var rows_passed := 0
+var out: Array = []         # events for the view, drained each frame
+var target_kind := ""       # what the squad shot this tick: "horde" | "gate" | "obstacle" | ""
+var target_ref = null
+
+var _spawns: Array = []     # pre-computed, sorted by the distance at which they appear
+var _next_spawn := 0
+var _wave_ats: Array = []   # arrival `at` of each wave event, in order
+var _wave_mods: Dictionary = {}  # wave index -> {"div": k, "strip": true}
+var _next_id := 1
+var _armour_note_t := 0.0
+
+
+func _init(level: Dictionary, units_cfg: Dictionary, upgrades: Dictionary = {}) -> void:
+	var w: Dictionary = units_cfg["world"]
+	S = float(w["scroll_speed"])
+	fire_range = float(w["fire_range"])
+	spawn_dist = float(w["spawn_distance"])
+	contact_z = float(w["contact_z"])
+	stats = units_cfg["allies"].duplicate(true)
+	weapons = units_cfg["hero_weapons"]
+	enemy_defs = units_cfg["enemies"]
+	powers = units_cfg["powers"]
+
+	var hero: Dictionary = stats["hero"]
+	hero["dmg"] = float(hero["dmg"]) + float(upgrades.get("knife", 0))
+	hero["rate"] = float(hero["rate"]) + 0.5 * float(upgrades.get("speed", 0))
+	squad.add("constable", int(upgrades.get("squad", 0)))
+
+	var ch: Dictionary = level.get("charges", {})
+	for k in ch:
+		charges[k] = int(ch[k])
+	_build_spawns(level.get("events", []))
+
+
+func _build_spawns(events: Array) -> void:
+	var wave_index := 0
+	for ev in events:
+		var e: Dictionary = ev
+		var at := float(e.get("at", 0.0))
+		match String(e.get("type", "")):
+			"gates", "obstacle":
+				_spawns.append({"kind": e["type"], "ev": e, "at": at, "spawn_at": at - spawn_dist})
+			"finish":
+				finish_at = at
+				_spawns.append({"kind": "finish", "ev": e, "at": at, "spawn_at": at - spawn_dist})
+			"hint":
+				_spawns.append({"kind": "hint", "ev": e, "at": at, "spawn_at": at})
+			"wave":
+				_wave_ats.append(at)
+				for g in e.get("groups", []):
+					var grp: Dictionary = g
+					var def: Dictionary = enemy_defs[grp["enemy"]]
+					var arrive := at + float(grp.get("gap", 0.0))
+					var vrel := S + float(def["speed"])
+					var stop := float(def.get("stop_at", 0.0))
+					_spawns.append({"kind": "horde", "ev": grp, "at": arrive, "wave": wave_index,
+						"label": String(e.get("label", "")),
+						"spawn_at": arrive - (spawn_dist - stop) * S / vrel})
+				wave_index += 1
+	_spawns.sort_custom(func(a, b): return float(a["spawn_at"]) < float(b["spawn_at"]))
+
+
+# ---------------------------------------------------------------- input
+
+func set_lane(l: int) -> void:
+	lane = clampi(l, 0, 2)
+
+
+func use_power(id: String) -> bool:
+	if state != "run" or int(charges.get(id, 0)) <= 0:
+		return false
+	match id:
+		"shield":
+			if shield_t > 0.0:
+				return false
+			shield_t = float(powers["shield"]["duration"])
+			out.append({"type": "shield_on", "dur": shield_t})
+		"bomb":
+			var h = _front_horde(float(powers["bomb"]["reach"]))
+			if h == null:
+				return false
+			var cfg: Dictionary = powers["bomb"]
+			var n: int = h["count"]
+			var k := mini(n, maxi(int(floor(n * float(cfg["kill_pct"]) / 100.0)), int(cfg["min_kill"])))
+			_kill(h, k)
+			out.append({"type": "bomb", "horde": h["id"], "z": h["z"], "killed": k})
+		_:
+			return false
+	charges[id] = int(charges[id]) - 1
+	return true
+
+
+# ---------------------------------------------------------------- tick
+
+func step(dt: float) -> void:
+	if state != "run":
+		return
+	time += dt
+	traveled += S * dt
+	shield_t = maxf(shield_t - dt, 0.0)
+	_armour_note_t = maxf(_armour_note_t - dt, 0.0)
+	_spawn_due()
+	_move(dt)
+	_shoot(dt)
+	_gunfire(dt)
+	_contacts()
+	_pass_rows()
+	_pass_obstacles()
+	if state == "run" and finish_at > 0.0 and traveled >= finish_at and hordes.is_empty():
+		state = "strike"
+		out.append({"type": "finish"})
+
+
+func _spawn_due() -> void:
+	while _next_spawn < _spawns.size() and float(_spawns[_next_spawn]["spawn_at"]) <= traveled:
+		var sp: Dictionary = _spawns[_next_spawn]
+		_next_spawn += 1
+		var ev: Dictionary = sp["ev"]
+		match String(sp["kind"]):
+			"gates":
+				var gates: Array = []
+				for g in ev.get("gates", []):
+					var gate: Dictionary = (g as Dictionary).duplicate(true)
+					gate["progress"] = 0.0
+					if gate["op"] == "num" or gate["op"] == "pct":
+						gate["v"] = int(gate.get("v", 0))
+					gates.append(gate)
+				var row := {"id": _new_id(), "at": sp["at"], "gates": gates, "z": 0.0,
+					"slowmo": bool(ev.get("slowmo", false)), "tutorial": String(ev.get("tutorial", ""))}
+				row["z"] = -(float(row["at"]) - traveled)
+				rows.append(row)
+				out.append({"type": "row_spawn", "row": row})
+			"obstacle":
+				var ob := ev.duplicate(true)
+				ob["id"] = _new_id()
+				ob["hp_max"] = float(ob.get("hp", 10))
+				ob["hp"] = ob["hp_max"]
+				ob["z"] = -(float(sp["at"]) - traveled)
+				obstacles.append(ob)
+				out.append({"type": "obstacle_spawn", "ob": ob})
+			"finish":
+				out.append({"type": "finish_spawn", "at": sp["at"]})
+			"hint":
+				out.append({"type": "hint", "ev": ev})
+			"horde":
+				_spawn_horde(sp)
+
+
+func _spawn_horde(sp: Dictionary) -> void:
+	var grp: Dictionary = sp["ev"]
+	var def: Dictionary = enemy_defs[grp["enemy"]]
+	var vrel := S + float(def["speed"])
+	var stop := float(def.get("stop_at", 0.0))
+	var h := {
+		"id": _new_id(), "wave": sp["wave"], "enemy": grp["enemy"], "label": sp["label"],
+		"count": int(grp["n"]), "start": int(grp["n"]),
+		"hp": float(def["hp"]), "armour": int(def["armour"]), "power": int(def["power"]),
+		"vrel": vrel, "stop": stop, "shoot_every": float(def.get("shoot_every", 0.0)),
+		"z": -stop - (float(sp["at"]) - traveled) * vrel / S,
+		"acc": 0.0, "shoot_t": 0.0, "stopped": false,
+	}
+	var mods: Dictionary = _wave_mods.get(sp["wave"], {})
+	if mods.has("div"):
+		h["count"] = int(floor(h["count"] / float(mods["div"])))
+		h["start"] = h["count"]
+	if mods.has("strip"):
+		h["armour"] = 0
+	if h["count"] <= 0:
+		return
+	hordes.append(h)
+	out.append({"type": "horde_spawn", "horde": h})
+
+
+func _move(dt: float) -> void:
+	for row in rows:
+		row["z"] = -(float(row["at"]) - traveled)
+		for g in row["gates"]:
+			g["z"] = row["z"]
+	for ob in obstacles:
+		ob["z"] = float(ob["z"]) + S * dt
+	for h in hordes:
+		if h["stopped"]:
+			continue
+		h["z"] = float(h["z"]) + float(h["vrel"]) * dt
+		if float(h["stop"]) > 0.0 and float(h["z"]) >= -float(h["stop"]):
+			h["z"] = -float(h["stop"])
+			h["stopped"] = true
+
+
+func _shoot(dt: float) -> void:
+	target_kind = ""
+	target_ref = null
+	var h = _front_horde(fire_range)
+	if h != null:
+		var d := squad.dps(stats, weapons, int(h["armour"]))
+		target_kind = "horde"
+		target_ref = h
+		if d <= 0.0:
+			if _armour_note_t <= 0.0 and squad.dps(stats, weapons, 0) > 0.0:
+				_armour_note_t = 1.5
+				out.append({"type": "armour_block", "horde": h["id"]})
+			return
+		h["acc"] = float(h["acc"]) + d * dt
+		var k := mini(int(floor(float(h["acc"]) / float(h["hp"]))), int(h["count"]))
+		if k > 0:
+			h["acc"] = float(h["acc"]) - k * float(h["hp"])
+			_kill(h, k)
+		return
+
+	var t = _lane_target()
+	if t == null:
+		return
+	var dmg := squad.dps(stats, weapons, 0) * dt
+	target_ref = t
+	if t.has("op"):  # a gate
+		target_kind = "gate"
+		t["progress"] = float(t["progress"]) + dmg
+		var step_hp := float(t["step"])
+		var inc := int(t.get("inc", 1))
+		while float(t["progress"]) >= step_hp and int(t["v"]) < int(t["max"]):
+			t["progress"] = float(t["progress"]) - step_hp
+			var before: int = t["v"]
+			t["v"] = mini(before + inc, int(t["max"]))
+			out.append({"type": "gate_tick", "gate": t, "from": before, "to": t["v"],
+				"flipped": before < 0 and int(t["v"]) >= 0})
+	else:  # an obstacle
+		target_kind = "obstacle"
+		t["hp"] = float(t["hp"]) - dmg
+		if float(t["hp"]) <= 0.0:
+			t["hp"] = 0.0
+			out.append({"type": "obstacle_broken", "ob": t})
+			obstacles.erase(t)
+
+
+func _kill(h: Dictionary, k: int) -> void:
+	if k <= 0:
+		return
+	h["count"] = int(h["count"]) - k
+	kills += k
+	out.append({"type": "kill", "horde": h["id"], "n": k, "left": h["count"]})
+	if int(h["count"]) <= 0:
+		hordes.erase(h)
+		out.append({"type": "horde_cleared", "horde": h["id"]})
+
+
+func _front_horde(reach: float):
+	var best = null
+	for h in hordes:
+		if int(h["count"]) > 0 and float(h["z"]) >= -reach:
+			if best == null or float(h["z"]) > float(best["z"]):
+				best = h
+	return best
+
+
+func _lane_target():
+	var best = null
+	var best_z := -INF
+	for row in rows:
+		var z := float(row["z"])
+		if z < -fire_range or z >= 0.0:
+			continue
+		for g in row["gates"]:
+			if int(g["lane"]) == lane and float(g.get("step", 0.0)) > 0.0 and int(g["v"]) < int(g["max"]):
+				if z > best_z:
+					best = g
+					best_z = z
+	for ob in obstacles:
+		var z := float(ob["z"])
+		if int(ob["lane"]) == lane and z >= -fire_range and z < 0.0 and float(ob["hp"]) > 0.0 and z > best_z:
+			best = ob
+			best_z = z
+	return best
+
+
+func _gunfire(dt: float) -> void:
+	for h in hordes:
+		if not h["stopped"] or float(h["shoot_every"]) <= 0.0:
+			continue
+		h["shoot_t"] = float(h["shoot_t"]) + dt
+		while float(h["shoot_t"]) >= float(h["shoot_every"]):
+			h["shoot_t"] = float(h["shoot_t"]) - float(h["shoot_every"])
+			if shield_t > 0.0:
+				out.append({"type": "blocked", "horde": h["id"], "n": h["count"]})
+			else:
+				_hurt(int(h["count"]), "gunman", h["id"])
+			if state != "run":
+				return
+
+
+func _contacts() -> void:
+	for h in hordes.duplicate():
+		if float(h["z"]) < contact_z:
+			continue
+		var power := int(h["count"]) * int(h["power"])
+		hordes.erase(h)
+		if shield_t > 0.0:
+			kills += int(h["count"])
+			out.append({"type": "contact", "horde": h["id"], "power": power, "lost": 0, "shielded": true})
+		else:
+			var lost := _hurt(power, String(h["enemy"]), h["id"], false)
+			out.append({"type": "contact", "horde": h["id"], "power": power, "lost": lost, "shielded": false})
+		if state != "run":
+			return
+
+
+func _hurt(n: int, cause: String, source_id: int = 0, announce: bool = true) -> int:
+	var lost := squad.lose(n)
+	if announce and lost > 0:
+		out.append({"type": "hurt", "n": lost, "cause": cause, "source": source_id})
+	if not squad.hero_alive():
+		state = "lost"
+		lose_cause = cause
+		out.append({"type": "lost", "cause": cause})
+	return lost
+
+
+func _pass_rows() -> void:
+	for row in rows.duplicate():
+		if float(row["z"]) < 0.0:
+			continue
+		rows.erase(row)
+		rows_passed += 1
+		var picked = null
+		for g in row["gates"]:
+			if int(g["lane"]) == lane:
+				picked = g
+		var before := squad.total()
+		var delta := 0
+		if picked != null:
+			delta = _apply_gate(picked)
+		out.append({"type": "row_pass", "row": row, "gate": picked, "before": before,
+			"after": squad.total(), "delta": delta})
+		if picked != null and not squad.hero_alive():
+			state = "lost"
+			lose_cause = "gate"
+			out.append({"type": "lost", "cause": "gate"})
+			return
+
+
+func _apply_gate(g: Dictionary) -> int:
+	match String(g["op"]):
+		"num":
+			var v: int = g["v"]
+			return squad.add("constable", v) if v >= 0 else -squad.lose(-v)
+		"recruit":
+			return squad.add(String(g["unit"]), int(g.get("n", 1)))
+		"mul":
+			return squad.multiply(int(g["k"]))
+		"div":
+			return squad.divide(int(g["k"]))
+		"pct":
+			return squad.apply_percent(int(g["v"]))
+		"weapon":
+			squad.hero_weapon = String(g["id"])
+			return 0
+		"power":
+			var id := String(g["id"])
+			charges[id] = int(charges.get(id, 0)) + int(g.get("n", 1))
+			return 0
+		"foe_div", "foe_strip":
+			_apply_foe_mod(g)
+			return 0
+	return 0
+
+
+func _apply_foe_mod(g: Dictionary) -> void:
+	var wave := -1
+	for i in _wave_ats.size():
+		if float(_wave_ats[i]) > traveled:
+			wave = i
+			break
+	if wave < 0:
+		return
+	var mods: Dictionary = _wave_mods.get(wave, {})
+	if g["op"] == "foe_div":
+		mods["div"] = int(g["k"])
+	else:
+		mods["strip"] = true
+	_wave_mods[wave] = mods
+	for h in hordes:
+		if int(h["wave"]) != wave:
+			continue
+		var before: int = h["count"]
+		if g["op"] == "foe_div":
+			h["count"] = int(floor(before / float(g["k"])))
+			h["start"] = maxi(int(h["start"]) / int(g["k"]), 1)
+		else:
+			h["armour"] = 0
+		out.append({"type": "foe_mod", "horde": h["id"], "op": g["op"], "from": before, "to": h["count"]})
+	for h in hordes.duplicate():
+		if int(h["count"]) <= 0:
+			hordes.erase(h)
+			out.append({"type": "horde_cleared", "horde": h["id"]})
+
+
+func _pass_obstacles() -> void:
+	for ob in obstacles.duplicate():
+		if float(ob["z"]) < 0.0:
+			continue
+		obstacles.erase(ob)
+		if int(ob["lane"]) == lane and float(ob["hp"]) > 0.0:
+			var lost := _hurt(int(ob.get("dmg", 5)), "barricade", ob["id"], false)
+			out.append({"type": "obstacle_hit", "ob": ob, "lost": lost})
+			if state != "run":
+				return
+		else:
+			out.append({"type": "obstacle_pass", "ob": ob})
+
+
+func _new_id() -> int:
+	_next_id += 1
+	return _next_id
+
+
+# ---------------------------------------------------------------- helpers
+
+func progress() -> float:
+	return clampf(traveled / finish_at, 0.0, 1.0) if finish_at > 0.0 else 0.0
+
+
+func drain() -> Array:
+	var e := out
+	out = []
+	return e
+
+
+static func strike_coins(economy: Dictionary, troops: int, mult: int) -> int:
+	return int(economy["clear_bonus"]) + troops * mult

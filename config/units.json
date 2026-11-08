@@ -1,0 +1,27 @@
+{
+  "_note": "All combat numbers. dmg = damage per hit, rate = hits per second. Armour is subtracted from every hit unless the attacker pierces.",
+  "world": {
+    "scroll_speed": 8.0,
+    "fire_range": 20.0,
+    "spawn_distance": 80.0,
+    "contact_z": -1.4
+  },
+  "allies": {
+    "hero":      { "name": "Hero",      "dmg": 1, "rate": 3.0, "pierce": false, "proj": "knife" },
+    "constable": { "name": "Constable", "dmg": 1, "rate": 2.0, "pierce": false, "proj": "bullet" },
+    "inspector": { "name": "Inspector", "dmg": 3, "rate": 1.5, "pierce": true,  "proj": "bullet_big" }
+  },
+  "hero_weapons": {
+    "pistol": { "name": "Pistol", "dmg": 2, "rate": 3.0, "pierce": false, "proj": "bullet" }
+  },
+  "enemies": {
+    "thug":   { "name": "Thugs",   "hp": 1, "armour": 0, "speed": 2.0, "power": 1 },
+    "knifer": { "name": "Knifers", "hp": 1, "armour": 0, "speed": 4.0, "power": 1 },
+    "gunman": { "name": "Gunmen",  "hp": 2, "armour": 0, "speed": 2.5, "power": 1, "stop_at": 17.0, "shoot_every": 1.6 },
+    "brute":  { "name": "Brutes",  "hp": 8, "armour": 1, "speed": 1.0, "power": 4 }
+  },
+  "powers": {
+    "shield": { "duration": 4.0 },
+    "bomb":   { "kill_pct": 50, "min_kill": 10, "reach": 50.0 }
+  }
+}

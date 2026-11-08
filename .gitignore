@@ -1,0 +1,27 @@
+# Secrets: never commit
+.env
+.env.*
+*.keystore
+*.jks
+google-services.json
+export_credentials.cfg
+
+# Godot
+.godot/
+*.import.tmp
+
+# Local screenshots, builds, scratch
+/_local/
+build/
+*.apk
+*.aab
+*.idsig
+
+# Claude Code / brainstorm tooling
+.claude/
+.superpowers/
+
+# OS / editor
+Thumbs.db
+.DS_Store
+.vscode/

@@ -1,0 +1,12 @@
+{
+  "_note": "Coins and lobby upgrades. Coins from a level = clear_bonus + troops at the finish x strike multiplier.",
+  "clear_bonus": 40,
+  "strike_zones": [1, 2, 3, 5, 3, 2, 1],
+  "strike_sweep_seconds": 1.1,
+  "upgrades": {
+    "knife": { "name": "Knife Power",    "desc": "+1 knife damage",      "max": 3, "costs": [60, 160, 320], "per_level": 1 },
+    "speed": { "name": "Throw Speed",    "desc": "+0.5 throws / sec",    "max": 4, "costs": [50, 120, 220, 360], "per_level": 0.5 },
+    "squad": { "name": "Starting Squad", "desc": "+1 constable at start", "max": 3, "costs": [80, 200, 400], "per_level": 1 }
+  },
+  "start_charges": { "shield": 1, "bomb": 1 }
+}

@@ -1,0 +1,40 @@
+{
+  "_design": "Kingpin. Combines everything, adds the hero's pistol, percent gates, BOMB and halving the next gang. A greedy 'biggest number' route struggles; a planned route wins big.",
+  "id": 3,
+  "name": "Kingpin",
+  "charges": { "shield": 1, "bomb": 1 },
+  "events": [
+    { "at": 34,  "type": "gates", "gates": [
+      { "lane": 0, "op": "weapon", "id": "pistol" },
+      { "lane": 1, "op": "num", "v": 6 },
+      { "lane": 2, "op": "recruit", "unit": "inspector", "n": 2 } ] },
+    { "at": 62,  "type": "wave", "groups": [ { "enemy": "knifer", "n": 14 } ] },
+    { "at": 70,  "type": "hint", "text": "PERCENT GATES: SHOOT THEM UP", "dur": 3.0 },
+    { "at": 92,  "type": "gates", "gates": [
+      { "lane": 0, "op": "pct", "v": -40, "inc": 10, "step": 5, "max": 60 },
+      { "lane": 1, "op": "num", "v": 12 },
+      { "lane": 2, "op": "mul", "k": 2 } ] },
+    { "at": 120, "type": "gates", "gates": [
+      { "lane": 0, "op": "foe_div", "k": 2 },
+      { "lane": 1, "op": "power", "id": "bomb", "n": 1 },
+      { "lane": 2, "op": "num", "v": 15 } ] },
+    { "at": 152, "type": "wave", "label": "GANG WAR", "groups": [
+      { "enemy": "thug", "n": 110 },
+      { "enemy": "gunman", "n": 8, "gap": 8 },
+      { "enemy": "brute", "n": 6, "gap": 14 } ] },
+    { "at": 146, "type": "hint", "text": "TAP BOMB: WIPES HALF A GANG", "icon": "bomb", "power": "bomb", "dur": 3.0 },
+    { "at": 186, "type": "gates", "slowmo": true, "gates": [
+      { "lane": 0, "op": "mul", "k": 2 },
+      { "lane": 1, "op": "num", "v": -15, "step": 3, "max": 20 },
+      { "lane": 2, "op": "recruit", "unit": "inspector", "n": 3 } ] },
+    { "at": 214, "type": "gates", "gates": [
+      { "lane": 0, "op": "foe_strip" },
+      { "lane": 1, "op": "foe_div", "k": 2 },
+      { "lane": 2, "op": "num", "v": 20 } ] },
+    { "at": 246, "type": "wave", "label": "KINGPIN'S ARMY", "groups": [
+      { "enemy": "thug", "n": 180 },
+      { "enemy": "knifer", "n": 50, "gap": 6 },
+      { "enemy": "brute", "n": 10, "gap": 14 } ] },
+    { "at": 272, "type": "finish" }
+  ]
+}
