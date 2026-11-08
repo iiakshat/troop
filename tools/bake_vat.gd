@@ -8,7 +8,8 @@ extends SceneTree
 ## shader reads its pose from that texture (src/game/crowd_vat.gdshader), so hundreds
 ## of animated people cost a single draw call per role.
 ##
-## Output (res://assets/characters/): <role>_mesh.res, <role>_vat.res, clips.json.
+## Output (res://assets/characters/): <role>_mesh.res, <role>_vat.res (positions),
+## <role>_nrm.res (smooth normals per frame, for toon lighting and outlines), clips.json.
 
 const OUT := "res://assets/characters/"
 const SRC := "res://art_src/characters/"
@@ -168,6 +169,9 @@ func _bake_role(role: String, recipe: Dictionary) -> Dictionary:
 	var n := verts.size()
 	var data := PackedFloat32Array()
 	data.resize(n * rows * 4)
+	var ndata := PackedByteArray()
+	ndata.resize(n * rows * 4)
+	var flip := 0.0  # 1 or -1 once the winding is known
 	var first_frame := PackedVector3Array()
 	for c in _cfg["clips"]:
 		var anim_name := _find_anim(ap, String(c["src"]))
@@ -179,8 +183,11 @@ func _bake_role(role: String, recipe: Dictionary) -> Dictionary:
 			var t := length * f / frames if bool(c["loop"]) else length * f / maxf(frames - 1, 1)
 			_pose(ap, String(c["src"]), t)
 			var ps := _skin_all(sk, verts, meshes)
+			var pm := PackedVector3Array()
+			pm.resize(n)
 			for vi in n:
 				var p := to_model * (ps[vi] - foot)
+				pm[vi] = p
 				var o := ((row0 + f) * n + vi) * 4
 				data[o] = p.x
 				data[o + 1] = p.y
@@ -188,10 +195,22 @@ func _bake_role(role: String, recipe: Dictionary) -> Dictionary:
 				data[o + 3] = 1.0
 				if c["name"] == "idle" and f == 0:
 					first_frame.append(p)
+			var nm := _normals(pm, indices)
+			if flip == 0.0:
+				flip = _outward(pm, nm)
+			for vi in n:
+				var nv := nm[vi] * flip
+				var o := ((row0 + f) * n + vi) * 4
+				ndata[o] = int(clampf(nv.x * 0.5 + 0.5, 0.0, 1.0) * 255.0)
+				ndata[o + 1] = int(clampf(nv.y * 0.5 + 0.5, 0.0, 1.0) * 255.0)
+				ndata[o + 2] = int(clampf(nv.z * 0.5 + 0.5, 0.0, 1.0) * 255.0)
+				ndata[o + 3] = 255
 
 	var img := Image.create_from_data(n, rows, false, Image.FORMAT_RGBAF, data.to_byte_array())
 	img.convert(Image.FORMAT_RGBAH)
 	ResourceSaver.save(ImageTexture.create_from_image(img), OUT + role + "_vat.res")
+	var nimg := Image.create_from_data(n, rows, false, Image.FORMAT_RGBA8, ndata)
+	ResourceSaver.save(ImageTexture.create_from_image(nimg), OUT + role + "_nrm.res")
 
 	var cols := PackedColorArray()
 	var uv2 := PackedVector2Array()
@@ -209,6 +228,36 @@ func _bake_role(role: String, recipe: Dictionary) -> Dictionary:
 	ResourceSaver.save(am, OUT + role + "_mesh.res")
 	scene.queue_free()
 	return {"verts": n, "tris": indices.size() / 3, "rows": rows}
+
+
+## Smooth vertex normals: area-weighted sum of the faces around each vertex.
+func _normals(p: PackedVector3Array, idx: PackedInt32Array) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	out.resize(p.size())
+	for t in range(0, idx.size(), 3):
+		var a := idx[t]
+		var b := idx[t + 1]
+		var c := idx[t + 2]
+		var fn := (p[b] - p[a]).cross(p[c] - p[a])
+		out[a] += fn
+		out[b] += fn
+		out[c] += fn
+	for i in out.size():
+		out[i] = out[i].normalized() if out[i].length_squared() > 1e-12 else Vector3.UP
+	return out
+
+
+## 1 if the normals point away from the body's centre line, else -1 (winding varies).
+func _outward(p: PackedVector3Array, nm: PackedVector3Array) -> float:
+	var c := Vector3.ZERO
+	for v in p:
+		c += v
+	c /= maxf(p.size(), 1)
+	var score := 0.0
+	for i in p.size():
+		var d := p[i] - Vector3(c.x, p[i].y, c.z)
+		score += d.dot(nm[i])
+	return 1.0 if score >= 0.0 else -1.0
 
 
 func _find_anim(ap: AnimationPlayer, src: String) -> String:

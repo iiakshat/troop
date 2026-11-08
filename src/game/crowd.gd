@@ -6,6 +6,7 @@ extends MultiMeshInstance3D
 ## texture rows so the shader can pose the mesh.
 
 const SHADER := preload("res://src/game/crowd_vat.gdshader")
+const OUTLINE := preload("res://src/game/crowd_outline.gdshader")
 const DIR := "res://assets/characters/"
 
 static var clips: Dictionary = {}
@@ -20,7 +21,15 @@ func setup(kind: String, capacity: int) -> Crowd:
 	_cap = capacity
 	var mat := ShaderMaterial.new()
 	mat.shader = SHADER
-	mat.set_shader_parameter("vat", load(DIR + kind + "_vat.res"))
+	var vat: Texture2D = load(DIR + kind + "_vat.res")
+	var nrm: Texture2D = load(DIR + kind + "_nrm.res")
+	mat.set_shader_parameter("vat", vat)
+	mat.set_shader_parameter("nrm", nrm)
+	var ink := ShaderMaterial.new()
+	ink.shader = OUTLINE
+	ink.set_shader_parameter("vat", vat)
+	ink.set_shader_parameter("nrm", nrm)
+	mat.next_pass = ink
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_custom_data = true
@@ -32,7 +41,7 @@ func setup(kind: String, capacity: int) -> Crowd:
 	mm.visible_instance_count = 0
 	multimesh = mm
 	material_override = mat
-	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	custom_aabb = AABB(Vector3(-60, -5, -200), Vector3(120, 40, 260))
 	name = "Crowd_" + kind
 	return self

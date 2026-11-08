@@ -1,0 +1,10 @@
+A square texture sheet for a stylized 3D mobile game: exactly FOUR square tiles in a 2x2 grid, separated by thin pure white gutters. Each tile is a straight-down top view, evenly lit, no perspective, no shadows, and seamlessly tileable (left edge matches right edge, top matches bottom).
+
+Style: premium hand-painted textured cartoon, like Subway Surfers or Fortnite: simplified chunky detail, soft painted texture, harmonious saturated colours.
+
+Top left: dark blue-grey asphalt road surface with fine grain, a few subtle cracks and patches, no lane markings.
+Top right: sidewalk of large square concrete paving slabs in warm light grey with soft grout lines.
+Bottom left: lush cartoon grass with tiny flowers.
+Bottom right: red brick pavers in a herringbone pattern.
+
+No text, no objects, no people.

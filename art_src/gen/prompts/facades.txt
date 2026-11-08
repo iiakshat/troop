@@ -1,0 +1,12 @@
+A 16:9 texture sheet for a stylized 3D mobile game: exactly FOUR building facades side by side in four equal tall columns, separated by thin pure white vertical gutters.
+
+Each facade is a straight-on orthographic front elevation: perfectly flat, no perspective, no sky, no ground, no cast shadows, filling its column edge to edge from the top of the roof cornice to the bottom of the ground floor. Each building is 5 storeys: a ground-floor shop with large glass shop windows, a door and a fabric awning, then 4 floors of windows, then a decorative cornice. Absolutely no readable text, letters, numbers, logos or signs.
+
+Style: premium hand-painted textured cartoon, like Subway Surfers or Fortnite: chunky simplified shapes, bold saturated but harmonious colours, soft painted light from the top left, subtle painted wear and texture, clean crisp edges. A sunny, friendly, neutral modern Western city.
+
+Facade 1: warm red brick apartment, white window frames, black iron fire escape, green awning.
+Facade 2: teal painted plaster with cream trim, small balconies with flower pots, orange awning.
+Facade 3: mustard yellow building with white columns and red-and-white striped awning.
+Facade 4: lilac stucco with arched windows, plant boxes and a blue awning.
+
+No people, no cars, no text.
