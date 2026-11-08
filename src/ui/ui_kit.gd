@@ -216,6 +216,30 @@ static func full_rect(c: Control) -> Control:
 	return c
 
 
+## Full rect minus the phone's notch / camera cut-out / gesture bar, so nothing important
+## hides under them. Call after the control is in the tree.
+static func safe_rect(c: Control) -> Control:
+	full_rect(c)
+	var ins := safe_insets(c)
+	c.offset_top = ins.x
+	c.offset_bottom = -ins.y
+	return c
+
+
+## (top, bottom) unsafe margins in UI units. Desktop: none.
+static func safe_insets(c: Control) -> Vector2:
+	if not OS.has_feature("mobile"):
+		return Vector2.ZERO
+	var win := Vector2(DisplayServer.window_get_size())
+	var safe := Rect2(DisplayServer.get_display_safe_area())
+	if win.y <= 0.0 or safe.size.y <= 0.0:
+		return Vector2(48, 24)
+	var k := c.get_viewport().get_visible_rect().size.y / win.y
+	var top := maxf(safe.position.y, 0.0) * k
+	var bottom := maxf(win.y - safe.end.y, 0.0) * k
+	return Vector2(maxf(top, 24.0), maxf(bottom, 12.0))
+
+
 static func pop(c: Control, from := 0.6) -> void:
 	c.pivot_offset = c.size * 0.5
 	c.scale = Vector2.ONE * from

@@ -174,6 +174,7 @@ func _process(delta: float) -> void:
 				_ui.queue_free()
 				done.emit({"broken": logic.broken_count(), "gold": logic.broken_count(true),
 					"mult": logic.multiplier(), "coins": logic.coins(troops, station_bonus)})
+				return  # the camera is handed back; don't take it again below
 	world.set_camera_override(_cam)
 
 

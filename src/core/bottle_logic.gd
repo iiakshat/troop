@@ -15,9 +15,10 @@ func _init(finale_cfg: Dictionary, level_id: int) -> void:
 	cfg = finale_cfg
 	var layouts: Dictionary = cfg["layouts"]
 	layout = layouts.get(str(level_id), layouts["1"])
-	knives_left = int(cfg["knives"])
 	for b in layout["bottles"]:
 		broken.append(false)
+	# One knife per bottle (owner), plus any extra the config grants.
+	knives_left = count() + int(cfg.get("extra_knives", 0))
 
 
 func count() -> int:

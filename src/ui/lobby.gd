@@ -13,7 +13,7 @@ var _overlay: Control = null
 
 
 func _ready() -> void:
-	UiKit.full_rect(self)
+	UiKit.safe_rect(self)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_level = int(Game.save["unlocked"])
 

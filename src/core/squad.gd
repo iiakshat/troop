@@ -75,9 +75,9 @@ func divide(k: int) -> int:
 
 
 ## Damage per second against one enemy type. `stats` is the effective ally table
-## (after upgrades); armour comes off every hit unless the attacker pierces. A unit with
-## `multi` > 1 (SWAT bursts) hits that many weak enemies per shot: it counts only when the
-## enemy dies to one hit (hp <= damage after armour).
+## (after upgrades); each point of armour divides a hit (1 armour = half damage) unless the
+## attacker pierces, so every hit still counts. A unit with `multi` > 1 (SWAT bursts) hits
+## that many weak enemies per shot: it counts only when the enemy dies to one hit.
 func dps(stats: Dictionary, weapons: Dictionary, armour: int, hp := 1.0) -> float:
 	var sum := 0.0
 	for rank in counts:
@@ -103,7 +103,7 @@ func pierce_dps(stats: Dictionary, weapons: Dictionary, hp := 1.0) -> float:
 static func hit_value(unit: Dictionary, armour: int, hp := 1.0) -> float:
 	var dmg := float(unit.get("dmg", 1))
 	if not bool(unit.get("pierce", false)):
-		dmg = maxf(dmg - armour, 0.0)
+		dmg = dmg / float(1 + maxi(armour, 0))
 	var multi := float(unit.get("multi", 1))
 	if multi > 1.0 and hp > dmg:
 		multi = 1.0

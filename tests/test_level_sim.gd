@@ -66,7 +66,10 @@ func test_melee_trades_row_by_row() -> void:
 		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 60}]},
 		{"at": 50, "type": "wave", "groups": [{"enemy": "brute", "n": 10}]},
 		{"at": 90, "type": "finish"}]}
-	var sim := LevelSim.new(lvl, units)
+	# Brutes too tough to shoot down in time, so this checks melee alone.
+	var tough: Dictionary = units.duplicate(true)
+	tough["enemies"]["brute"]["hp"] = 100000
+	var sim := LevelSim.new(lvl, tough)
 	var seen := _step_until(sim, func(): return sim.state != "run")
 	var melees := seen.filter(func(e): return e["type"] == "melee")
 	eq(melees.size(), 2, "10 brutes in rows of 5 strike in two rows")

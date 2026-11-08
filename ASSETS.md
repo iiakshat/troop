@@ -18,7 +18,7 @@ Research notes, verified URLs and checks are in `docs/ASSET_SOURCES.md`. Everyth
 | `assets/audio/tap, upgrade, error, banner, recruit, swoosh, tick` | Kenney, *Interface Sounds*, OGA kenney_interfaceSounds.zip | CC0 1.0 |
 | `assets/audio/win, lose, gate_good, flip` | Kenney, *85 Music Jingles*, OGA jingleSounds_Kenney.zip | CC0 1.0 |
 | `assets/audio/glass*, thunk, punch*, clink, crash` | rubberduck, *75 CC0 breaking/falling/hit sfx*, OGA sfx_breaking_and_falling.zip | CC0 1.0 |
-| `assets/audio/knife*, coin_bag` | Kenney, *50 RPG sound effects*, OGA RPGsounds_Kenney.zip | CC0 1.0 |
+| `assets/audio/coin_bag` | Kenney, *50 RPG sound effects*, OGA RPGsounds_Kenney.zip | CC0 1.0 |
 | `assets/audio/music_fight.ogg` | XCVG, *fight_looped*, OGA fight_looped.ogg | CC0 1.0 |
 | Gunshots, hits, explosions and other synth sounds | Synthesised at startup in `src/autoload/sfx.gd` | Our own |
 | `icon.svg` (app icon) | Our own composition around the game-icons.net knife icon (`assets/icons/knife.svg`) | CC BY 3.0 (credited in-game) + our own |

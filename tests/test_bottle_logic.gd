@@ -3,12 +3,13 @@ extends "res://tests/test_case.gd"
 var cfg: Dictionary = Config.load_json("res://config/finale.json")
 
 
-func test_three_knives_only() -> void:
+func test_one_knife_per_bottle() -> void:
 	var b := BottleLogic.new(cfg, 1)
-	for i in 3:
+	eq(b.knives_left, b.count(), "as many knives as bottles")
+	for i in b.count():
 		b.throw(Vector2(9, 9), 0.0)
 	eq(b.knives_left, 0, "all used")
-	eq(b.throw(b.position(0, 0.0), 0.0), -1, "no fourth knife")
+	eq(b.throw(b.position(0, 0.0), 0.0), -1, "no extra knife")
 
 
 func test_direct_hit_breaks_and_misses_do_not() -> void:

@@ -23,7 +23,7 @@ var _pulse: Dictionary = {}
 
 
 func _ready() -> void:
-	UiKit.full_rect(self)
+	UiKit.safe_rect(self)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	var top := HBoxContainer.new()

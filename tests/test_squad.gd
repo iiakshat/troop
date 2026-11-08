@@ -65,6 +65,6 @@ func test_armour_and_pierce() -> void:
 		"inspector": {"dmg": 3, "rate": 1.0, "pierce": true}}
 	var s := _squad(10)
 	eq(s.dps(stats, {}, 0), 12.0, "no armour")
-	eq(s.dps(stats, {}, 1), 0.0, "armour 1 stops pistols and knife")
+	eq(s.dps(stats, {}, 1), 6.0, "armour 1 halves pistols and knife")
 	s.add("inspector", 1)
-	eq(s.dps(stats, {}, 1), 3.0, "inspector pierces")
+	eq(s.dps(stats, {}, 1), 9.0, "inspector pierces")

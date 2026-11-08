@@ -18,7 +18,9 @@ const HORDE_CAP := 180
 const DT := 1.0 / 60.0
 const ENEMY_KINDS := ["thug", "knifer", "gunman", "brute", "riot", "biker", "boss"]
 const ALLY_KINDS := ["hero", "constable", "inspector", "swat"]
-const SWIPE_PX := 36.0
+const STEER_PER_SCREEN := 14.0   # metres of squad travel for a full-width finger drag
+const LANE_SLACK := 0.35         # metres past the midpoint before the lane flips (no flicker)
+const STEER_EASE := 16.0         # how quickly the squad catches the finger
 
 var sim: LevelSim
 var world: World
@@ -52,9 +54,10 @@ var _hq: Node3D
 var _hq_fill: MeshInstance3D
 var finale: BottleShot = null
 var _hero_throw_t := -1.0
-var _touch_start := Vector2.ZERO
 var _touching := false
-var _swiped := false
+var _drag_from_x := 0.0          # finger x when the drag (re)started
+var _steer_from := 0.0           # squad target x at that moment
+var _steer_x := 0.0              # where the finger wants the squad
 var _last_total := 1
 var _shown_banner: Dictionary = {}
 var _obstacles: Dictionary = {}  # id -> {ob, node}
@@ -106,28 +109,29 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if demo or paused or _state != "play" or not input_enabled:
 		return
+	# Drag to steer: the squad follows the finger 1:1 anywhere on screen; the lane is the
+	# nearest one; letting go settles the squad into it.
 	if event is InputEventScreenTouch:
 		var t := event as InputEventScreenTouch
-		if t.pressed:
-			_touching = true
-			_swiped = false
-			_touch_start = t.position
-		else:
-			if _touching and not _swiped and t.position.distance_to(_touch_start) < 12.0:
-				# A tap on the left or right third also steps one lane.
-				var w := get_viewport().get_visible_rect().size.x
-				if t.position.x < w * 0.33:
-					_move(-1)
-				elif t.position.x > w * 0.67:
-					_move(1)
-			_touching = false
+		_touching = t.pressed
+		_drag_from_x = t.position.x
+		_steer_from = _squad_x
+		_steer_x = _squad_x
 	elif event is InputEventScreenDrag and _touching:
 		var d := event as InputEventScreenDrag
-		var dx := d.position.x - _touch_start.x
-		if absf(dx) > SWIPE_PX:
-			_move(1 if dx > 0 else -1)
-			_touch_start = d.position
-			_swiped = true
+		var w := get_viewport().get_visible_rect().size.x
+		_steer_x = clampf(_steer_from + (d.position.x - _drag_from_x) / w * STEER_PER_SCREEN,
+			LANE_X[0], LANE_X[2])
+		# Finger went past the edge: re-anchor so dragging back responds at once.
+		if _steer_x == LANE_X[0] or _steer_x == LANE_X[2]:
+			_drag_from_x = d.position.x
+			_steer_from = _steer_x
+		var lane := sim.lane
+		var half := (LANE_X[1] - LANE_X[0]) * 0.5 + LANE_SLACK
+		if _steer_x > LANE_X[lane] + half:
+			_move(1)
+		elif _steer_x < LANE_X[lane] - half:
+			_move(-1)
 	elif event is InputEventKey and event.pressed and not event.echo:
 		var k := (event as InputEventKey).keycode
 		if k == KEY_LEFT or k == KEY_A:
@@ -529,8 +533,11 @@ func _slot_pos(slot: int, n: int) -> Vector3:
 # ---------------------------------------------------------------- visuals
 
 func _update_visuals(d: float) -> void:
-	var lane_target: float = LANE_X[sim.lane]
-	_squad_x = move_toward(_squad_x, lane_target, d * 24.0 if not demo else 1.0)
+	var lane_target: float = _steer_x if _touching else LANE_X[sim.lane]
+	if demo:
+		_squad_x = move_toward(_squad_x, lane_target, 1.0)
+	else:
+		_squad_x = lerpf(_squad_x, lane_target, 1.0 - exp(-d * STEER_EASE))
 	var target_pos = _target_point()
 	_anim_t += d
 	var moving := demo or _state == "play" or _state == "done"

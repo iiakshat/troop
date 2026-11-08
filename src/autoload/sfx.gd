@@ -13,6 +13,7 @@ var _next := 0
 var _last_play: Dictionary = {}
 var _min_gap := {"knife": 0.06, "shot": 0.045, "hit": 0.05, "die": 0.035, "tick": 0.05, "clink": 0.12, "coin": 0.05, "punch": 0.07}
 var _variants: Dictionary = {}   # id -> Array of streams
+var _jitter := {"knife": 0.015, "glass": 0.03}  # random pitch range per id (default 0.06)
 var _music: AudioStreamPlayer
 
 
@@ -73,14 +74,22 @@ func play(id: String, volume_db := 0.0, pitch := 1.0) -> void:
 	_next = (_next + 1) % VOICES
 	p.stream = (_variants[id] as Array).pick_random() if _variants.has(id) else _streams[id]
 	p.volume_db = volume_db
-	p.pitch_scale = pitch * randf_range(0.94, 1.06)
+	var j := float(_jitter.get(id, 0.06))
+	p.pitch_scale = pitch * randf_range(1.0 - j, 1.0 + j)
 	p.play()
 
 
 # ---------------------------------------------------------------- synthesis
 
 func _build() -> void:
-	_streams["knife"] = _make(0.11, func(t, d): return _noise() * _env(t, d, 0.005) * 0.35 * (0.4 + t / d))
+	# Knife throw: a short "fwip" (noise through a filter that opens and closes).
+	var lp := [0.0, 0.0]
+	_streams["knife"] = _make(0.15, func(t, d):
+		var x: float = t / d
+		var k: float = 0.04 + 0.42 * sin(PI * x)
+		lp[0] += (_noise() - lp[0]) * k
+		lp[1] += (lp[0] - lp[1]) * k
+		return (lp[0] - lp[1]) * sin(PI * pow(x, 0.7)) * 1.6)
 	_streams["shot"] = _make(0.12, func(t, d): return (_noise() * 0.6 + sin(TAU * 110.0 * t) * 0.6) * exp(-t * 38.0) * 0.55)
 	_streams["hit"] = _make(0.05, func(t, d): return _noise() * exp(-t * 90.0) * 0.3)
 	_streams["die"] = _make(0.09, func(t, d): return sin(TAU * (520.0 - 3000.0 * t) * t) * exp(-t * 30.0) * 0.32)

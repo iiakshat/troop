@@ -1,6 +1,6 @@
 {
-  "_note": "Bottle Shot finale. Bottles sit on a shelf wall `wall_z` metres in front of the hero; x/y are wall-plane positions (y = height). motion: static | slide (whole set moves sideways) | swing (each bottle swings on a string) | drive (rides the boss van). Coins = (clear_bonus + troops x per_troop) x (1 + bonus per normal bottle) x (gold_mult if the gold bottle broke) x station bonus.",
-  "knives": 3,
+  "_note": "Bottle Shot finale. One knife per bottle (+ extra_knives). Bottles sit on a shelf wall `wall_z` metres in front of the hero; x/y are wall-plane positions (y = height). motion: static | slide (whole set moves sideways) | swing (each bottle swings on a string) | drive (rides the boss van). Coins = (clear_bonus + troops x per_troop) x (1 + bonus per normal bottle) x (gold_mult if the gold bottle broke) x station bonus.",
+  "extra_knives": 0,
   "knife_speed": 14.0,
   "wall_z": -5.8,
   "hit_radius": 0.19,
