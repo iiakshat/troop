@@ -19,7 +19,7 @@ var _tick := 0.0
 
 
 func _ready() -> void:
-	var col := _frame(first_icon(["gift", "chest"]), 1060)
+	var col := _frame(first_icon(["gift", "chest"]), 0)
 	_state = Game.daily_state()
 	# Streak: flame + number of days in a row (0 when the streak broke).
 	var top := HBoxContainer.new()

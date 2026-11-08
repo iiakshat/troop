@@ -21,7 +21,7 @@ func _init(lv := 1) -> void:
 
 func _ready() -> void:
 	var boss := Economy.is_boss(level, Game.economy)
-	var col := _frame("boss_crown" if boss and has_icon("boss_crown") else "", 900, str(level), false)
+	var col := _frame("boss_crown" if boss and has_icon("boss_crown") else "", 0, str(level), false)
 	var order: Array = Game.economy.get("boosters", {}).get("order", ["headstart", "shield", "bomb"])
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER

@@ -28,7 +28,7 @@ var _tick := 0.0
 
 
 func _ready() -> void:
-	var col := _frame(first_icon(["wheel", "star_icon"]), 1100)
+	var col := _frame(first_icon(["wheel", "star_icon"]), 0)
 	_slices = Spin.slices(Game.economy)
 	_probs = Game.spin_state().get("probabilities", [])
 	var stage := Control.new()
@@ -148,7 +148,7 @@ func _add_slice_icons() -> void:
 		item.position = Vector2(r, r) + dir * r * 0.66 - item.size * 0.5
 		item.rotation = mid
 		_wheel.add_child(item)
-		var isz := clampf(span * r * 0.55, 40.0, 76.0)
+		var isz := clampf(span * r * 0.55, 32.0, 76.0)
 		var ic := icon_safe(String(_slices[i].get("icon", "coin")), int(isz))
 		ic.position = Vector2(60 - isz * 0.5, 4)
 		ic.size = Vector2(isz, isz)

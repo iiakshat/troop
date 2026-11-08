@@ -48,7 +48,7 @@ func show_win(level: int, r: Dictionary, has_next: bool) -> void:
 	_clear()
 	_doubled = false
 	_ad_busy = false
-	var col := _card(860)
+	var col := _card(0)
 	col.add_child(UiKit.ribbon(RetentionPanel.first_icon(["trophy_gold", "trophy"]), str(level)))
 	# Stars: empty slots first, then they pop in one after another.
 	var stars_row := HBoxContainer.new()
@@ -176,7 +176,7 @@ func _on_x2() -> void:
 
 func show_loss(level: int, cause: String, progress := -1.0, peak := 0) -> void:
 	_clear()
-	var col := _card(800)
+	var col := _card(0)
 	var info: Array = LOSS.get(cause, ["person", "TRY AGAIN"])
 	col.add_child(UiKit.ribbon("", str(level)))
 	if progress >= 0.0:
@@ -220,7 +220,7 @@ func _road(progress: float) -> Control:
 	road.custom_minimum_size = Vector2(0, 160)
 	road.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var bar := RetentionPanel.progress_bar(52, UiKit.YELLOW)
-	bar.set_anchors_and_offsets_preset(Control.PRESET_HCENTER_WIDE)
+	bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	bar.offset_left = 10
 	bar.offset_right = -96
 	bar.offset_top = 92
@@ -334,10 +334,9 @@ func _card(height := 800.0) -> VBoxContainer:
 	add_child(dim)
 	var p := UiKit.panel(Color("3b6fd1"))
 	p.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	p.offset_left = -330
-	p.offset_right = 330
-	p.offset_top = -height * 0.5
-	p.offset_bottom = height * 0.5
+	p.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	p.grow_vertical = Control.GROW_DIRECTION_BOTH
+	p.custom_minimum_size = Vector2(660, height)
 	add_child(p)
 	var col := VBoxContainer.new()
 	col.alignment = BoxContainer.ALIGNMENT_CENTER

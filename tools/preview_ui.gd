@@ -13,6 +13,8 @@ var _frame := 0
 var _shots: Array[int] = []
 var _out := "_local/shots/ui.png"
 var _panel: Control
+var _queue: Array = []
+var _holder: Control
 
 
 func _initialize() -> void:
@@ -20,6 +22,7 @@ func _initialize() -> void:
 		var kv := String(a).trim_prefix("--").split("=", true, 1)
 		_args[kv[0]] = kv[1] if kv.size() > 1 else "1"
 	_out = String(_args.get("out", _out))
+	_queue = Array(String(_args.get("panel", "daily")).split(","))
 	for s in String(_args.get("shots", _args.get("frames", "90"))).split(","):
 		_shots.append(int(s))
 	process_frame.connect(_on_frame)
@@ -36,13 +39,23 @@ func _setup() -> void:
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var ui := CanvasLayer.new()
 	root.add_child(ui)
-	var holder := Control.new()
-	holder.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	ui.add_child(holder)
-	holder.add_child(bg)
-	_panel = _make(String(_args.get("panel", "daily")), holder)
+	ui.add_child(bg)
+	_next_panel(ui)
+
+
+func _next_panel(ui: Node) -> void:
+	if is_instance_valid(_holder):
+		_holder.queue_free()
+	_holder = Control.new()
+	_holder.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	ui.add_child(_holder)
+	var name := String(_queue.pop_front())
+	if _args.has("dir"):
+		_out = String(_args["dir"]).path_join(name + ".png")
+	_frame = 0
+	_panel = _make(name, _holder)
 	if _panel and _panel.get_parent() == null:
-		holder.add_child(_panel)
+		_holder.add_child(_panel)
 
 
 ## A mid-game player: some coins, stars, a streak, missions half done.
@@ -68,31 +81,36 @@ func _demo_state(g: Node) -> void:
 	s["rank_seen"] = ["hero", "constable", "sergeant", "inspector", "swat"]
 
 
+## Panel scripts load at run time: autoload names (Game) only resolve once the tree is up.
+func _ui(file: String) -> GDScript:
+	return load("res://src/ui/%s.gd" % file)
+
+
 func _make(name: String, holder: Control) -> Control:
 	match name:
 		"daily":
-			return DailyPanel.new()
+			return _ui("daily_panel").new()
 		"missions":
-			return MissionsPanel.new()
+			return _ui("missions_panel").new()
 		"spin":
-			return SpinPanel.new()
+			return _ui("spin_panel").new()
 		"booster":
-			return BoosterPanel.new(int(_args.get("level", "10")))
+			return _ui("booster_panel").new(int(_args.get("level", "10")))
 		"revive":
-			return RevivePanel.new(float(_args.get("progress", "0.82")), int(_args.get("peak", "64")))
+			return _ui("revive_panel").new(float(_args.get("progress", "0.82")), int(_args.get("peak", "64")))
 		"codex":
-			var c := CodexPanel.new()
+			var c: Control = _ui("codex_panel").new()
 			c.start_tab = String(_args.get("tab", "ranks"))
 			return c
 		"chest":
 			var g: Node = root.get_node("Game")
 			g.save["stars"]["14"] = 3
 			g.save["stars"]["15"] = 3
-			return StarChestPanel.new()
+			return _ui("star_chest_panel").new()
 		"welcome":
-			return WelcomeBackPanel.new(int(_args.get("coins", "840")))
+			return _ui("welcome_back_panel").new(int(_args.get("coins", "840")))
 		"result_win", "result_loss":
-			var r := ResultPanel.new()
+			var r: Control = _ui("result_panel").new()
 			holder.add_child(r)
 			if name == "result_win":
 				r.show_win(int(_args.get("level", "7")), {"coins": 360, "stars": int(_args.get("stars", "2")), "broken": 3, "gold": 1, "mult": 3.0, "star_chest_ready": false}, true)
@@ -100,7 +118,7 @@ func _make(name: String, holder: Control) -> Control:
 				r.show_loss(int(_args.get("level", "7")), String(_args.get("cause", "brute")), float(_args.get("progress", "0.82")), 64)
 			return r
 		"toast":
-			RankToast.show(holder, String(_args.get("unit", "sergeant")))
+			_ui("rank_toast").show(holder, String(_args.get("unit", "inspector")))
 			return null
 		"ad":
 			root.get_node("Ads").skip_ads = false
@@ -131,4 +149,7 @@ func _on_frame() -> void:
 		img.save_png(ProjectSettings.globalize_path("res://" + path))
 		print("saved ", path)
 	if _frame >= _shots.max():
-		quit()
+		if _queue.is_empty():
+			quit()
+		else:
+			_next_panel(_holder.get_parent())

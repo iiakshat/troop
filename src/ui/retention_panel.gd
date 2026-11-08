@@ -22,8 +22,9 @@ var _busy := false                 # an ad is showing for this panel: ignore rep
 var hold_coins := false            # true: the pill waits for count_coins() (chests)
 
 
-## Builds the frame and returns the card's column. Call from _ready (needs the tree).
-func _frame(icon_name: String, height: float, title := "", with_coins := true, color := UiKit.CREAM) -> VBoxContainer:
+## Builds the frame and returns the card's column. The card sizes itself to its content (at
+## least `min_height`) and stays centred. Call from _ready.
+func _frame(icon_name: String, min_height: float, title := "", with_coins := true, color := UiKit.CREAM) -> VBoxContainer:
 	UiKit.full_rect(self)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	var dim := ColorRect.new()
@@ -36,10 +37,9 @@ func _frame(icon_name: String, height: float, title := "", with_coins := true, c
 	UiKit.safe_rect(_safe)
 	_card = UiKit.panel(color)
 	_card.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	_card.offset_left = -CARD_W * 0.5
-	_card.offset_right = CARD_W * 0.5
-	_card.offset_top = -height * 0.5
-	_card.offset_bottom = height * 0.5
+	_card.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_card.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_card.custom_minimum_size = Vector2(CARD_W, min_height)
 	_safe.add_child(_card)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 14)

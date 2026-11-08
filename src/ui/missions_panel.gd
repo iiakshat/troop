@@ -14,7 +14,7 @@ var _tick := 0.0
 
 
 func _ready() -> void:
-	var col := _frame(first_icon(["missions", "trophy"]), 1040)
+	var col := _frame(first_icon(["missions", "trophy"]), 0)
 	var list := Game.missions()
 	for i in list.size():
 		var r := _row(i, list[i])
@@ -34,6 +34,7 @@ func _ready() -> void:
 	for i in list.size():
 		var pip := Panel.new()
 		pip.custom_minimum_size = Vector2(54, 54)
+		pip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		pips.add_child(pip)
 		_pips.append(pip)

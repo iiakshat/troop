@@ -16,7 +16,7 @@ var _stage: Control
 
 func _ready() -> void:
 	hold_coins = true
-	var col := _frame(first_icon(["star_chest", "chest"]), 860)
+	var col := _frame(first_icon(["star_chest", "chest"]), 0)
 	if not reward.is_empty():
 		set_coins_shown(int(Game.save.get("coins", 0)) - int(reward.get("coins", 0)))
 	_stage = Control.new()

@@ -31,14 +31,14 @@ static func troops_for(peak_squad: int, units: Dictionary = {}) -> int:
 
 
 func _ready() -> void:
-	var col := _frame("", 820, "%d%%" % int(floor(progress * 100.0)), false, Color("3b6fd1"))
+	var col := _frame("", 0, "%d%%" % int(floor(progress * 100.0)), false, Color("3b6fd1"))
 	# How far you got: squad marker on the road, flag at the end.
 	var road := Control.new()
 	road.custom_minimum_size = Vector2(0, 170)
 	road.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(road)
 	var bar := progress_bar(56, UiKit.YELLOW)
-	bar.set_anchors_and_offsets_preset(Control.PRESET_HCENTER_WIDE)
+	bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	bar.offset_left = 20
 	bar.offset_right = -96
 	bar.offset_top = 90

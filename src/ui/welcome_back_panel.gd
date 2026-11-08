@@ -20,7 +20,7 @@ func _init(c := 0) -> void:
 
 
 func _ready() -> void:
-	var col := _frame(first_icon(["city_hall", "station"]), 780)
+	var col := _frame(first_icon(["city_hall", "station"]), 0)
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 14)
