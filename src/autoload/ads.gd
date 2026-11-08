@@ -40,7 +40,7 @@ var _was_paused := false
 func _ready() -> void:
 	cfg = Config.economy().get("ads", {})
 	for a in OS.get_cmdline_user_args():
-		var kv := String(a).split("=", true, 1)
+		var kv := String(a).trim_prefix("--").split("=", true, 1)
 		if kv[0] in ["autoplay", "skip_ads"] and (kv.size() < 2 or kv[1] != "0"):
 			skip_ads = true
 
