@@ -67,7 +67,7 @@ static func _make(e: Dictionary, level: int, scale: float, rng: RandomNumberGene
 	var hi := maxi(int(floor(float(g[1]) / step)), lo)
 	var goal := rng.randi_range(lo, hi) * step
 	goal = maxi(int(round(goal * (1.0 + float(e.get("per_level", 0.0)) * (level - 1)) / step)) * step, step)
-	var reward: Dictionary = (e.get("reward", {}) as Dictionary).duplicate(true)
+	var reward: Dictionary = Rewards.normalized(e.get("reward", {}))
 	reward["coins"] = int(reward.get("coins", 0)) + Economy.round_price(float(e.get("coins", 0)) * scale, economy)
 	return {
 		"id": String(e["id"]), "stat": String(e["stat"]), "icon": String(e.get("icon", "star_icon")),
@@ -112,7 +112,7 @@ static func claim(save: Dictionary, i: int) -> Dictionary:
 	if i < 0 or i >= l.size() or not bool(l[i]["done"]) or bool(l[i]["claimed"]):
 		return {}
 	l[i]["claimed"] = true
-	return (l[i]["reward"] as Dictionary).duplicate(true)
+	return Rewards.normalized(l[i]["reward"])
 
 
 ## True when every mission today is claimed and the bonus chest is still closed.

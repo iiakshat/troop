@@ -21,7 +21,7 @@ static func _days(economy: Dictionary) -> Array:
 ## Reward of calendar day n (1..7) as written in the config (coins not scaled yet).
 static func reward_for_day(n: int, economy: Dictionary = {}) -> Dictionary:
 	var days := _days(economy)
-	return (days[clampi(n, 1, days.size()) - 1] as Dictionary).duplicate(true)
+	return Rewards.normalized(days[clampi(n, 1, days.size()) - 1])
 
 
 ## {can_claim, day (the day the next claim gives, 1..7), missed (the streak broke), streak,

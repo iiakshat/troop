@@ -10,10 +10,20 @@ const BOOSTERS := ["headstart", "shield", "bomb"]
 
 
 ## Copy of a reward with its coins multiplied by `mult` and rounded to a clean number.
+## Counts come out as ints (JSON numbers are floats).
 static func scaled(reward: Dictionary, mult: float, economy: Dictionary = {}) -> Dictionary:
-	var out := reward.duplicate(true)
+	var out := normalized(reward)
 	if out.has("coins"):
 		out["coins"] = Economy.round_price(float(out["coins"]) * mult, economy)
+	return out
+
+
+## Copy with coins and booster counts as ints.
+static func normalized(reward: Dictionary) -> Dictionary:
+	var out := reward.duplicate(true)
+	for k in ["coins"] + BOOSTERS:
+		if out.has(k):
+			out[k] = int(out[k])
 	return out
 
 

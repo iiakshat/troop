@@ -69,3 +69,10 @@ func test_resolve_rolls_chest_and_scales_once() -> void:
 	eq(int(r["coins"]), 400, "own coins x2 + chest coins x2")
 	eq(int(r["headstart"]), 1, "chest booster")
 	eq(r["chest"], "t", "chest named for the UI")
+
+
+func test_counts_are_ints_after_json() -> void:
+	var r := Rewards.normalized(JSON.parse_string('{"coins": 150.0, "shield": 1.0, "chest": "daily"}'))
+	check(r["coins"] is int and r["shield"] is int, "ints")
+	eq(r["chest"], "daily", "other keys untouched")
+	check(Daily.reward_for_day(3, eco)["shield"] is int, "daily rewards as ints")
