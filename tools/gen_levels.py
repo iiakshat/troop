@@ -60,8 +60,8 @@ MIN_SECS = 62.0
 
 # Target share of random routes that win (tests/tune.gd fits a scale to hit it):
 # about 70% in levels 1-5 falling to 15-25% in 40-50; sawtooth inside each district.
-WIN_START = [0.86, 0.62, 0.50, 0.40, 0.30]
-WIN_END = [0.52, 0.42, 0.33, 0.25, 0.18]
+WIN_START = [0.78, 0.62, 0.50, 0.40, 0.30]
+WIN_END = [0.50, 0.42, 0.33, 0.25, 0.18]
 WIN_BOSS = [0.45, 0.36, 0.28, 0.22, 0.15]
 
 

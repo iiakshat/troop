@@ -4,7 +4,7 @@
   "name": "Crossing",
   "district": 1,
   "boss": false,
-  "target_win": 0.65,
+  "target_win": 0.6,
   "target_ratio": -1.0,
   "stars": {"star2": 30, "star3": 60},
   "charges": {"shield": 1, "bomb": 1},
