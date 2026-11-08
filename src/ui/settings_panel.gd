@@ -8,6 +8,7 @@ Street props: Kay Lousberg / KayKit (CC0)
 Icons: game-icons.net by Lorc, Delapouite, Skoll,
 Sbed, Andy Meneely, Guard13007 (CC BY 3.0)
 Sounds: Kenney, rubberduck (CC0)
+Gunshots: Vincent Sevedge (CC BY 3.0)
 Music: XCVG (CC0)
 Fonts: Luckiest Guy (Apache 2.0), Lilita One (OFL)"""
 

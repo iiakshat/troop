@@ -11,9 +11,9 @@ var _streams: Dictionary = {}
 var _players: Array[AudioStreamPlayer] = []
 var _next := 0
 var _last_play: Dictionary = {}
-var _min_gap := {"knife": 0.06, "shot": 0.045, "hit": 0.05, "die": 0.035, "tick": 0.05, "clink": 0.12, "coin": 0.05, "punch": 0.07}
+var _min_gap := {"knife": 0.06, "shot": 0.05, "shot_big": 0.09, "shot_rifle": 0.06, "blast": 0.3, "hit": 0.05, "die": 0.035, "tick": 0.05, "clink": 0.12, "coin": 0.05, "punch": 0.07}
 var _variants: Dictionary = {}   # id -> Array of streams
-var _jitter := {"knife": 0.015, "glass": 0.03}  # random pitch range per id (default 0.06)
+var _jitter := {"knife": 0.015, "glass": 0.03, "shot": 0.04, "shot_big": 0.03, "shot_rifle": 0.03}  # random pitch range per id (default 0.06)
 var _music: AudioStreamPlayer
 
 

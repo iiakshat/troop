@@ -458,7 +458,7 @@ func _gun_tracers(horde_id: int, blocked: bool) -> void:
 	if hv.is_empty():
 		return
 	hv["shoot_flash"] = 0.15
-	Sfx.play("shot", -2.0, 0.7)
+	Sfx.play("blast" if hv["kind"] == "boss" else "shot", -3.0, 0.85)
 	var n := mini((hv["offs"] as Array).size(), 8)
 	for i in n:
 		var from := _fig_pos(hv, hv["offs"][i]) + Vector3(0, 1.2, 0.5)
@@ -759,7 +759,13 @@ func _fire(a: Dictionary, target: Vector3) -> void:
 			fx.shoot("bullet", from + Vector3(0.2, 0, 0), target + spread * 0.5, 55.0)
 			Sfx.play("shot", -8.0)
 	else:
-		Sfx.play("shot", -10.0, 1.3 if kind == "constable" else 0.9)
+		match kind:
+			"inspector":
+				Sfx.play("shot_big", -9.0)
+			"swat":
+				Sfx.play("shot_rifle", -10.0)
+			_:
+				Sfx.play("shot", -11.0, 1.1)
 
 
 func _count_kind(kind: String) -> int:
