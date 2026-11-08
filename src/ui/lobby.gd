@@ -1,31 +1,90 @@
 class_name Lobby
 extends Control
-## Title screen over the jogging squad: coins, settings, level picker, Station / Style and
-## a big Play button. Icons over words.
+## The lobby: the city map (CityMap) fills the screen; over it a top bar (settings, coins),
+## side buttons (Daily = gift, Spin = wheel, Missions on the left; star chest with its
+## progress on the right) and a bottom bar (Station, Codex, a big Play showing the selected
+## level, Style). Every button has a "!" alert when something is claimable or affordable.
+## Icons and numbers only.
+##
+## Signals for INTEGRATE (RETENTION-UI panels open from main.gd, or via open_panel()):
+##   play_pressed(level)  Play, or tapping the selected level node again
+##   play(level)          same moment as play_pressed; kept so main.gd keeps working.
+##                        Connect only one of the two.
+##   daily_pressed  spin_pressed  missions_pressed  codex_pressed  star_chest_pressed
+## Station, Style, Settings and BuildingPanel open here (one overlay at a time).
+## Debug args (after --): save=path (load that save, never write), building=<id> (open its
+## panel), focus=N (scroll the map to level N).
 
 signal play(level: int)
+signal play_pressed(level: int)
+signal daily_pressed
+signal spin_pressed
+signal missions_pressed
+signal codex_pressed
+signal star_chest_pressed
 
+var map: CityMap
+var _chrome: Control
 var _coins: HBoxContainer
-var _level := 1
-var _level_buttons: Array[Button] = []
+var _coin_icon: Control
 var _play: Button
-var _overlay: Control = null
+var _play_icon: TextureRect
+var _play_label: Label
 var _station: Button
+var _codex: Button
+var _style: Button
+var _daily: Button
+var _spin: Button
+var _missions: Button
+var _chest: Button
+var _chest_label: Label
+var _overlay: Control = null
+var _level := 1
+var _shown_coins := 0
+var _flying := 0
 
 
 func _ready() -> void:
-	UiKit.safe_rect(self)
+	_debug_save()
+	UiKit.full_rect(self)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_level = int(Game.save["unlocked"])
 
+	map = CityMap.new()
+	UiKit.full_rect(map)
+	add_child(map)
+	_level = map.selected
+	map.level_selected.connect(_on_level_selected)
+	map.play_requested.connect(_start)
+	map.building_pressed.connect(_open_building)
+	map.collected.connect(_on_collected)
+
+	_chrome = Control.new()
+	_chrome.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_chrome)
+	UiKit.safe_rect(_chrome)
+	_build_top()
+	_build_sides()
+	_build_bottom()
+
+	Game.coins_changed.connect(_on_coins)
+	Game.alerts_changed.connect(refresh)
+	Game.stars_changed.connect(_on_stars)
+	Game.city_changed.connect(refresh)
+	_shown_coins = int(Game.save["coins"])
+	refresh()
+	_debug_args()
+
+
+func _build_top() -> void:
 	var top := HBoxContainer.new()
 	top.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	top.offset_left = 24
-	top.offset_right = -24
-	top.offset_top = 28
+	top.offset_left = 20
+	top.offset_right = -20
+	top.offset_top = 20
 	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(top)
-	var gear := UiKit.icon_button("settings", "yellow", 96)
+	top.add_theme_constant_override("separation", 14)
+	_chrome.add_child(top)
+	var gear := UiKit.icon_button("settings", "yellow", 92)
 	gear.pressed.connect(func(): _open(SettingsPanel.new()))
 	top.add_child(gear)
 	var gap := Control.new()
@@ -35,90 +94,203 @@ func _ready() -> void:
 	_coins = UiKit.pill("coin", "0", UiKit.YELLOW)
 	_coins.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	top.add_child(_coins)
+	_coin_icon = _coins.get_child(0).get_child(0).get_child(0) as Control
 
-	var title := UiKit.label("TROOP", 170, UiKit.YELLOW, 30)
-	title.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	title.offset_top = 140
-	title.offset_bottom = 330
-	title.rotation_degrees = -4.0
-	add_child(title)
 
-	var col := VBoxContainer.new()
-	col.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-	col.offset_left = 34
-	col.offset_right = -34
-	col.offset_top = -470
-	col.offset_bottom = -40
-	col.alignment = BoxContainer.ALIGNMENT_END
-	col.add_theme_constant_override("separation", 22)
-	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(col)
+func _side_button(icon_name: String, sig: Signal, parent: Control) -> Button:
+	var b := UiKit.icon_button(icon_name, "blue", 108)
+	b.pressed.connect(func(): sig.emit())
+	parent.add_child(b)
+	return b
 
-	var levels := HBoxContainer.new()
-	levels.alignment = BoxContainer.ALIGNMENT_CENTER
-	levels.add_theme_constant_override("separation", 14)
-	levels.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_child(levels)
-	for n in range(1, Config.LEVEL_COUNT + 1):
-		var b := UiKit.button(str(n), "blue", 48, Vector2(110, 110), "round")
-		b.pressed.connect(_pick_level.bind(n))
-		levels.add_child(b)
-		_level_buttons.append(b)
+
+func _build_sides() -> void:
+	var left := VBoxContainer.new()
+	left.position = Vector2(20, 136)
+	left.add_theme_constant_override("separation", 18)
+	left.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_chrome.add_child(left)
+	_daily = _side_button("gift", daily_pressed, left)
+	_spin = _side_button("wheel", spin_pressed, left)
+	_missions = _side_button("missions", missions_pressed, left)
+
+	var right := VBoxContainer.new()
+	right.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	right.offset_left = -128
+	right.offset_right = -20
+	right.offset_top = 136
+	right.add_theme_constant_override("separation", 2)
+	right.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_chrome.add_child(right)
+	_chest = _side_button("star_chest", star_chest_pressed, right)
+	_chest_label = UiKit.label("0/15", 30, Color.WHITE, 9)
+	right.add_child(_chest_label)
+
+
+func _build_bottom() -> void:
+	var strip := Panel.new()
+	strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	strip.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	strip.offset_top = -176
+	strip.offset_bottom = 400  # runs under the gesture bar / past the screen edge
+	var sb := UiKit.flat_box(Color(0.04, 0.1, 0.26, 0.72), 34, 5)
+	sb.corner_radius_bottom_left = 0
+	sb.corner_radius_bottom_right = 0
+	strip.add_theme_stylebox_override("panel", sb)
+	_chrome.add_child(strip)
 
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 18)
+	row.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	row.offset_left = 18
+	row.offset_right = -18
+	row.offset_top = -160
+	row.offset_bottom = -18
+	row.add_theme_constant_override("separation", 12)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_child(row)
-	_station = UiKit.icon_button("station", "blue", 150)
+	_chrome.add_child(row)
+	_station = UiKit.icon_button("station", "blue", 126)
+	_station.size_flags_vertical = Control.SIZE_SHRINK_END
 	_station.pressed.connect(func(): _open(StationPanel.new()))
 	row.add_child(_station)
-	_play = UiKit.icon_button("play", "green", 150)
+	_codex = UiKit.icon_button("badge", "blue", 126)
+	_codex.size_flags_vertical = Control.SIZE_SHRINK_END
+	_codex.pressed.connect(func(): codex_pressed.emit())
+	row.add_child(_codex)
+
+	_play = UiKit.button("", "green", 10, Vector2(0, 142))
 	_play.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_play.pressed.connect(func(): play.emit(_level))
+	_play.size_flags_vertical = Control.SIZE_SHRINK_END
+	_play.pressed.connect(func(): _start(_level))
 	row.add_child(_play)
-	var style := UiKit.icon_button("shirt", "blue", 150)
-	style.pressed.connect(func(): _open(StylePanel.new()))
-	row.add_child(style)
-	Game.coins_changed.connect(func(_c): refresh())
-	refresh()
+	var prow := HBoxContainer.new()
+	prow.alignment = BoxContainer.ALIGNMENT_CENTER
+	prow.add_theme_constant_override("separation", 6)
+	prow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	UiKit.full_rect(prow)
+	prow.offset_top = 8
+	prow.offset_bottom = -18
+	_play.add_child(prow)
+	_play_icon = UiKit.icon("play", 74)
+	prow.add_child(_play_icon)
+	_play_label = UiKit.label("1", 66, Color.WHITE, 12)
+	prow.add_child(_play_label)
+
+	_style = UiKit.icon_button("shirt", "blue", 126)
+	_style.size_flags_vertical = Control.SIZE_SHRINK_END
+	_style.pressed.connect(func(): _open(StylePanel.new()))
+	row.add_child(_style)
+	_play_breathe()
+
+
+func _play_breathe() -> void:
+	var tw := _play.create_tween().set_loops()
+	tw.tween_interval(1.6)
+	tw.tween_callback(func(): UiKit.bump(_play, 1.06))
+
+
+## Opens a full-screen panel over the lobby (one at a time); the lobby refreshes when it closes.
+func open_panel(p: Control) -> void:
+	_open(p)
 
 
 func _open(p: Control) -> void:
 	if is_instance_valid(_overlay):
 		_overlay.queue_free()
 	_overlay = p
-	p.tree_exited.connect(refresh)
+	p.tree_exited.connect(_on_panel_closed)
 	add_child(p)
 
 
-func _pick_level(n: int) -> void:
-	if n <= int(Game.save["unlocked"]):
-		_level = n
+func _open_building(id: String) -> void:
+	_open(BuildingPanel.new(id))
+
+
+func _on_panel_closed() -> void:
+	if is_inside_tree():
 		refresh()
+		map.refresh()
+
+
+func _start(n: int) -> void:
+	play_pressed.emit(n)
+	play.emit(n)
+
+
+func _on_level_selected(n: int) -> void:
+	_level = n
+	refresh()
+	UiKit.bump(_play, 1.08)
+
+
+func _on_coins(_c: int) -> void:
+	refresh()
+
+
+func _on_stars(_t: int) -> void:
+	refresh()
+
+
+## Storage collected on the map: coins fly from the bubble to the counter, which then counts up.
+func _on_collected(coins: int, from: Vector2) -> void:
+	_flying += 1
+	var before := _shown_coins
+	var to := _coin_icon.get_global_rect().get_center()
+	var land := func():
+		Sfx.play("coin")
+		UiKit.bump(_coin_icon, 1.25)
+	var done := func():
+		_flying -= 1
+		var now := int(Game.save["coins"])
+		UiKit.pill_count(_coins, before, now)
+		_shown_coins = now
+	UiKit.fly_coins(self, from, to, CityMap.fly_count(coins), land, done)
 
 
 func refresh() -> void:
 	if not is_inside_tree():
 		return
-	UiKit.set_alert(_station, StationPanel.anything_affordable())
-	UiKit.pill_set(_coins, str(int(Game.save["coins"])))
-	for i in _level_buttons.size():
-		var n := i + 1
-		var b := _level_buttons[i]
-		var locked := n > int(Game.save["unlocked"])
-		b.disabled = locked
-		b.text = "" if locked else str(n)
-		if locked and not b.has_meta("lock"):
-			var l := UiKit.icon("lock", 54)
-			l.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-			l.offset_left = -27
-			l.offset_right = 27
-			l.offset_top = -34
-			l.offset_bottom = 20
-			b.add_child(l)
-			b.set_meta("lock", l)
-		if b.has_meta("lock"):
-			(b.get_meta("lock") as Control).visible = locked
-		var colr := "yellow" if n == _level else "blue"
-		b.add_theme_stylebox_override("normal", UiKit._tex_box(colr, "round"))
-		b.add_theme_stylebox_override("hover", UiKit._tex_box(colr, "round"))
+	if _flying <= 0:
+		_shown_coins = int(Game.save["coins"])
+		UiKit.pill_set(_coins, str(_shown_coins))
+	var al: Dictionary = Game.alerts()
+	UiKit.set_alert(_daily, bool(al.get("daily", false)))
+	UiKit.set_alert(_spin, bool(al.get("spin", false)))
+	UiKit.set_alert(_missions, bool(al.get("missions", false)))
+	UiKit.set_alert(_station, bool(al.get("station", false)))
+	UiKit.set_alert(_chest, bool(al.get("star_chest", false)))
+	var chest: Dictionary = Game.star_chest_progress()
+	_chest_label.text = "%d/%d" % [int(chest.get("have", 0)), int(chest.get("need", 0))]
+	if map and CityMap.node_state(Game.save, _level, Config.LEVEL_COUNT) == "locked":
+		_level = map.selected
+	_play_label.text = str(_level)
+	var boss := Economy.is_boss(_level, Game.economy)
+	_play_icon.texture = UiKit.icon_texture("boss_crown" if boss else "play")
+
+
+# ---------------------------------------------------------------- debug (screenshots)
+
+func _arg(key: String) -> String:
+	for a in OS.get_cmdline_user_args():
+		var kv := String(a).trim_prefix("--").split("=", true, 1)
+		if kv[0] == key:
+			return kv[1] if kv.size() > 1 else "1"
+	return ""
+
+
+## save=path: play on a copy of that save (JSON) and never write the real one.
+func _debug_save() -> void:
+	var path := _arg("save")
+	if path == "" or not FileAccess.file_exists(path):
+		return
+	Game.save_path = ""
+	Game.boot(Config.load_json(path))
+
+
+func _debug_args() -> void:
+	var f := _arg("focus")
+	if f != "":
+		map.focus_level(int(f), false)
+	var b := _arg("building")
+	if b != "":
+		_open_building(b)

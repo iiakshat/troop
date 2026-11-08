@@ -24,11 +24,19 @@ static var _icons: Dictionary = {}
 
 
 ## Glossy full-colour icon (assets/icons/gloss, AI-painted) when there is one, else the
-## white game-icons.net SVG (UI glyphs like pause, close, retry).
+## white game-icons.net SVG (UI glyphs like pause, close, retry), else the star icon, so a
+## missing icon never crashes (null only if even the star is gone).
 static func icon_texture(name: String) -> Texture2D:
 	if not _icons.has(name):
-		var gloss := "res://assets/icons/gloss/%s.png" % name
-		_icons[name] = load(gloss) if ResourceLoader.exists(gloss) else load("res://assets/icons/%s.svg" % name)
+		var tex: Texture2D = null
+		for path in ["res://assets/icons/gloss/%s.png" % name, "res://assets/icons/%s.svg" % name]:
+			if ResourceLoader.exists(path):
+				tex = load(path) as Texture2D
+				if tex:
+					break
+		if tex == null and name != "star_icon":
+			tex = icon_texture("star_icon")
+		_icons[name] = tex
 	return _icons[name]
 
 
@@ -274,3 +282,130 @@ static func _squash(c: Control) -> void:
 	var tw := c.create_tween()
 	tw.tween_property(c, "scale", Vector2(1.06, 0.92), 0.06)
 	tw.tween_property(c, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+## A timer as numbers only: 0:30, 1:05, 59:59, then 2h 10m (2h when the minutes are 0).
+static func fmt_time(seconds: int) -> String:
+	var t := maxi(seconds, 0)
+	if t < 3600:
+		return "%d:%02d" % [t / 60, t % 60]
+	var h := t / 3600
+	var m := (t % 3600) / 60
+	return "%dh" % h if m == 0 else "%dh %dm" % [h, m]
+
+
+## Short coin amounts: 950, 12.5K, 3.2M (numbers only).
+static func fmt_coins(n: int) -> String:
+	if absi(n) < 10000:
+		return str(n)
+	if absi(n) < 1000000:
+		return "%sK" % _trim(n / 1000.0)
+	return "%sM" % _trim(n / 1000000.0)
+
+
+static func _trim(v: float) -> String:
+	return str(int(v)) if v >= 100.0 else String.num(floorf(v * 10.0) / 10.0, 1).trim_suffix(".0")
+
+
+## Coins burst out of `from` and fly to `to` (global canvas positions, e.g. a bubble on the map
+## and the coin pill). on_each() runs as each coin lands (tick a sound, pulse the counter),
+## on_done() after the last one. Purely visual; the coins were already added.
+static func fly_coins(layer: Node, from: Vector2, to: Vector2, count := 8, on_each := Callable(), on_done := Callable()) -> void:
+	count = clampi(count, 1, 24)
+	var half := Vector2(28, 28)
+	for i in count:
+		var c := icon("coin", 56)
+		c.top_level = true
+		c.z_index = 50
+		layer.add_child(c)
+		c.size = half * 2.0
+		c.pivot_offset = half
+		c.global_position = from - half
+		var burst := from - half + Vector2(randf_range(-95.0, 95.0), randf_range(-120.0, -10.0))
+		var tw := c.create_tween()
+		tw.tween_interval(i * 0.045)
+		tw.tween_property(c, "global_position", burst, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw.tween_property(c, "global_position", to - half, 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tw.parallel().tween_property(c, "scale", Vector2.ONE * 0.7, 0.5)
+		var last := i == count - 1
+		tw.tween_callback(func():
+			if on_each.is_valid():
+				on_each.call()
+			if last and on_done.is_valid():
+				on_done.call()
+			c.queue_free())
+
+
+## Counts a pill's number from `from` to `to` (after coins land) and gives it a little bump.
+static func pill_count(p: HBoxContainer, from: int, to: int, duration := 0.45) -> void:
+	var l: Label = p.get_meta("label")
+	var tw := p.create_tween()
+	tw.tween_method(func(v: float): l.text = str(int(round(v))), float(from), float(to), duration)
+	bump(p)
+
+
+## Quick scale bump (a counter receiving coins, a button that got something).
+static func bump(c: Control, amount := 1.15) -> void:
+	c.pivot_offset = c.size * 0.5
+	var tw := c.create_tween()
+	tw.tween_property(c, "scale", Vector2.ONE * amount, 0.08)
+	tw.tween_property(c, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+## Sideways shake: "not yet" (locked level, not enough coins).
+static func shake(c: Control) -> void:
+	if not c.has_meta("shake_x"):
+		c.set_meta("shake_x", c.position.x)
+	var x: float = c.get_meta("shake_x")
+	if c.has_meta("shake_tw"):
+		(c.get_meta("shake_tw") as Tween).kill()
+	var tw := c.create_tween()
+	c.set_meta("shake_tw", tw)
+	for dx in [14.0, -12.0, 8.0, -4.0, 0.0]:
+		tw.tween_property(c, "position:x", x + dx, 0.05)
+
+
+## Rounded flat box (bubbles, tags, bars). radius/border in px.
+static func flat_box(color: Color, radius := 24, border := 4, border_color := INK) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = color
+	sb.set_corner_radius_all(radius)
+	sb.set_border_width_all(border)
+	sb.border_color = border_color
+	return sb
+
+
+## Icon + number row inside a button (price tags, district locks): replaces the button's own
+## text. Returns the row; its "icons" meta holds the TextureRects, "label" the Label.
+static func button_row(b: Button, icons: Array, text := "", size := 44) -> HBoxContainer:
+	if b.has_meta("row"):
+		var old: HBoxContainer = b.get_meta("row")
+		if old.get_meta("names") == icons and old.get_meta("size") == size:
+			var ol: Label = old.get_meta("label")
+			ol.text = text
+			ol.visible = text != ""
+			return old
+		old.queue_free()
+	b.text = ""
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 6)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	full_rect(row)
+	row.offset_top = 6
+	row.offset_bottom = -12
+	var rects := []
+	for n in icons:
+		var ic := icon(String(n), int(size * 1.15))
+		rects.append(ic)
+		row.add_child(ic)
+	var l := label(text, size, Color.WHITE, 10)
+	l.visible = text != ""
+	row.add_child(l)
+	row.set_meta("icons", rects)
+	row.set_meta("names", icons.duplicate())
+	row.set_meta("size", size)
+	row.set_meta("label", l)
+	b.add_child(row)
+	b.set_meta("row", row)
+	return row
