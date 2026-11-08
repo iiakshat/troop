@@ -42,8 +42,8 @@ func _ready() -> void:
 	_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	_panel.offset_left = -330
 	_panel.offset_right = 330
-	_panel.offset_top = -500
-	_panel.offset_bottom = 500
+	_panel.offset_top = -470
+	_panel.offset_bottom = 470
 	add_child(_panel)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 14)
@@ -170,12 +170,14 @@ func refresh() -> void:
 		(_pips.get_child(i) as Panel).add_theme_stylebox_override("panel", UiKit.flat_box(c, 10, 3))
 
 	var maxed := lv >= mx
+	var building := status == "building"
+	# While building, "next" is the level being built; otherwise the level after this one.
+	var next_income := City.income_at(id, lv, Game.economy) if building else float(st["next_income"])
 	_now.text = str(int(round(float(st["income"]))))
-	_next.text = str(int(round(float(st["next_income"]))))
-	_arrow.visible = not maxed and status != "building"
+	_next.text = str(int(round(next_income)))
+	_arrow.visible = building or not maxed
 	_next.visible = _arrow.visible
 
-	var building := status == "building"
 	_info.visible = not building and not maxed
 	_time.text = UiKit.fmt_time(int(st["build_time"]))
 	_bar_bg.visible = building

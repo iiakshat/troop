@@ -202,6 +202,18 @@ func _open(p: Control) -> void:
 	add_child(p)
 
 
+## Closes the open panel (for Android back). True if there was one to close.
+func close_overlay() -> bool:
+	if not is_instance_valid(_overlay) or _overlay.is_queued_for_deletion():
+		return false
+	if _overlay.has_method("_close"):
+		_overlay.call("_close")
+	else:
+		_overlay.queue_free()
+	_overlay = null
+	return true
+
+
 func _open_building(id: String) -> void:
 	_open(BuildingPanel.new(id))
 
@@ -260,7 +272,9 @@ func refresh() -> void:
 	UiKit.set_alert(_station, bool(al.get("station", false)))
 	UiKit.set_alert(_chest, bool(al.get("star_chest", false)))
 	var chest: Dictionary = Game.star_chest_progress()
-	_chest_label.text = "%d/%d" % [int(chest.get("have", 0)), int(chest.get("need", 0))]
+	var span := maxi(int(chest.get("need", 0)) - int(chest.get("from", 0)), 1)
+	var into := clampi(int(chest.get("have", 0)) - int(chest.get("from", 0)), 0, span)
+	_chest_label.text = "%d/%d" % [into, span]
 	if map and CityMap.node_state(Game.save, _level, Config.LEVEL_COUNT) == "locked":
 		_level = map.selected
 	_play_label.text = str(_level)
@@ -294,3 +308,5 @@ func _debug_args() -> void:
 	var b := _arg("building")
 	if b != "":
 		_open_building(b)
+	if _arg("collect") != "":
+		get_tree().create_timer(1.0).timeout.connect(map.collect_any)

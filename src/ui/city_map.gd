@@ -17,7 +17,7 @@ extends Control
 signal level_selected(level: int)              ## an open level was tapped; it is now `selected`
 signal play_requested(level: int)              ## the selected level was tapped again
 signal building_pressed(id: String)
-signal collected(coins: int, from: Vector2)    ## storage emptied; from = tapped bubble (global)
+signal collected(coins: int, from: Vector2)    ## a bubble was tapped: these coins are collected right after; from = bubble (global)
 
 const LAYOUT_PATH := "res://assets/city/map_layout.json"
 const BASE_W := 720.0          ## the map is laid out at this width, then scaled to the screen
@@ -390,7 +390,7 @@ func _build_nodes() -> void:
 			var c := to_base(l["pos"])
 			var boss := Economy.is_boss(n, Game.economy)
 			var dia := BOSS_NODE if boss else NODE
-			var b := UiKit.button(str(n), "blue", 46 if boss else 40, Vector2(dia, dia), "round")
+			var b := UiKit.button(str(n), "blue", 52 if boss else 44, Vector2(dia, dia), "round")
 			b.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			b.size = Vector2(dia, dia)
 			b.position = c - b.size * 0.5
@@ -510,8 +510,9 @@ func refresh_levels() -> void:
 		if boss and (st == "current" or st == "open"):
 			color = "red"
 		var b: Button = e["btn"]
+		var box := _node_box(color)
 		for s in ["normal", "hover", "pressed", "disabled"]:
-			b.add_theme_stylebox_override(s, UiKit._tex_box(color, "round"))
+			b.add_theme_stylebox_override(s, box)
 		b.add_theme_color_override("font_color", Color(1, 1, 1, 0.62) if st == "locked" else Color.WHITE)
 		(e["lock"] as Control).visible = st == "locked"
 		var got := clampi(int(save.get("stars", {}).get(str(n), 0)), 0, 3)
@@ -548,6 +549,21 @@ func refresh_levels() -> void:
 		sb.shadow_offset = Vector2(0, 6)
 		(e["box"] as Panel).add_theme_stylebox_override("panel", sb)
 		(e["icon"] as TextureRect).texture = UiKit.icon_texture(icon_name)
+
+
+## The whole round button texture scaled to the node (no 9-slice, so it stays a circle).
+static var _node_boxes := {}
+
+
+static func _node_box(color: String) -> StyleBoxTexture:
+	if not _node_boxes.has(color):
+		var sb := StyleBoxTexture.new()
+		var path := String(UiKit.BUTTON_TEX.get(color, UiKit.BUTTON_TEX["blue"])) % "round"
+		sb.texture = load(path) as Texture2D if ResourceLoader.exists(path) else null
+		sb.content_margin_top = 2
+		sb.content_margin_bottom = 12
+		_node_boxes[color] = sb
+	return _node_boxes[color]
 
 
 ## Pulse + ripple on the current level node.
@@ -782,13 +798,24 @@ func _tap_node(n: int) -> void:
 	level_selected.emit(n)
 
 
+## Collects through the first visible coin bubble (debug args, tests). False if none shows.
+func collect_any() -> bool:
+	for id in _bld_order:
+		var bub: Control = _bld[id]["bubble"]
+		if bub.visible:
+			_collect(bub)
+			return true
+	return false
+
+
 func _collect(bubble: Control) -> void:
 	var from := bubble.get_global_rect().get_center()
-	var got: int = Game.city_collect(1)
-	if got <= 0:
+	var amount: int = Game.city_pending()
+	if amount <= 0:
 		return
 	Sfx.play("collect")
-	collected.emit(got, from)
+	collected.emit(amount, from)  # first, so the counter can hold its number while coins fly
+	Game.city_collect(1)
 
 
 func _on_coins(_c: int) -> void:
