@@ -156,9 +156,12 @@
 
   "ads": {
     "_note": "Stub only (no SDK yet). Interstitials: only between levels, from from_level, at most one per every_levels completed levels, at least min_seconds apart, never right after a rewarded ad or a revive offer, always closable.",
-    "stub_delay": 0.6,
+    "_popup": "Stub placeholder popup (blank, countdown, close X). Rewarded pays only when the countdown reaches 0; closing early pays nothing. Interstitial shows the X after its countdown and closes itself interstitial_close_after seconds later.",
+    "rewarded_seconds": 5,
+    "interstitial_seconds": 3,
+    "interstitial_close_after": 2,
     "interstitial": { "from_level": 6, "every_levels": 2, "min_seconds": 45 },
-    "placements": ["x2_coins", "revive", "x2_offline", "spin", "booster_headstart", "booster_shield", "booster_bomb", "speedup"]
+    "placements": ["x2_coins", "revive", "x2_offline", "spin", "booster_headstart", "booster_shield", "booster_bomb", "speed_up"]
   },
 
   "analytics": {
