@@ -1,0 +1,32 @@
+{
+  "_design": "District 2 level 2: generated (seed 1012), difficulty 0.21, newest enemy molotov.",
+  "id": 12,
+  "name": "Night Shift",
+  "district": 2,
+  "boss": false,
+  "target_win": 0.59,
+  "target_ratio": 0.58,
+  "stars": {"star2": 27, "star3": 55},
+  "charges": {"shield": 1, "bomb": 1},
+  "events": [
+    {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "inspector", "n": 2}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 5}, {"lane": 2, "op": "mul", "k": 2}]},
+    {"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 42}]},
+    {"at": 100, "type": "gates", "gates": [{"lane": 1, "op": "pct", "v": 60}]},
+    {"at": 100, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 32, "dmg": 3},
+    {"at": 100, "type": "obstacle", "kind": "pothole", "lane": 2, "fall": 2},
+    {"at": 134, "type": "wave", "groups": [{"enemy": "thug", "n": 49}]},
+    {"at": 164, "type": "gates", "gates": [{"lane": 0, "op": "pct", "v": 50}, {"lane": 1, "op": "power", "id": "shield", "n": 1}]},
+    {"at": 164, "type": "obstacle", "kind": "car", "lane": 2, "hp": 45, "dmg": 4},
+    {"at": 198, "type": "wave", "groups": [{"enemy": "thug", "n": 20}, {"enemy": "molotov", "n": 21, "gap": 10}]},
+    {"at": 227, "type": "gates", "gates": [{"lane": 1, "op": "recruit", "unit": "inspector", "n": 2}, {"lane": 2, "op": "recruit", "unit": "inspector", "n": 2}]},
+    {"at": 227, "type": "obstacle", "kind": "pothole", "lane": 0, "fall": 2},
+    {"at": 253, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "pct", "v": -30, "inc": 10, "step": 14.0, "max": 20}, {"lane": 2, "op": "recruit", "unit": "inspector", "n": 2}]},
+    {"at": 287, "type": "wave", "groups": [{"enemy": "knifer", "n": 60}, {"enemy": "biker", "n": 90, "gap": 8}, {"enemy": "molotov", "n": 30, "gap": 16}]},
+    {"at": 319, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "inspector", "n": 4}, {"lane": 1, "op": "num", "v": -7, "step": 9.1, "max": 8, "inc": 1}, {"lane": 2, "op": "pct", "v": 60}]},
+    {"at": 353, "type": "wave", "groups": [{"enemy": "thug", "n": 82}, {"enemy": "knifer", "n": 500, "gap": 8}]},
+    {"at": 373, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 100, "dmg": 3, "block_reach": 12},
+    {"at": 381, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -8, "step": 11.0, "max": 9, "inc": 1}, {"lane": 1, "op": "num", "v": 16}, {"lane": 2, "op": "num", "v": 22}]},
+    {"at": 415, "type": "wave", "groups": [{"enemy": "knifer", "n": 122}, {"enemy": "biker", "n": 90, "gap": 8}, {"enemy": "molotov", "n": 30, "gap": 16}], "label": "RUSH"},
+    {"at": 453, "type": "finish"}
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "_design": "District 1 level 8: generated (seed 1008), difficulty 0.39, newest enemy riot.",
+  "id": 8,
+  "name": "Riot Act",
+  "district": 1,
+  "boss": false,
+  "target_win": 0.56,
+  "target_ratio": -1.0,
+  "stars": {"star2": 30, "star3": 60},
+  "charges": {"shield": 1, "bomb": 1},
+  "events": [
+    {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 8}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 6}, {"lane": 2, "op": "recruit", "unit": "inspector", "n": 2}]},
+    {"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 55}]},
+    {"at": 91, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 22, "dmg": 3, "block_reach": 12},
+    {"at": 99, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 3}, {"lane": 2, "op": "recruit", "unit": "inspector", "n": 3}]},
+    {"at": 99, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 2},
+    {"at": 133, "type": "wave", "groups": [{"enemy": "thug", "n": 63}, {"enemy": "riot", "n": 36, "gap": 6}]},
+    {"at": 162, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 16}, {"lane": 2, "op": "recruit", "unit": "inspector", "n": 5}]},
+    {"at": 162, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 100, "dmg": 7},
+    {"at": 188, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "pct", "v": -40, "inc": 10, "step": 22.8, "max": 40}, {"lane": 2, "op": "num", "v": 16}]},
+    {"at": 222, "type": "wave", "groups": [{"enemy": "thug", "n": 197}, {"enemy": "gunman", "n": 60, "gap": 10}]},
+    {"at": 252, "type": "gates", "gates": [{"lane": 0, "op": "pct", "v": -50, "inc": 10, "step": 51.6, "max": 20}, {"lane": 1, "op": "num", "v": 70}]},
+    {"at": 252, "type": "obstacle", "kind": "pothole", "lane": 2, "fall": 24},
+    {"at": 286, "type": "wave", "groups": [{"enemy": "thug", "n": 342}, {"enemy": "gunman", "n": 60, "gap": 10}]},
+    {"at": 318, "type": "gates", "gates": [{"lane": 1, "op": "recruit", "unit": "inspector", "n": 14}, {"lane": 2, "op": "mul", "k": 2}]},
+    {"at": 318, "type": "obstacle", "kind": "barrel", "lane": 0, "hp": 195, "dmg": 16, "radius": 8, "kill": 225},
+    {"at": 352, "type": "wave", "groups": [{"enemy": "riot", "n": 68}, {"enemy": "brute", "n": 40, "gap": 8}, {"enemy": "gunman", "n": 60, "gap": 16}]},
+    {"at": 383, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 125}, {"lane": 2, "op": "num", "v": -80, "step": 28.5, "max": 80, "inc": 7}]},
+    {"at": 383, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 565, "dmg": 32},
+    {"at": 417, "type": "wave", "groups": [{"enemy": "thug", "n": 342}, {"enemy": "brute", "n": 40, "gap": 6}], "label": "STREET WAR"},
+    {"at": 445, "type": "finish"}
+  ]
+}

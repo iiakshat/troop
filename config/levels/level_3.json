@@ -1,28 +1,33 @@
 {
-  "_design": "Crossfire. Teaches: gunmen stop and shoot (SHIELD), barrels blow up gangs running past them, percent gates.",
-  "id": 3, "name": "Crossfire", "charges": { "shield": 1 },
+  "_design": "Crossfire. Teaches: gunmen stop and shoot (SHIELD blocks them), barrels blow up gangs running past them, a power gate.",
+  "id": 3,
+  "name": "Back Alley",
+  "district": 1,
+  "boss": false,
+  "target_win": 0.78,
+  "target_ratio": -1.0,
+  "stars": {"star2": 30, "star3": 60},
+  "charges": {"shield": 1},
   "events": [
-    { "at": 36,  "type": "gates", "gates": [
-      { "lane": 0, "op": "num", "v": 10 },
-      { "lane": 1, "op": "recruit", "unit": "inspector", "n": 2 },
-      { "lane": 2, "op": "weapon", "id": "pistol" } ] },
-    { "at": 70,  "type": "wave", "groups": [ { "enemy": "thug", "n": 34 }, { "enemy": "gunman", "n": 8, "gap": 10 } ] },
-    { "at": 62,  "type": "hint", "id": "shield", "icon": "shield", "power": "shield" },
-    { "at": 104, "type": "gates", "gates": [
-      { "lane": 0, "op": "pct", "v": -40, "inc": 10, "step": 4, "max": 60 },
-      { "lane": 1, "op": "mul", "k": 2 },
-      { "lane": 2, "op": "num", "v": 15 } ] },
-    { "at": 138, "type": "obstacle", "kind": "barrel", "lane": 1, "hp": 10, "radius": 8, "kill": 60, "dmg": 4 },
-    { "at": 132, "type": "hint", "id": "barrel", "icon": "barrel" },
-    { "at": 150, "type": "wave", "groups": [ { "enemy": "thug", "n": 90 } ] },
-    { "at": 186, "type": "gates", "gates": [
-      { "lane": 0, "op": "num", "v": 12 },
-      { "lane": 1, "op": "num", "v": -15, "step": 3, "max": 15 },
-      { "lane": 2, "op": "recruit", "unit": "inspector", "n": 3 } ] },
-    { "at": 230, "type": "wave", "label": "CROSSFIRE", "groups": [
-      { "enemy": "knifer", "n": 80 },
-      { "enemy": "gunman", "n": 18, "gap": 8 },
-      { "enemy": "brute", "n": 8, "gap": 14 } ] },
-    { "at": 254, "type": "finish" }
+    {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 10}, {"lane": 2, "op": "mul", "k": 3}]},
+    {"at": 36, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 3},
+    {"at": 62, "type": "hint", "id": "shield", "icon": "shield", "power": "shield"},
+    {"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 34}, {"enemy": "gunman", "n": 6, "gap": 10}]},
+    {"at": 104, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "num", "v": 14}, {"lane": 2, "op": "num", "v": -8, "step": 2, "max": 14, "inc": 2}]},
+    {"at": 110, "type": "hint", "id": "barrel", "icon": "barrel"},
+    {"at": 138, "type": "obstacle", "kind": "barrel", "lane": 1, "hp": 10, "radius": 8, "kill": 60, "dmg": 4},
+    {"at": 150, "type": "wave", "groups": [{"enemy": "thug", "n": 90}]},
+    {"at": 184, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 24}, {"lane": 1, "op": "mul", "k": 2}]},
+    {"at": 184, "type": "obstacle", "kind": "pothole", "lane": 2, "fall": 10},
+    {"at": 220, "type": "wave", "groups": [{"enemy": "knifer", "n": 80}, {"enemy": "gunman", "n": 10, "gap": 10}]},
+    {"at": 254, "type": "gates", "gates": [{"lane": 0, "op": "power", "id": "shield", "n": 1}, {"lane": 2, "op": "num", "v": 30}]},
+    {"at": 254, "type": "obstacle", "kind": "barrel", "lane": 1, "hp": 12, "radius": 8, "kill": 80, "dmg": 6},
+    {"at": 290, "type": "wave", "groups": [{"enemy": "thug", "n": 150}]},
+    {"at": 322, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "num", "v": -16, "step": 3, "max": 24, "inc": 2}, {"lane": 2, "op": "num", "v": 40}]},
+    {"at": 360, "type": "wave", "groups": [{"enemy": "knifer", "n": 120}, {"enemy": "gunman", "n": 14, "gap": 10}]},
+    {"at": 394, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 40}, {"lane": 2, "op": "mul", "k": 2}]},
+    {"at": 394, "type": "obstacle", "kind": "pothole", "lane": 0, "fall": 24},
+    {"at": 436, "type": "wave", "label": "CROSSFIRE", "groups": [{"enemy": "thug", "n": 180}, {"enemy": "gunman", "n": 20, "gap": 10}]},
+    {"at": 470, "type": "finish"}
   ]
 }

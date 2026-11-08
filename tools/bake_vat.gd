@@ -1,6 +1,6 @@
 extends SceneTree
 ## Bakes the role characters (config/characters.json) into vertex-animation textures.
-##   godot --headless --path . --script res://tools/bake_vat.gd [-- only=hero]
+##   godot --headless --path . --script res://tools/bake_vat.gd [-- only=hero,sniper]
 ##
 ## For every role: load the Quaternius FBX in art_src/characters, recolour its materials,
 ## attach the weapon to the hand bone, then sample each clip and write every vertex's
@@ -34,14 +34,14 @@ func _process(_delta: float) -> bool:
 
 func _run() -> void:
 	_cfg = Config.load_json("res://config/characters.json")
-	var only := ""
+	var only: Array = []
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("only="):
-			only = a.substr(5)
+			only = Array(a.substr(5).split(","))
 	DirAccess.make_dir_recursive_absolute(OUT)
 	var clip_table := _clip_table()
 	for role in _cfg["roles"]:
-		if only != "" and role != only:
+		if not only.is_empty() and not only.has(role):
 			continue
 		var t0 := Time.get_ticks_msec()
 		var info := _bake_role(String(role), _cfg["roles"][role])
@@ -365,6 +365,21 @@ func _weapon_on(sk: Skeleton3D, hand: String, fore: String, kind: String, u: flo
 			_box(out, indices, base, hb, grip + dir * 0.3 * u, dir, up, side, Vector3(0.04, 0.04, 0.6) * u, Color(0.6, 0.6, 0.62))
 		"shield":
 			_box(out, indices, base, hb, grip + dir * 0.05 * u, side, up, dir, Vector3(0.06, 1.0, 0.7) * u, Color(0.75, 0.82, 0.9))
+		"shotgun":
+			_box(out, indices, base, hb, grip + up * 0.06 * u + dir * 0.2 * u, dir, up, side, Vector3(0.07, 0.1, 0.62) * u, dark)
+			_box(out, indices, base, hb, grip + up * 0.03 * u + dir * 0.3 * u, dir, up, side, Vector3(0.08, 0.06, 0.16) * u, wood)
+			_box(out, indices, base, hb, grip + up * 0.04 * u - dir * 0.1 * u, dir, up, side, Vector3(0.06, 0.1, 0.18) * u, wood)
+		"sniper":
+			_box(out, indices, base, hb, grip + up * 0.06 * u + dir * 0.32 * u, dir, up, side, Vector3(0.05, 0.08, 0.98) * u, dark)
+			_box(out, indices, base, hb, grip + up * 0.15 * u + dir * 0.14 * u, dir, up, side, Vector3(0.05, 0.05, 0.24) * u, Color(0.05, 0.05, 0.06))
+			_box(out, indices, base, hb, grip + up * 0.04 * u - dir * 0.12 * u, dir, up, side, Vector3(0.06, 0.11, 0.2) * u, Color(0.25, 0.27, 0.22))
+		"launcher":
+			_box(out, indices, base, hb, grip + up * 0.1 * u + dir * 0.16 * u, dir, up, side, Vector3(0.15, 0.15, 0.88) * u, Color(0.33, 0.38, 0.22))
+			_box(out, indices, base, hb, grip + up * 0.1 * u + dir * 0.62 * u, dir, up, side, Vector3(0.18, 0.18, 0.06) * u, dark)
+		"molotov":
+			_box(out, indices, base, hb, grip + dir * 0.1 * u, dir, up, side, Vector3(0.09, 0.09, 0.2) * u, Color(0.22, 0.55, 0.3))
+			_box(out, indices, base, hb, grip + dir * 0.24 * u, dir, up, side, Vector3(0.04, 0.04, 0.08) * u, Color(0.22, 0.55, 0.3))
+			_box(out, indices, base, hb, grip + dir * 0.3 * u, dir, up, side, Vector3(0.06, 0.06, 0.06) * u, Color(1.0, 0.55, 0.15))
 
 
 ## Oriented box: `size` is (width along x_axis, height along y_axis, length along z_axis).

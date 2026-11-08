@@ -31,6 +31,18 @@
     "biker":     { "base": "Casual3_Male", "weapon": "chain",
                    "colors": { "Skin": "d0a080", "Shirt": "2a2a2a", "Pants": "1a1a3a", "Hair": "6b1a1a" } },
     "boss":      { "base": "Suit_Male", "weapon": "pistol",
-                   "colors": { "Skin": "d8a987", "Black": "151515", "Shirt": "b3282d", "Details": "f2c14e", "Hair": "111111" } }
+                   "colors": { "Skin": "d8a987", "Black": "151515", "Shirt": "b3282d", "Details": "f2c14e", "Hair": "111111" } },
+    "sergeant":  { "base": "Worker_Male", "weapon": "shotgun",
+                   "colors": { "Skin": "b07a58", "Shirt": "2f4f8f", "Vest": "d8e23a", "Pants": "1d2f57", "Hat": "1d2f57" } },
+    "sniper":    { "base": "Soldier_Male", "weapon": "sniper",
+                   "colors": { "Skin": "c99772", "Main": "2c3440", "Helmet": "1a2230", "DarkGreen": "3a4a5c", "Black": "111111" } },
+    "commando":  { "base": "BlueSoldier_Male", "weapon": "launcher",
+                   "colors": { "Skin": "b9875f", "Main": "556b2f", "Helmet": "3b4a22", "Black": "1a1a1a", "Grey": "6b7a4a" } },
+    "molotov":   { "base": "Casual2_Male", "weapon": "molotov",
+                   "colors": { "Skin": "d0a080", "Shirt": "d0681c", "Pants": "2a2a2a", "Belt": "1a1a1a", "Hair": "141414" } },
+    "sniper_foe": { "base": "Casual3_Male", "weapon": "sniper",
+                   "colors": { "Skin": "c48e6a", "Shirt": "3d4a2a", "Pants": "2a2a2a", "Hair": "1a1a1a" } },
+    "grenadier": { "base": "Soldier_Male", "weapon": "launcher", "scale": 1.1,
+                   "colors": { "Skin": "b07a58", "Main": "6b2a24", "Helmet": "3a1a16", "DarkGreen": "2b2b2b", "Black": "1a1a1a" } }
   }
 }
