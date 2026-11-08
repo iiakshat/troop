@@ -20,16 +20,17 @@ const HOLD_HIT := 0.85          # real seconds on the close-up after a bottle br
 const HOLD_MISS := 0.3          # real seconds on the stuck knife after a miss
 const ARC := 0.25               # metres the knife rises mid-flight
 const SPIN_PER_S := 4.2         # knife turns per second of (game) flight
-const NORMAL_VIEW := Vector3(0.35, 1.85, 1.5)  # just over the hero's shoulder
+const NORMAL_VIEW := Vector3(0.6, 2.0, 1.4)   # behind and above the hero, clear of his head
 const AIM_FOV := 34.0           # telephoto: the bottle wall fills the screen
 const TRACK_FOV := 52.0
 const CLOSE_FOV := 40.0
 const NEAR := 0.04              # close-ups need a near clip plane right by the lens
 const TRACK_SIDE := 0.3        # tracking camera: metres beside the flight line
 const TRACK_BACK := 0.45        # ... and behind the knife
-const TRACK_LEAD := 0.3        # it looks this far ahead of the knife
+const TRACK_LEAD := 0.15        # it looks this far ahead of the knife
 const CLOSE_DIST := 1.3         # close-up distance from the bottle
 const CLOSE_DOLLY := 0.5       # extra pull-back while the glass flies
+const MISS_DIST := 0.75         # close-up distance from a knife stuck in the wood
 const BOTTLE_SCALE := 1.3
 const STAGE_KNIFE_IN := 0.04    # metres a stuck knife's tip sinks into the planks
 
@@ -336,7 +337,7 @@ func _cut_to_close() -> void:
 	if _knife_hit >= 0:
 		_close_target = _bottle_center(_knife_hit, _t_contact)
 	else:
-		_close_target = _knife_end + _knife_dir * FinaleKnife.TIP + Vector3(0, 0, 0.03)
+		_close_target = _knife_end + _knife_dir * 0.03   # the middle of the stuck knife
 	_fov = CLOSE_FOV
 	_blur = 0.06
 	_roll = 0.0
@@ -382,7 +383,7 @@ func _contact() -> void:
 	Sfx.play("coin", -4.0, 1.2)
 	Game.vibrate(60)
 	if gold:
-		fx.confetti(_close_target, 46)
+		# Gold glitter comes out of the Shatter itself (big confetti blocks look crude this close).
 		Game.vibrate(120)
 	_set_multiplier(logic.multiplier(), gold)
 
@@ -484,12 +485,22 @@ func _track_view(p: Vector3) -> Transform3D:
 ## Front three-quarter close-up of the target (bottle or wall spot); pulls back slowly
 ## after contact so the flying glass stays in frame.
 func _close_view() -> Transform3D:
+	if _knife_hit < 0:
+		# A miss is filmed side-on to the knife, from the wall's middle side, so the whole
+		# knife sticking out of the planks reads (never from inside the wall).
+		var s := signf(hero_pos.x - _close_target.x)
+		if absf(hero_pos.x - _close_target.x) < 0.3:
+			s = _side
+		var across := _knife_dir.cross(Vector3.UP).normalized()
+		if across.x * s < 0.0:
+			across = -across
+		var e := _close_target + (across * 0.8 + Vector3(0, 0.25, 0.45)).normalized() * MISS_DIST
+		e.z = maxf(e.z, _wall_front + 0.3)
+		return Transform3D(Basis.looking_at(_close_target - e, Vector3.UP), e)
 	var dolly := 0.0
-	if _contacted and _knife_hit >= 0:
+	if _contacted:
 		dolly = CLOSE_DOLLY * (1.0 - pow(1.0 - clampf(_close_t / HOLD_HIT, 0.0, 1.0), 2.0))
-	var dist := (CLOSE_DIST if _knife_hit >= 0 else 0.85) + dolly
-	# A miss is filmed more from the side, so the knife sticking out of the planks reads.
-	var off := (Vector3(-_side * 0.55, 0.14, 0.85) if _knife_hit >= 0 else Vector3(-_side * 0.8, 0.12, 0.6)).normalized() * dist
+	var off := Vector3(-_side * 0.55, 0.14, 0.85).normalized() * (CLOSE_DIST + dolly)
 	var target := _close_target
 	if _knife_hit >= 0 and not _contacted:
 		target = _bottle_center(_knife_hit, _ft)
@@ -828,7 +839,7 @@ func _tick_ui(delta: float) -> void:
 	if _mult_t < 1.0:
 		_mult_t = minf(_mult_t + delta / 0.35, 1.0)
 		_mult_shown = lerpf(_mult_from, _mult_to, 1.0 - pow(1.0 - _mult_t, 3.0))
-		_mult_label.text = "×%s" % (_fmt(_mult_to) if _mult_t >= 1.0 else "%.1f" % _mult_shown)
+		_mult_label.text = "×%s" % _fmt(_mult_to if _mult_t >= 1.0 else snappedf(_mult_shown, 0.5))
 	if _punch > 0.0:
 		_punch = maxf(_punch - delta / (0.6 if _punch_gold else 0.45), 0.0)
 		var big := 1.25 if _punch_gold else 0.9

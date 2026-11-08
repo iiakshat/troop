@@ -194,7 +194,7 @@ static func _shard_mesh() -> ArrayMesh:
 
 func _build_streaks(rng: RandomNumberGenerator, at: Vector3, scale: float, dir: Vector3, drink: Color, gold: bool, height: float) -> void:
 	var n_drink := 44
-	var n_glit := 26 if gold else 16
+	var n_glit := 48 if gold else 16
 	var n := n_drink + n_glit
 	_smm = MultiMesh.new()
 	_smm.transform_format = MultiMesh.TRANSFORM_3D
@@ -221,6 +221,8 @@ func _build_streaks(rng: RandomNumberGenerator, at: Vector3, scale: float, dir: 
 		_spos.append(centre + radial * 0.05 * scale + Vector3(0, rng.randf_range(-0.12, 0.08) * scale, 0))
 		_svel.append(v)
 		var life := rng.randf_range(0.15, 0.35) if glitter else rng.randf_range(0.3, 0.6)
+		if glitter and gold:
+			life *= 1.8   # the gold bottle sparkles for longer
 		_slife.append(life)
 		_smax.append(life)
 		_swidth.append(rng.randf_range(0.003, 0.006) if glitter else rng.randf_range(0.007, 0.016))
