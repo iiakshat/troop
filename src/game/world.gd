@@ -16,7 +16,9 @@ var _shake := 0.0
 var _cam_base := Transform3D()
 var _cam_override: Variant = null
 var _base_fov := 56.0
+var _lens_attr: CameraAttributesPractical
 var _rng := RandomNumberGenerator.new()
+const BASE_NEAR := 0.5
 
 
 func _ready() -> void:
@@ -43,24 +45,30 @@ func shake(amount: float) -> void:
 	_shake = maxf(_shake, amount)
 
 
-## Lens for close-ups: field of view (degrees, < 0 = default) and a focus distance beyond
-## which things blur (< 0 = no blur).
-func set_lens(fov: float, focus := -1.0) -> void:
+## Lens for close-ups: field of view (degrees, < 0 = default), a focus distance beyond which
+## things blur (< 0 = no blur), the near clip plane (< 0 = default) and the blur strength.
+## Cheap to call every frame (the camera attributes are reused).
+func set_lens(fov: float, focus := -1.0, near := -1.0, blur := 0.12) -> void:
 	camera.fov = fov if fov > 0.0 else _base_fov
+	camera.near = near if near > 0.0 else BASE_NEAR
 	if focus > 0.0:
-		var ca := CameraAttributesPractical.new()
-		ca.dof_blur_far_enabled = true
-		ca.dof_blur_far_distance = focus
-		ca.dof_blur_far_transition = 1.5
-		ca.dof_blur_amount = 0.12
-		camera.attributes = ca
+		if _lens_attr == null:
+			_lens_attr = CameraAttributesPractical.new()
+			_lens_attr.dof_blur_far_enabled = true
+			_lens_attr.dof_blur_far_transition = 1.5
+		_lens_attr.dof_blur_far_distance = focus
+		_lens_attr.dof_blur_amount = blur
+		_lens_attr.exposure_multiplier = 1.0
+		camera.attributes = _lens_attr
 	else:
 		camera.attributes = null
 
 
 ## The finale takes the camera: pass a transform each frame, or null to give it back.
+## Applied at once, so a cut and a lens change land on the same frame.
 func set_camera_override(xf: Variant) -> void:
 	_cam_override = xf
+	camera.transform = xf if xf != null else _cam_base
 
 
 func _process(delta: float) -> void:
