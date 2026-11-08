@@ -405,7 +405,10 @@ def build_layout():
                 "and <id>_ruin.png, 512x512, one shared scale) have the centre of their base tile "
                 "at building_pivot: put that point on the building's pos, drawn about "
                 "building_width of the map width wide. tint: suggested modulate for building "
-                "sprites so they match the band's lighting. Level nodes follow the road in order.",
+                "sprites so they match the band's lighting. Level nodes follow the road's centre line in "
+                "order (levels 1..50). map.png is 8192 px tall: on GPUs limited to 4096 px "
+                "textures, draw the five tiles stacked instead (tile y = (map_y - band[0]) / "
+                "(band[1] - band[0])).",
         "image": "map.png", "size": size, "full_size": info["full_size"],
         "building_pivot": [0.5, BUILDING_PIVOT_Y], "building_width": BUILDING_WIDTH,
         "districts": districts,

@@ -1,5 +1,5 @@
 {
- "_doc": "Normalised 0..1 coordinates over map.png (x right, y down, 0 = top). Downtown (district 1) is the bottom band, Uptown (5) the top. Each district's tile is the same band at full resolution (use either). Building sprites (assets/city/<id>.png and <id>_ruin.png, 512x512, one shared scale) have the centre of their base tile at building_pivot: put that point on the building's pos, drawn about building_width of the map width wide. tint: suggested modulate for building sprites so they match the band's lighting. Level nodes follow the road in order.",
+ "_doc": "Normalised 0..1 coordinates over map.png (x right, y down, 0 = top). Downtown (district 1) is the bottom band, Uptown (5) the top. Each district's tile is the same band at full resolution (use either). Building sprites (assets/city/<id>.png and <id>_ruin.png, 512x512, one shared scale) have the centre of their base tile at building_pivot: put that point on the building's pos, drawn about building_width of the map width wide. tint: suggested modulate for building sprites so they match the band's lighting. Level nodes follow the road's centre line in order (levels 1..50). map.png is 8192 px tall: on GPUs limited to 4096 px textures, draw the five tiles stacked instead (tile y = (map_y - band[0]) / (band[1] - band[0])).",
  "image": "map.png",
  "size": [
   604,
