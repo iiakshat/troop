@@ -1,0 +1,13 @@
+The attached image is ONLY a style and camera reference (hand-painted cartoon look, thin dark navy outlines, isometric 3/4 top-down view). Do not copy or include any of its buildings.
+
+Paint a 16:9 sheet made of exactly FIVE equal tall vertical panels side by side, separated by thin pure white vertical gutters, with nothing else on the sheet. Together the panels are the world map of a cosy mobile city-builder game (like the Township or Homescapes map): each panel is one district of the same cartoon city seen from above at a steep isometric 3/4 angle, filling its panel edge to edge with no frame and no sky.
+
+In every panel the same kind of wide light-grey two-lane road with white centre dashes and pale sidewalks winds from the exact centre of the bottom edge up to the exact centre of the top edge in a big gentle S-curve that sweeps left and right across the panel twice, so the road is long and clearly visible all the way. Beside the road there are exactly FIVE EMPTY building plots per panel, spread from bottom to top at different heights, alternating left and right of the road: each plot is a flat, clean, square isometric lot of light paving with a thin kerb, about a third of the panel width, with absolutely nothing on it. Around the road and the plots, fill the rest densely with small generic low houses, rooftops, trees, hedges, lamp posts, benches and a few parked cars, all smaller and lower than the plots so the plots and the road stand out. The bottom edge and top edge of every panel are a plain strip of green park lawn around the road, so the panels can be stacked on top of each other.
+
+Panel 1 (leftmost), Downtown: bright sunny midday, colourful small shops and town houses, little green parks.
+Panel 2, Market quarter: warm afternoon light, terracotta roofs, cobbled squares with striped market canopies and fruit crates.
+Panel 3, Docks: golden-hour light, a blue harbour with wooden piers, small boats, cranes and stacked containers along one side of the road.
+Panel 4, Industrial: dusk with an orange haze, brick sheds, railway tracks, chimneys with puffs of steam, pipes and fences.
+Panel 5 (rightmost), Uptown: night, deep blue darkness, glowing warm street lamps, lit windows, colourful neon light strips on elegant buildings.
+
+Absolutely no text, letters, numbers, signs, logos or symbols anywhere. No people. No large landmark buildings. Do not use magenta.

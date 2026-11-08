@@ -1,0 +1,614 @@
+{
+ "_doc": "Normalised 0..1 coordinates over map.png (x right, y down, 0 = top). Downtown (district 1) is the bottom band, Uptown (5) the top. Each district's tile is the same band at full resolution (use either). Building sprites (assets/city/<id>.png and <id>_ruin.png, 512x512, one shared scale) have the centre of their base tile at building_pivot: put that point on the building's pos, drawn about building_width of the map width wide. tint: suggested modulate for building sprites so they match the band's lighting. Level nodes follow the road in order.",
+ "image": "map.png",
+ "size": [
+  604,
+  8192
+ ],
+ "full_size": [
+  1078,
+  14628
+ ],
+ "building_pivot": [
+  0.5,
+  0.808
+ ],
+ "building_width": 0.44,
+ "districts": [
+  {
+   "id": 1,
+   "name": "downtown",
+   "band": [
+    0.7974,
+    1.0
+   ],
+   "tile": "map_1.png",
+   "tint": "#ffffff",
+   "buildings": [
+    {
+     "id": "cafe",
+     "pos": [
+      0.67,
+      0.9726
+     ]
+    },
+    {
+     "id": "newsstand",
+     "pos": [
+      0.37,
+      0.9463
+     ]
+    },
+    {
+     "id": "pharmacy",
+     "pos": [
+      0.47,
+      0.9189
+     ]
+    },
+    {
+     "id": "bus_stop",
+     "pos": [
+      0.62,
+      0.8794
+     ]
+    },
+    {
+     "id": "police_post",
+     "pos": [
+      0.67,
+      0.8409
+     ]
+    }
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "pos": [
+      0.1981,
+      0.9791
+     ]
+    },
+    {
+     "level": 2,
+     "pos": [
+      0.452,
+      0.9638
+     ]
+    },
+    {
+     "level": 3,
+     "pos": [
+      0.6646,
+      0.9455
+     ]
+    },
+    {
+     "level": 4,
+     "pos": [
+      0.7319,
+      0.9221
+     ]
+    },
+    {
+     "level": 5,
+     "pos": [
+      0.6348,
+      0.8994
+     ]
+    },
+    {
+     "level": 6,
+     "pos": [
+      0.395,
+      0.883
+     ]
+    },
+    {
+     "level": 7,
+     "pos": [
+      0.1985,
+      0.8641
+     ]
+    },
+    {
+     "level": 8,
+     "pos": [
+      0.2246,
+      0.8405
+     ]
+    },
+    {
+     "level": 9,
+     "pos": [
+      0.43,
+      0.8219
+     ]
+    },
+    {
+     "level": 10,
+     "pos": [
+      0.7057,
+      0.8089
+     ]
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "name": "market",
+   "band": [
+    0.5993,
+    0.7974
+   ],
+   "tile": "map_2.png",
+   "tint": "#fff1de",
+   "buildings": [
+    {
+     "id": "fruit_market",
+     "pos": [
+      0.33,
+      0.7716
+     ]
+    },
+    {
+     "id": "bakery",
+     "pos": [
+      0.62,
+      0.7469
+     ]
+    },
+    {
+     "id": "barber",
+     "pos": [
+      0.7,
+      0.7142
+     ]
+    },
+    {
+     "id": "cinema",
+     "pos": [
+      0.37,
+      0.6785
+     ]
+    },
+    {
+     "id": "clinic",
+     "pos": [
+      0.33,
+      0.6409
+     ]
+    }
+   ],
+   "levels": [
+    {
+     "level": 11,
+     "pos": [
+      0.8047,
+      0.7782
+     ]
+    },
+    {
+     "level": 12,
+     "pos": [
+      0.5727,
+      0.7628
+     ]
+    },
+    {
+     "level": 13,
+     "pos": [
+      0.3404,
+      0.7474
+     ]
+    },
+    {
+     "level": 14,
+     "pos": [
+      0.2104,
+      0.7269
+     ]
+    },
+    {
+     "level": 15,
+     "pos": [
+      0.2515,
+      0.7044
+     ]
+    },
+    {
+     "level": 16,
+     "pos": [
+      0.4694,
+      0.6883
+     ]
+    },
+    {
+     "level": 17,
+     "pos": [
+      0.6075,
+      0.6681
+     ]
+    },
+    {
+     "level": 18,
+     "pos": [
+      0.6262,
+      0.6452
+     ]
+    },
+    {
+     "level": 19,
+     "pos": [
+      0.4847,
+      0.6253
+     ]
+    },
+    {
+     "level": 20,
+     "pos": [
+      0.242,
+      0.6108
+     ]
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "name": "docks",
+   "band": [
+    0.4007,
+    0.5993
+   ],
+   "tile": "map_3.png",
+   "tint": "#ffe5c4",
+   "buildings": [
+    {
+     "id": "fish_market",
+     "pos": [
+      0.68,
+      0.5735
+     ]
+    },
+    {
+     "id": "warehouse",
+     "pos": [
+      0.37,
+      0.5496
+     ]
+    },
+    {
+     "id": "lighthouse",
+     "pos": [
+      0.2,
+      0.5169
+     ]
+    },
+    {
+     "id": "diner",
+     "pos": [
+      0.63,
+      0.4831
+     ]
+    },
+    {
+     "id": "ferry",
+     "pos": [
+      0.68,
+      0.4434
+     ]
+    }
+   ],
+   "levels": [
+    {
+     "level": 21,
+     "pos": [
+      0.2022,
+      0.5789
+     ]
+    },
+    {
+     "level": 22,
+     "pos": [
+      0.4674,
+      0.5646
+     ]
+    },
+    {
+     "level": 23,
+     "pos": [
+      0.6926,
+      0.5473
+     ]
+    },
+    {
+     "level": 24,
+     "pos": [
+      0.763,
+      0.524
+     ]
+    },
+    {
+     "level": 25,
+     "pos": [
+      0.6527,
+      0.5017
+     ]
+    },
+    {
+     "level": 26,
+     "pos": [
+      0.3962,
+      0.4867
+     ]
+    },
+    {
+     "level": 27,
+     "pos": [
+      0.2265,
+      0.4667
+     ]
+    },
+    {
+     "level": 28,
+     "pos": [
+      0.2646,
+      0.443
+     ]
+    },
+    {
+     "level": 29,
+     "pos": [
+      0.4605,
+      0.4239
+     ]
+    },
+    {
+     "level": 30,
+     "pos": [
+      0.7388,
+      0.4112
+     ]
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "name": "industrial",
+   "band": [
+    0.2028,
+    0.4007
+   ],
+   "tile": "map_4.png",
+   "tint": "#f6cba8",
+   "buildings": [
+    {
+     "id": "factory",
+     "pos": [
+      0.33,
+      0.376
+     ]
+    },
+    {
+     "id": "power_station",
+     "pos": [
+      0.62,
+      0.3503
+     ]
+    },
+    {
+     "id": "garage",
+     "pos": [
+      0.66,
+      0.3156
+     ]
+    },
+    {
+     "id": "train_station",
+     "pos": [
+      0.36,
+      0.285
+     ]
+    },
+    {
+     "id": "fire_station",
+     "pos": [
+      0.32,
+      0.2444
+     ]
+    }
+   ],
+   "levels": [
+    {
+     "level": 31,
+     "pos": [
+      0.7961,
+      0.3797
+     ]
+    },
+    {
+     "level": 32,
+     "pos": [
+      0.555,
+      0.3644
+     ]
+    },
+    {
+     "level": 33,
+     "pos": [
+      0.3082,
+      0.3495
+     ]
+    },
+    {
+     "level": 34,
+     "pos": [
+      0.1784,
+      0.3287
+     ]
+    },
+    {
+     "level": 35,
+     "pos": [
+      0.2235,
+      0.3056
+     ]
+    },
+    {
+     "level": 36,
+     "pos": [
+      0.4405,
+      0.2888
+     ]
+    },
+    {
+     "level": 37,
+     "pos": [
+      0.6482,
+      0.2714
+     ]
+    },
+    {
+     "level": 38,
+     "pos": [
+      0.6805,
+      0.2483
+     ]
+    },
+    {
+     "level": 39,
+     "pos": [
+      0.5221,
+      0.2284
+     ]
+    },
+    {
+     "level": 40,
+     "pos": [
+      0.2643,
+      0.2146
+     ]
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "name": "uptown",
+   "band": [
+    0.0,
+    0.2028
+   ],
+   "tile": "map_5.png",
+   "tint": "#9aa6d6",
+   "buildings": [
+    {
+     "id": "hotel",
+     "pos": [
+      0.65,
+      0.1775
+     ]
+    },
+    {
+     "id": "bank",
+     "pos": [
+      0.38,
+      0.1521
+     ]
+    },
+    {
+     "id": "museum",
+     "pos": [
+      0.32,
+      0.1176
+     ]
+    },
+    {
+     "id": "fountain_park",
+     "pos": [
+      0.62,
+      0.0842
+     ]
+    },
+    {
+     "id": "city_hall",
+     "pos": [
+      0.67,
+      0.0456
+     ]
+    }
+   ],
+   "levels": [
+    {
+     "level": 41,
+     "pos": [
+      0.2072,
+      0.1808
+     ]
+    },
+    {
+     "level": 42,
+     "pos": [
+      0.4804,
+      0.1677
+     ]
+    },
+    {
+     "level": 43,
+     "pos": [
+      0.6701,
+      0.1484
+     ]
+    },
+    {
+     "level": 44,
+     "pos": [
+      0.7229,
+      0.1249
+     ]
+    },
+    {
+     "level": 45,
+     "pos": [
+      0.6001,
+      0.1032
+     ]
+    },
+    {
+     "level": 46,
+     "pos": [
+      0.3646,
+      0.0865
+     ]
+    },
+    {
+     "level": 47,
+     "pos": [
+      0.2161,
+      0.0654
+     ]
+    },
+    {
+     "level": 48,
+     "pos": [
+      0.254,
+      0.042
+     ]
+    },
+    {
+     "level": 49,
+     "pos": [
+      0.4789,
+      0.025
+     ]
+    },
+    {
+     "level": 50,
+     "pos": [
+      0.7538,
+      0.0121
+     ]
+    }
+   ]
+  }
+ ]
+}
