@@ -6,12 +6,13 @@ extends Control
 signal next_pressed
 signal retry_pressed
 signal lobby_pressed
+signal station_pressed
 
 const LOSS := {
-	"thug": ["person", "GROW BIGGER"], "knifer": ["knife", "GROW EARLIER"],
-	"brute": ["armour", "PIERCE THE ARMOUR"], "gunman": ["shield", "SHIELD UP"],
+	"thug": ["thug", "GROW BIGGER"], "knifer": ["knife", "GROW EARLIER"],
+	"brute": ["brute", "BRING INSPECTORS"], "gunman": ["shield", "SHIELD UP"],
 	"riot": ["riot", "BOMB OR PIERCE"], "biker": ["speed", "KILL THEM FAST"],
-	"boss": ["fist", "BUILD UP FIRST"], "gate": ["aim", "SHOOT RED GATES"],
+	"boss": ["boss", "BUILD UP FIRST"], "gate": ["aim", "SHOOT RED GATES"],
 	"barricade": ["aim", "SHOOT IT FIRST"], "car": ["police_car", "SHOOT IT FIRST"],
 }
 
@@ -49,9 +50,13 @@ func show_win(level: int, r: Dictionary, has_next: bool) -> void:
 	var home := UiKit.icon_button("home", "blue", 140)
 	home.pressed.connect(func(): lobby_pressed.emit())
 	row.add_child(home)
+	var station := UiKit.icon_button("station", "blue", 140)
+	station.pressed.connect(func(): station_pressed.emit())
+	row.add_child(station)
+	UiKit.set_alert(station, StationPanel.anything_affordable())
 	if has_next:
 		var nxt := UiKit.icon_button("play", "green", 140)
-		nxt.custom_minimum_size.x = 300
+		nxt.custom_minimum_size.x = 220
 		nxt.pressed.connect(func(): next_pressed.emit())
 		row.add_child(nxt)
 	_show()
@@ -79,8 +84,12 @@ func show_loss(level: int, cause: String) -> void:
 	var home := UiKit.icon_button("home", "blue", 140)
 	home.pressed.connect(func(): lobby_pressed.emit())
 	row.add_child(home)
+	var station := UiKit.icon_button("station", "blue", 140)
+	station.pressed.connect(func(): station_pressed.emit())
+	row.add_child(station)
+	UiKit.set_alert(station, StationPanel.anything_affordable())
 	var retry := UiKit.icon_button("retry", "green", 140)
-	retry.custom_minimum_size.x = 300
+	retry.custom_minimum_size.x = 220
 	retry.pressed.connect(func(): retry_pressed.emit())
 	row.add_child(retry)
 	_show()
@@ -93,8 +102,8 @@ func _card() -> VBoxContainer:
 	add_child(dim)
 	var p := UiKit.panel(Color("3b6fd1"))
 	p.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	p.offset_left = -310
-	p.offset_right = 310
+	p.offset_left = -330
+	p.offset_right = 330
 	p.offset_top = -380
 	p.offset_bottom = 380
 	add_child(p)

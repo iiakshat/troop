@@ -1,14 +1,14 @@
 {
-  "_note": "Coins buy only police-station rooms and cosmetics (owner). Rooms give capped passive bonuses; the front desk unlocks rooms. Level coins come from the Bottle Shot finale (config/finale.json) x evidence-room bonus.",
+  "_note": "Coins buy only police-station rooms and cosmetics (owner). Every room is open from the start and shows its effect as before > after numbers. Level coins come from the Bottle Shot finale (config/finale.json) x evidence-room bonus.",
   "station": {
-    "desk":     { "icon": "keys",        "max": 2, "costs": [200, 500],      "desk": 0, "effect": "desk",    "per": 1 },
-    "armory":   { "icon": "knife_power", "max": 3, "costs": [80, 200, 450],  "desk": 0, "effect": "knife",   "per": 1 },
-    "range":    { "icon": "speed",       "max": 3, "costs": [70, 180, 400],  "desk": 0, "effect": "speed",   "per": 1 },
-    "training": { "icon": "person",      "max": 3, "costs": [120, 280, 560], "desk": 1, "effect": "squad",   "per": 1 },
-    "evidence": { "icon": "money",       "max": 3, "costs": [150, 350, 700], "desk": 1, "effect": "coins",   "per": 0.1 },
-    "garage":   { "icon": "police_car",  "max": 2, "costs": [250, 600],      "desk": 2, "effect": "charges", "per": 1 }
+    "armory":   { "icon": "knife",      "max": 4, "costs": [80, 200, 450, 900],    "effect": "knife",    "per": 1 },
+    "range":    { "icon": "speed",      "max": 4, "costs": [70, 180, 400, 800],    "effect": "speed",    "per": 1 },
+    "training": { "icon": "badge",      "max": 4, "costs": [120, 280, 560, 1000],  "effect": "squad",    "per": 1 },
+    "barracks": { "icon": "station",    "max": 4, "costs": [150, 320, 650, 1200],  "effect": "capacity", "per": 25 },
+    "evidence": { "icon": "money",      "max": 3, "costs": [150, 350, 700],        "effect": "coins",    "per": 0.1 },
+    "garage":   { "icon": "police_car", "max": 2, "costs": [250, 600],             "effect": "charges",  "per": 1 }
   },
-  "station_order": ["desk", "armory", "range", "training", "evidence", "garage"],
+  "station_order": ["armory", "range", "training", "barracks", "evidence", "garage"],
   "cosmetics": {
     "outfits": [
       { "id": "street",    "price": 0,   "shirt": "21c7b5", "pants": "3d5f9e" },

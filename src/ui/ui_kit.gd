@@ -147,6 +147,18 @@ static func set_badge(b: Button, n: int) -> void:
 	(b.get_meta("badge_bg") as Control).visible = n > 0
 
 
+## Red "!" badge that bobs: something to do here (e.g. an upgrade you can afford).
+static func set_alert(b: Button, on: bool) -> void:
+	set_badge(b, 1 if on else 0)
+	(b.get_meta("badge") as Label).text = "!"
+	var bg: Control = b.get_meta("badge_bg")
+	if on and not bg.has_meta("tween"):
+		var tw := bg.create_tween().set_loops()
+		tw.tween_property(bg, "position:y", -18.0, 0.35).set_trans(Tween.TRANS_SINE)
+		tw.tween_property(bg, "position:y", -10.0, 0.35).set_trans(Tween.TRANS_SINE)
+		bg.set_meta("tween", tw)
+
+
 static func panel(color := CREAM) -> PanelContainer:
 	var p := PanelContainer.new()
 	var sb := StyleBoxFlat.new()

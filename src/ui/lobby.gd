@@ -10,6 +10,7 @@ var _level := 1
 var _level_buttons: Array[Button] = []
 var _play: Button
 var _overlay: Control = null
+var _station: Button
 
 
 func _ready() -> void:
@@ -68,9 +69,9 @@ func _ready() -> void:
 	row.add_theme_constant_override("separation", 18)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(row)
-	var station := UiKit.icon_button("badge", "blue", 150)
-	station.pressed.connect(func(): _open(StationPanel.new()))
-	row.add_child(station)
+	_station = UiKit.icon_button("station", "blue", 150)
+	_station.pressed.connect(func(): _open(StationPanel.new()))
+	row.add_child(_station)
 	_play = UiKit.icon_button("play", "green", 150)
 	_play.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_play.pressed.connect(func(): play.emit(_level))
@@ -99,6 +100,7 @@ func _pick_level(n: int) -> void:
 func refresh() -> void:
 	if not is_inside_tree():
 		return
+	UiKit.set_alert(_station, StationPanel.anything_affordable())
 	UiKit.pill_set(_coins, str(int(Game.save["coins"])))
 	for i in _level_buttons.size():
 		var n := i + 1

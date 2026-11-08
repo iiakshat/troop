@@ -1,48 +1,48 @@
 class_name StationPanel
 extends Control
-## Police station: one card per room with its icon, level pips, the bonus it gives (a
-## number) and a buy button (coin + price), a lock until the front desk opens it, or a
-## tick when maxed.
+## Police station upgrades. One row per room: its glossy icon, what you have now ▸ what the
+## next level gives (real numbers from the game: knife damage, throws per second, starting
+## squad, squad cap, coin bonus, powers at the start), level pips, and a coin price.
 
-var _cards: Dictionary = {}
+var _rows: Dictionary = {}
+var _coins: HBoxContainer
 
 
 func _ready() -> void:
 	UiKit.full_rect(self)
 	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.55)
+	dim.color = Color(0, 0, 0, 0.6)
 	UiKit.full_rect(dim)
 	add_child(dim)
 	var p := UiKit.panel()
 	p.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	p.offset_left = -330
-	p.offset_right = 330
-	p.offset_top = -560
-	p.offset_bottom = 560
+	p.offset_left = -340
+	p.offset_right = 340
+	p.offset_top = -520
+	p.offset_bottom = 520
 	add_child(p)
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 18)
+	col.add_theme_constant_override("separation", 14)
 	p.add_child(col)
 	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 12)
 	col.add_child(head)
-	var rib := UiKit.ribbon("badge")
+	var rib := UiKit.ribbon("station")
 	rib.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(rib)
 	var close := UiKit.icon_button("close", "red", 96)
 	close.pressed.connect(queue_free)
 	head.add_child(close)
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 16)
-	grid.add_theme_constant_override("v_separation", 16)
-	col.add_child(grid)
+	_coins = UiKit.pill("coin", str(int(Game.save["coins"])))
+	_coins.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_child(_coins)
 	for room in Game.economy["station_order"]:
-		grid.add_child(_card(String(room)))
+		col.add_child(_row(String(room)))
 	refresh()
 	UiKit.pop(p, 0.7)
 
 
-func _card(room: String) -> Control:
+func _row(room: String) -> Control:
 	var r: Dictionary = Game.economy["station"][room]
 	var card := PanelContainer.new()
 	var sb := StyleBoxFlat.new()
@@ -50,88 +50,117 @@ func _card(room: String) -> Control:
 	sb.set_corner_radius_all(22)
 	sb.set_border_width_all(5)
 	sb.border_color = UiKit.INK
-	sb.content_margin_left = 12
-	sb.content_margin_right = 12
-	sb.content_margin_top = 12
-	sb.content_margin_bottom = 12
+	sb.content_margin_left = 14
+	sb.content_margin_right = 14
+	sb.content_margin_top = 8
+	sb.content_margin_bottom = 8
 	card.add_theme_stylebox_override("panel", sb)
-	card.custom_minimum_size = Vector2(285, 0)
-	var col := VBoxContainer.new()
-	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.add_theme_constant_override("separation", 8)
-	card.add_child(col)
-	var ic := UiKit.icon(String(r["icon"]), 92)
-	ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	col.add_child(ic)
-	var effect := UiKit.label("", 40, UiKit.YELLOW, 10)
-	col.add_child(effect)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	card.add_child(row)
+	row.add_child(UiKit.icon(String(r["icon"]), 104))
+
+	var mid := VBoxContainer.new()
+	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.alignment = BoxContainer.ALIGNMENT_CENTER
+	mid.add_theme_constant_override("separation", 6)
+	row.add_child(mid)
+	var values := HBoxContainer.new()
+	values.alignment = BoxContainer.ALIGNMENT_CENTER
+	values.add_theme_constant_override("separation", 10)
+	mid.add_child(values)
+	var now := UiKit.label("", 46, Color.WHITE, 10)
+	values.add_child(now)
+	var arrow := UiKit.icon("play", 34, UiKit.YELLOW)
+	values.add_child(arrow)
+	var next := UiKit.label("", 46, UiKit.YELLOW, 10)
+	values.add_child(next)
 	var pips := HBoxContainer.new()
 	pips.alignment = BoxContainer.ALIGNMENT_CENTER
 	pips.add_theme_constant_override("separation", 8)
-	col.add_child(pips)
+	mid.add_child(pips)
 	for i in int(r["max"]):
 		var pip := Panel.new()
-		pip.custom_minimum_size = Vector2(30, 30)
+		pip.custom_minimum_size = Vector2(28, 16)
 		pips.add_child(pip)
-	var buy := UiKit.button("", "green", 40, Vector2(0, 96))
+
+	var buy := UiKit.button("", "green", 40, Vector2(190, 100))
 	buy.pressed.connect(func(): _buy(room))
-	col.add_child(buy)
-	var coin := UiKit.icon("coin", 44, UiKit.YELLOW)
-	coin.position = Vector2(18, 18)
+	row.add_child(buy)
+	var coin := UiKit.icon("coin", 46)
+	coin.position = Vector2(14, 20)
 	buy.add_child(coin)
-	_cards[room] = {"effect": effect, "pips": pips, "buy": buy, "coin": coin, "card": card}
+	_rows[room] = {"now": now, "next": next, "arrow": arrow, "pips": pips, "buy": buy, "coin": coin, "card": card}
 	return card
+
+
+## The number a room shows at a given level, using the game's real base stats.
+static func value_text(room: String, lv: int) -> String:
+	var r: Dictionary = Game.economy["station"][room]
+	var units: Dictionary = Config.units()
+	var per := float(r["per"])
+	match String(r["effect"]):
+		"knife":
+			return str(int(float(units["allies"]["hero"]["dmg"]) + lv * per))
+		"speed":
+			return BottleShot._fmt(float(units["allies"]["hero"]["rate"]) + 0.5 * lv * per)
+		"squad":
+			return str(1 + int(lv * per))
+		"capacity":
+			return str(int(units["world"].get("max_squad", 0)) + int(lv * per))
+		"coins":
+			return "+%d%%" % int(round(lv * per * 100))
+		"charges":
+			return ["0", "+1", "+2"][clampi(lv, 0, 2)]
+	return str(lv)
 
 
 func _buy(room: String) -> void:
 	if Game.buy_room(room):
 		Sfx.play("upgrade")
-		var c: Dictionary = _cards[room]
-		UiKit.pop(c["card"], 0.85)
+		UiKit.pop(_rows[room]["card"], 0.85)
 		refresh()
 	else:
 		Sfx.play("error")
 
 
 func refresh() -> void:
-	for room in _cards:
-		var r: Dictionary = Game.economy["station"][room]
-		var c: Dictionary = _cards[room]
+	UiKit.pill_set(_coins, str(int(Game.save["coins"])))
+	for room in _rows:
+		var c: Dictionary = _rows[room]
 		var lv := Game.room_level(room)
 		var cost := Game.room_cost(room)
-		var unlocked := SaveData.room_unlocked(Game.economy, Game.save["station"], room)
-		var per := float(r["per"])
-		match String(r["effect"]):
-			"coins":
-				(c["effect"] as Label).text = "+%d%%" % int(round(maxi(lv, 1) * per * 100))
-			"desk":
-				(c["effect"] as Label).text = "%d" % (lv + 1)
-			"charges":
-				(c["effect"] as Label).text = "+%d" % maxi(lv, 1)
-			_:
-				(c["effect"] as Label).text = "+%d" % int(maxi(lv, 1) * per)
+		var maxed := cost < 0
+		(c["now"] as Label).text = value_text(room, lv)
+		(c["next"] as Label).text = "" if maxed else value_text(room, lv + 1)
+		(c["arrow"] as Control).visible = not maxed
 		var pips: HBoxContainer = c["pips"]
 		for i in pips.get_child_count():
 			var sb := StyleBoxFlat.new()
 			sb.bg_color = UiKit.YELLOW if i < lv else Color(0, 0, 0, 0.35)
-			sb.set_corner_radius_all(15)
+			sb.set_corner_radius_all(8)
 			sb.set_border_width_all(3)
 			sb.border_color = UiKit.INK
 			(pips.get_child(i) as Panel).add_theme_stylebox_override("panel", sb)
 		var buy: Button = c["buy"]
 		var coin: Control = c["coin"]
-		if not unlocked:
+		if maxed:
 			buy.text = ""
 			buy.disabled = true
-			coin.texture = UiKit.icon_texture("lock")
-			coin.position = Vector2(110, 20)
-		elif cost < 0:
-			buy.text = "MAX"
-			buy.disabled = true
-			coin.visible = false
-		else:
-			buy.text = "   %d" % cost
-			buy.disabled = int(Game.save["coins"]) < cost
-			coin.texture = UiKit.icon_texture("coin")
-			coin.position = Vector2(18, 18)
 			coin.visible = true
+			(coin as TextureRect).texture = UiKit.icon_texture("star_icon")
+			coin.position = Vector2(70, 20)
+		else:
+			buy.text = "    %d" % cost
+			buy.disabled = int(Game.save["coins"]) < cost
+			(coin as TextureRect).texture = UiKit.icon_texture("coin")
+			coin.position = Vector2(14, 20)
+
+
+## True when the player can afford at least one upgrade (drives the "!" badges).
+static func anything_affordable() -> bool:
+	for room in Game.economy["station_order"]:
+		var cost := Game.room_cost(String(room))
+		if cost > 0 and int(Game.save["coins"]) >= cost:
+			return true
+	return false

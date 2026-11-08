@@ -40,6 +40,7 @@ func _ready() -> void:
 	result.next_pressed.connect(func(): _start_level(mini(current_level + 1, Config.LEVEL_COUNT)))
 	result.retry_pressed.connect(func(): _start_level(current_level))
 	result.lobby_pressed.connect(_show_lobby)
+	result.station_pressed.connect(_open_station_from_result)
 	if _args.has("level"):
 		_start_level(int(_args["level"]))
 	elif int(Game.save["coins"]) == 0 and int(Game.save["unlocked"]) == 1 and not _args.has("lobby"):
@@ -66,6 +67,16 @@ func _show_lobby() -> void:
 			lobby._open(StylePanel.new())
 		"settings":
 			lobby._open(SettingsPanel.new())
+
+
+## Station over the result screen; closing it returns to the result (badges refresh).
+func _open_station_from_result() -> void:
+	var p := StationPanel.new()
+	ui.add_child(p)
+	p.tree_exited.connect(func():
+		for b in result.find_children("*", "Button", true, false):
+			if (b as Button).has_meta("badge"):
+				UiKit.set_alert(b, StationPanel.anything_affordable()))
 
 
 func _start_level(n: int) -> void:

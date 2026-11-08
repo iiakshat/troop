@@ -52,18 +52,19 @@ static func room_cost(economy: Dictionary, station: Dictionary, room: String) ->
 	return int(r["costs"][lv])
 
 
+## Rooms can still carry a "desk" requirement, but none do now: everything is open.
 static func room_unlocked(economy: Dictionary, station: Dictionary, room: String) -> bool:
 	return int(station.get("desk", 0)) >= int(economy["station"][room].get("desk", 0))
 
 
 ## What the sim and economy get from the station.
 static func effects(economy: Dictionary, station: Dictionary) -> Dictionary:
-	var out := {"knife": 0, "speed": 0, "squad": 0, "coins": 0.0, "shield": 0, "bomb": 0}
+	var out := {"knife": 0, "speed": 0, "squad": 0, "capacity": 0, "coins": 0.0, "shield": 0, "bomb": 0}
 	for room in economy["station"]:
 		var r: Dictionary = economy["station"][room]
 		var lv := int(station.get(room, 0))
 		match String(r["effect"]):
-			"knife", "speed", "squad":
+			"knife", "speed", "squad", "capacity":
 				out[r["effect"]] = lv * int(r["per"])
 			"coins":
 				out["coins"] = lv * float(r["per"])
