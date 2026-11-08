@@ -14,10 +14,10 @@ signal finished(result: Dictionary)
 
 const LANE_X := [-3.2, 0.0, 3.2]
 const ALLY_CAP := 72
-const HORDE_CAP := 140
+const HORDE_CAP := 180
 const DT := 1.0 / 60.0
-const ENEMY_KINDS := ["thug", "knifer", "gunman", "brute"]
-const ALLY_KINDS := ["hero", "constable", "inspector"]
+const ENEMY_KINDS := ["thug", "knifer", "gunman", "brute", "riot", "biker", "boss"]
+const ALLY_KINDS := ["hero", "constable", "inspector", "swat"]
 const SWIPE_PX := 36.0
 
 var sim: LevelSim
@@ -57,6 +57,7 @@ var _touching := false
 var _swiped := false
 var _last_total := 1
 var _shown_banner: Dictionary = {}
+var _obstacles: Dictionary = {}  # id -> {ob, node}
 
 
 func setup(level: Dictionary, upgrades: Dictionary, w: World, f: Fx, fnt: Font, is_demo := false) -> LevelView:
@@ -236,8 +237,23 @@ func _handle_events(events: Array) -> void:
 				Sfx.play("die", -4.0)
 			"horde_cleared":
 				pass
-			"contact":
-				_on_contact(e)
+			"melee_start":
+				Sfx.play("swoosh", -2.0, 0.7)
+			"melee":
+				_on_melee(e)
+			"turncoat":
+				_on_turncoat(e)
+			"shield_broken":
+				var hb: Dictionary = _hordes.get(e["horde"], {})
+				if not hb.is_empty():
+					fx.burst(_horde_front(hb) + Vector3(0, 1.2, 0), Color("9fc6ff"), 30, 7.0, 0.22, 0.6)
+					Sfx.play("clink")
+			"barrel_armed":
+				var bo: Dictionary = _obstacles.get(e["ob"]["id"], {})
+				if not bo.is_empty():
+					Sfx.play("tick", 0.0, 1.6)
+			"barrel_boom":
+				_on_barrel_boom(e)
 			"hurt":
 				_on_hurt(e)
 			"blocked":
@@ -270,8 +286,20 @@ func _handle_events(events: Array) -> void:
 				_end_t = 0.0
 				Sfx.play("lose")
 				Game.vibrate(200)
-			"obstacle_spawn", "obstacle_broken", "obstacle_hit", "obstacle_pass":
-				pass  # no obstacles in the first three levels yet
+			"obstacle_spawn":
+				_spawn_obstacle(e["ob"])
+			"obstacle_broken":
+				var ob: Dictionary = e["ob"]
+				fx.burst(_obstacle_pos(ob) + Vector3(0, 1.0, 0), Color(0.55, 0.45, 0.35), 24, 6.0, 0.3, 0.7)
+				Sfx.play("boom", -8.0, 1.4)
+				_free_obstacle(int(ob["id"]))
+			"obstacle_hit":
+				world.shake(0.5)
+				Sfx.play("hurt")
+				_free_obstacle(int(e["ob"]["id"]))
+				_sync_allies(Vector3(_squad_x, 0, 0))
+			"obstacle_pass":
+				_free_obstacle(int(e["ob"]["id"]))
 	if sim.squad.total() != _last_total:
 		_last_total = sim.squad.total()
 		squad_changed.emit(_last_total)
@@ -339,16 +367,16 @@ func _on_horde_spawn(h: Dictionary) -> void:
 	var n := int(h["count"])
 	var per := maxi(1, int(ceil(n / float(HORDE_CAP))))
 	var vis := int(ceil(n / float(per)))
-	var cols := 5 if kind == "brute" else 9
-	var dx := 1.75 if kind == "brute" else 0.98
-	var dz := 1.8 if kind == "brute" else 0.95
+	var cols := int(h["cols"])
+	var dx := 9.0 / maxf(cols, 1)
+	var dz := float(h["row_gap"]) * per
 	var offs: Array = []
 	for i in vis:
 		var r := i / cols
 		var c := i % cols
 		var row_n := mini(cols, vis - r * cols)
-		var x := (c - (row_n - 1) * 0.5) * dx + randf_range(-0.2, 0.2)
-		offs.append(Vector3(x, randf(), r * dz + randf_range(-0.2, 0.2)))  # y holds a phase
+		var x := (c - (row_n - 1) * 0.5) * dx + randf_range(-0.15, 0.15)
+		offs.append(Vector3(x if cols > 1 else 0.0, randf(), r * dz + randf_range(-0.12, 0.12)))  # y holds a phase
 	var label := GateRowView._label(font, 90, 0.011)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.modulate = Color("ff6b6b") if int(h["armour"]) == 0 else Color("b8c7d9")
@@ -362,26 +390,51 @@ func _on_horde_spawn(h: Dictionary) -> void:
 		banner.emit(label_text, Color("ff5a5f"))
 
 
-func _on_contact(e: Dictionary) -> void:
+func _on_melee(e: Dictionary) -> void:
 	var hv: Dictionary = _hordes.get(e["horde"], {})
 	if hv.is_empty():
 		return
-	for o in hv["offs"]:
+	# The striking row charges into the squad (the sim already removed them).
+	var n := mini(int(ceil(int(e["enemies"]) / float(hv["per"]))), (hv["offs"] as Array).size())
+	for i in n:
+		var o: Vector3 = hv["offs"].pop_front()
 		_charging.append({"kind": hv["kind"], "pos": _fig_pos(hv, o), "phase": o.y, "shielded": e["shielded"]})
-	_free_horde(e["horde"])
 	var lost := int(e["lost"])
-	world.shake(clampf(0.3 + lost * 0.03, 0.3, 1.2))
+	world.shake(clampf(0.2 + lost * 0.02, 0.2, 0.9))
 	if e["shielded"]:
 		Sfx.play("blocked")
 	elif lost > 0:
-		Sfx.play("hurt")
-		Game.vibrate(120)
-	_sync_allies(Vector3(_squad_x, 0, 0))
+		Sfx.play("hurt", -2.0)
+		Game.vibrate(60)
+	_sync_allies(Vector3(_squad_x, 0, -1.0))
+
+
+func _on_turncoat(e: Dictionary) -> void:
+	var hv: Dictionary = _hordes.get(e["horde"], {})
+	var src := Vector3(_squad_x, 0, -6.0)
+	if not hv.is_empty():
+		src = _horde_front(hv)
+		var n := mini(int(ceil(int(e["n"]) / float(hv["per"]))), (hv["offs"] as Array).size())
+		for i in n:
+			var o: Vector3 = hv["offs"].pop_front()
+			fx.burst(_fig_pos(hv, o) + Vector3(0, 1.0, 0), Color("6fa8ff"), 4, 3.0, 0.18, 0.4)
+	Sfx.play("recruit")
+	_sync_allies(src)
+
+
+func _on_barrel_boom(e: Dictionary) -> void:
+	var ob: Dictionary = e["ob"]
+	var p := _obstacle_pos(ob)
+	_free_obstacle(int(ob["id"]))
+	fx.explosion(p + Vector3(0, 0.8, 0), 2.2)
+	world.shake(1.1)
+	Sfx.play("boom")
+	Game.vibrate(150)
 
 
 func _on_hurt(e: Dictionary) -> void:
 	Sfx.play("hurt", -3.0)
-	if e["cause"] == "gunman":
+	if e["cause"] == "gunman" or e["cause"] == "boss":
 		_gun_tracers(int(e["source"]), false)
 	world.shake(0.25)
 	_sync_allies(Vector3(_squad_x, 0, 0))
@@ -419,11 +472,14 @@ func _on_bomb(e: Dictionary) -> void:
 func _desired_allies() -> Dictionary:
 	var counts := sim.squad.counts
 	var total := sim.squad.total()
-	var out := {"hero": int(counts["hero"]), "constable": int(counts["constable"]), "inspector": int(counts["inspector"])}
+	var out := {}
+	for k in ALLY_KINDS:
+		out[k] = int(counts.get(k, 0))
 	if total > ALLY_CAP:
 		var per := float(total) / ALLY_CAP
-		out["inspector"] = maxi(int(round(int(counts["inspector"]) / per)), 1 if int(counts["inspector"]) > 0 else 0)
-		out["constable"] = maxi(ALLY_CAP - out["hero"] - out["inspector"], 0)
+		for k in ["inspector", "swat"]:
+			out[k] = maxi(int(round(int(counts[k]) / per)), 1 if int(counts[k]) > 0 else 0)
+		out["constable"] = maxi(ALLY_CAP - out["hero"] - out["inspector"] - out["swat"], 0)
 	return out
 
 
@@ -446,7 +502,7 @@ func _sync_allies(source: Vector3) -> void:
 				_dying.append({"kind": kind, "pos": a["pos"], "t": 0.0, "basis": Basis()})
 				fx.puff(a["pos"])
 	# Slots: hero in front, inspectors next, constables behind.
-	var order := {"hero": 0, "inspector": 1, "constable": 2}
+	var order := {"hero": 0, "swat": 1, "inspector": 2, "constable": 3}
 	_allies.sort_custom(func(a, b): return order[a["kind"]] < order[b["kind"]])
 	for i in _allies.size():
 		_allies[i]["slot"] = i
@@ -485,11 +541,12 @@ func _update_visuals(d: float) -> void:
 		a["pos"] = pos
 		a["flash"] = maxf(float(a["flash"]) - d * 3.0, 0.0)
 		var aim := 0.0
-		if target_pos != null and not demo:
+		if not demo and (_state == "play" or _state == "strike" or _state == "striking"):
 			aim = 1.0
 			a["fire_t"] = float(a["fire_t"]) - d
 			if float(a["fire_t"]) <= 0.0:
-				_fire(a, target_pos)
+				var aim_at: Vector3 = target_pos if target_pos != null else Vector3(pos.x, 1.1, pos.z - sim.fire_range)
+				_fire(a, aim_at)
 		var basis := Basis()
 		if target_pos != null and not demo:
 			var dir: Vector3 = (target_pos as Vector3) - pos
@@ -515,12 +572,14 @@ func _update_visuals(d: float) -> void:
 		var flash := float(hv["shoot_flash"])
 		hv["shoot_flash"] = maxf(flash - d, 0.0)
 		var face := Basis(Vector3.UP, PI)
+		if hv["kind"] == "boss":
+			face = face.scaled(Vector3.ONE * 2.2)
 		for o in offs:
 			crowd.push(Transform3D(face, _fig_pos(hv, o)), Color(o.y, flash * 2.0, run, aim))
 		var lab: Label3D = hv["label"]
 		var depth := (offs.back().z if not offs.is_empty() else 0.0) as float
 		lab.position = Vector3(0, 3.6 if hv["kind"] != "brute" else 4.6, float(h["z"]) - depth * 0.5)
-		lab.text = str(int(h["count"]))
+		lab.text = str(int(h["count"])) if hv["kind"] != "boss" else str(int(ceil(float(h["hp"]) - float(h["acc"]))))
 		if int(h["armour"]) == 0:
 			lab.modulate = Color("ff6b6b")
 
@@ -580,6 +639,12 @@ func _update_visuals(d: float) -> void:
 		v.position.z = float(v.row["z"])
 	if _finish:
 		_finish.position.z = -(sim.finish_at - sim.traveled)
+	for oid in _obstacles:
+		var od: Dictionary = _obstacles[oid]
+		var on: Node3D = od["node"]
+		on.position = _obstacle_pos(od["ob"])
+		if od["ob"].get("armed", false):
+			on.scale = Vector3.ONE * (1.0 + 0.12 * absf(sin(Time.get_ticks_msec() / 60.0)))
 
 	# Squad label and shield.
 	_label_pop = maxf(_label_pop - d * 4.0, 0.0)
@@ -624,6 +689,8 @@ func _target_point():
 			return _fig_pos(hv, offs[randi() % mini(offs.size(), 9)]) + Vector3(0, 1.0, 0)
 		"gate":
 			return Vector3(LANE_X[int(sim.target_ref["lane"])], 1.9, float(sim.target_ref.get("z", -10.0)))
+		"obstacle":
+			return _obstacle_pos(sim.target_ref) + Vector3(0, 0.8, 0)
 	return null
 
 
@@ -670,6 +737,46 @@ func _physics_process(_delta: float) -> void:
 		var hv: Dictionary = _hordes[id]
 		if int(hv["h"]["count"]) <= 0 and (hv["offs"] as Array).is_empty():
 			_free_horde(id)
+
+
+# ---------------------------------------------------------------- obstacles
+
+func _obstacle_pos(ob: Dictionary) -> Vector3:
+	return Vector3(LANE_X[int(ob["lane"])], 0, float(ob["z"]))
+
+
+func _spawn_obstacle(ob: Dictionary) -> void:
+	var n := Node3D.new()
+	match String(ob.get("kind", "barricade")):
+		"barrel":
+			var body := World._box(Vector3(1.0, 1.3, 1.0), Color("c8352b"))
+			body.position.y = 0.65
+			n.add_child(body)
+			var band := World._box(Vector3(1.06, 0.18, 1.06), Color("f2c14e"))
+			band.position.y = 0.95
+			n.add_child(band)
+		"car":
+			var body := World._box(Vector3(2.2, 0.9, 4.0), Color("3a6fd6"))
+			body.position.y = 0.65
+			n.add_child(body)
+			var cab := World._box(Vector3(1.9, 0.7, 2.0), Color("9ec4ff"))
+			cab.position = Vector3(0, 1.4, 0.2)
+			n.add_child(cab)
+		_:
+			var bar := World._box(Vector3(2.8, 0.9, 0.4), Color("8a6a3f"))
+			bar.position.y = 0.6
+			n.add_child(bar)
+	add_child(n)
+	n.position = _obstacle_pos(ob)
+	_obstacles[int(ob["id"])] = {"ob": ob, "node": n}
+
+
+func _free_obstacle(id: int) -> void:
+	var od: Dictionary = _obstacles.get(id, {})
+	if od.is_empty():
+		return
+	(od["node"] as Node).queue_free()
+	_obstacles.erase(id)
 
 
 # ---------------------------------------------------------------- shield, finish, strike

@@ -10,13 +10,18 @@ extends RefCounted
 ## Gates and obstacles ride the road (scroll speed); gangs also run (scroll + their speed),
 ## so they spawn earlier to arrive on time.
 ##
-## Shooting rule (easy to explain to players): troops shoot the nearest gang in range;
-## when no gang is in range they shoot whatever is in their lane (red gates, barricades).
+## Shooting rule (easy to explain to players): bullets stream down your lane and hit the
+## first thing they meet: a gang (gangs fill the whole road), a red gate, a barrel or a car.
+##
+## Gangs are blocks of rows. Bullets always kill from the front, so the gang's front is its
+## frontmost *living* row. Nothing hurts the squad until that front physically reaches it;
+## then the gang fights row by row (melee), each enemy taking `power` troops and dying.
 
 var S: float            # scroll speed, m/s
 var fire_range: float
 var spawn_dist: float
 var contact_z: float
+var melee_tick: float
 
 var stats: Dictionary   # effective ally stats after upgrades
 var weapons: Dictionary
@@ -56,6 +61,7 @@ func _init(level: Dictionary, units_cfg: Dictionary, upgrades: Dictionary = {}) 
 	fire_range = float(w["fire_range"])
 	spawn_dist = float(w["spawn_distance"])
 	contact_z = float(w["contact_z"])
+	melee_tick = float(w.get("melee_tick", 0.22))
 	stats = units_cfg["allies"].duplicate(true)
 	weapons = units_cfg["hero_weapons"]
 	enemy_defs = units_cfg["enemies"]
@@ -121,9 +127,17 @@ func use_power(id: String) -> bool:
 				return false
 			var cfg: Dictionary = powers["bomb"]
 			var n: int = h["count"]
-			var k := mini(n, maxi(int(floor(n * float(cfg["kill_pct"]) / 100.0)), int(cfg["min_kill"])))
+			var k := 0
+			if float(h["hp"]) >= float(cfg.get("big_hp", 50)):
+				# Big single targets (the boss) take flat damage instead of dying outright.
+				h["acc"] = float(h["acc"]) + float(cfg.get("big_dmg", 120))
+				k = mini(int(floor(float(h["acc"]) / float(h["hp"]))), n)
+				h["acc"] = float(h["acc"]) - k * float(h["hp"])
+			else:
+				k = mini(n, maxi(int(floor(n * float(cfg["kill_pct"]) / 100.0)), int(cfg["min_kill"])))
+			h["shield"] = float(h["shield"]) * 0.5
 			_kill(h, k)
-			out.append({"type": "bomb", "horde": h["id"], "z": h["z"], "killed": k})
+			out.append({"type": "bomb", "horde": h["id"], "z": front_z(h), "killed": k})
 		_:
 			return false
 	charges[id] = int(charges[id]) - 1
@@ -141,9 +155,10 @@ func step(dt: float) -> void:
 	_armour_note_t = maxf(_armour_note_t - dt, 0.0)
 	_spawn_due()
 	_move(dt)
+	_check_barrels()
 	_shoot(dt)
 	_gunfire(dt)
-	_contacts()
+	_contacts(dt)
 	_pass_rows()
 	_pass_obstacles()
 	if state == "run" and finish_at > 0.0 and traveled >= finish_at and hordes.is_empty():
@@ -196,8 +211,10 @@ func _spawn_horde(sp: Dictionary) -> void:
 		"count": int(grp["n"]), "start": int(grp["n"]),
 		"hp": float(def["hp"]), "armour": int(def["armour"]), "power": int(def["power"]),
 		"vrel": vrel, "stop": stop, "shoot_every": float(def.get("shoot_every", 0.0)),
-		"z": -stop - (float(sp["at"]) - traveled) * vrel / S,
-		"acc": 0.0, "shoot_t": 0.0, "stopped": false,
+		"shot_dmg": int(def.get("shot_dmg", 1)),
+		"cols": int(def.get("cols", 9)), "row_gap": float(def.get("row_gap", 0.95)),
+		"shield": 0.0, "z": -stop - (float(sp["at"]) - traveled) * vrel / S,
+		"acc": 0.0, "shoot_t": 0.0, "stopped": false, "melee": false, "melee_t": 0.0,
 	}
 	var mods: Dictionary = _wave_mods.get(sp["wave"], {})
 	if mods.has("div"):
@@ -205,6 +222,11 @@ func _spawn_horde(sp: Dictionary) -> void:
 		h["start"] = h["count"]
 	if mods.has("strip"):
 		h["armour"] = 0
+	var take := mini(int(mods.get("turncoat", 0)), int(h["count"]))
+	if take > 0:
+		mods["turncoat"] = int(mods["turncoat"]) - take
+		_turn(h, take)
+	h["shield"] = float(def.get("shield", 0.0)) * int(h["count"])
 	if h["count"] <= 0:
 		return
 	hordes.append(h)
@@ -219,11 +241,15 @@ func _move(dt: float) -> void:
 	for ob in obstacles:
 		ob["z"] = float(ob["z"]) + S * dt
 	for h in hordes:
+		if h["melee"]:
+			# Rows behind keep walking up so the living front stays on the squad.
+			h["z"] = contact_z + killed_rows(h) * float(h["row_gap"])
+			continue
 		if h["stopped"]:
 			continue
 		h["z"] = float(h["z"]) + float(h["vrel"]) * dt
-		if float(h["stop"]) > 0.0 and float(h["z"]) >= -float(h["stop"]):
-			h["z"] = -float(h["stop"])
+		if float(h["stop"]) > 0.0 and front_z(h) >= -float(h["stop"]):
+			h["z"] = -float(h["stop"]) + killed_rows(h) * float(h["row_gap"])
 			h["stopped"] = true
 
 
@@ -231,26 +257,40 @@ func _shoot(dt: float) -> void:
 	target_kind = ""
 	target_ref = null
 	var h = _front_horde(fire_range)
-	if h != null:
-		var d := squad.dps(stats, weapons, int(h["armour"]))
-		target_kind = "horde"
-		target_ref = h
-		if d <= 0.0:
-			if _armour_note_t <= 0.0 and squad.dps(stats, weapons, 0) > 0.0:
-				_armour_note_t = 1.5
-				out.append({"type": "armour_block", "horde": h["id"]})
-			return
-		h["acc"] = float(h["acc"]) + d * dt
-		var k := mini(int(floor(float(h["acc"]) / float(h["hp"]))), int(h["count"]))
-		if k > 0:
-			h["acc"] = float(h["acc"]) - k * float(h["hp"])
-			_kill(h, k)
-		return
-
 	var t = _lane_target()
-	if t == null:
+	# Bullets hit whichever is nearer in the lane: the gang's front or a lane object.
+	if t != null and (h == null or float(t["z"]) > front_z(h)):
+		_shoot_lane(t, dt)
 		return
-	var dmg := squad.dps(stats, weapons, 0) * dt
+	if h == null:
+		return
+	target_kind = "horde"
+	target_ref = h
+	var hp := float(h["hp"])
+	var d := squad.dps(stats, weapons, int(h["armour"]), hp)
+	if d <= 0.0:
+		if _armour_note_t <= 0.0 and squad.dps(stats, weapons, 0, hp) > 0.0:
+			_armour_note_t = 1.5
+			out.append({"type": "armour_block", "horde": h["id"]})
+		return
+	var dmg := d * dt
+	if float(h["shield"]) > 0.0:
+		# Riot shields soak non-piercing fire first; piercing rounds go straight through.
+		var pierce := squad.pierce_dps(stats, weapons, hp) * dt
+		var blocked := minf(float(h["shield"]), maxf(dmg - pierce, 0.0))
+		h["shield"] = float(h["shield"]) - blocked
+		dmg -= blocked
+		if blocked > 0.0 and float(h["shield"]) <= 0.0:
+			out.append({"type": "shield_broken", "horde": h["id"]})
+	h["acc"] = float(h["acc"]) + dmg
+	var k := mini(int(floor(float(h["acc"]) / hp)), int(h["count"]))
+	if k > 0:
+		h["acc"] = float(h["acc"]) - k * hp
+		_kill(h, k)
+
+
+func _shoot_lane(t: Dictionary, dt: float) -> void:
+	var dmg := squad.dps(stats, weapons, 0, 1000.0) * dt
 	target_ref = t
 	if t.has("op"):  # a gate
 		target_kind = "gate"
@@ -268,8 +308,38 @@ func _shoot(dt: float) -> void:
 		t["hp"] = float(t["hp"]) - dmg
 		if float(t["hp"]) <= 0.0:
 			t["hp"] = 0.0
-			out.append({"type": "obstacle_broken", "ob": t})
-			obstacles.erase(t)
+			if String(t.get("kind", "")) == "barrel":
+				# A shot barrel is armed: it blows when the next gang's front reaches it.
+				t["armed"] = true
+				out.append({"type": "barrel_armed", "ob": t})
+			else:
+				obstacles.erase(t)
+				out.append({"type": "obstacle_broken", "ob": t})
+
+
+func _check_barrels() -> void:
+	for ob in obstacles.duplicate():
+		if not ob.get("armed", false):
+			continue
+		for h in hordes:
+			if front_z(h) >= float(ob["z"]) - 0.5:
+				obstacles.erase(ob)
+				_explode(ob)
+				break
+
+
+## An armed barrel blows up every gang whose front is within its blast radius.
+func _explode(b: Dictionary) -> void:
+	var radius := float(b.get("radius", 7.0))
+	var max_kill := int(b.get("kill", 30))
+	var total := 0
+	for h in hordes.duplicate():
+		if absf(front_z(h) - float(b["z"])) <= radius:
+			var k := mini(max_kill, int(h["count"]))
+			total += k
+			h["shield"] = 0.0
+			_kill(h, k)
+	out.append({"type": "barrel_boom", "ob": b, "killed": total})
 
 
 func _kill(h: Dictionary, k: int) -> void:
@@ -286,10 +356,20 @@ func _kill(h: Dictionary, k: int) -> void:
 func _front_horde(reach: float):
 	var best = null
 	for h in hordes:
-		if int(h["count"]) > 0 and float(h["z"]) >= -reach:
-			if best == null or float(h["z"]) > float(best["z"]):
+		if int(h["count"]) > 0 and front_z(h) >= -reach:
+			if best == null or front_z(h) > front_z(best):
 				best = h
 	return best
+
+
+## How many whole rows have been shot away from the front.
+static func killed_rows(h: Dictionary) -> int:
+	return int((int(h["start"]) - int(h["count"])) / maxi(int(h["cols"]), 1))
+
+
+## Position of the frontmost living row.
+static func front_z(h: Dictionary) -> float:
+	return float(h["z"]) - killed_rows(h) * float(h["row_gap"])
 
 
 func _lane_target():
@@ -306,7 +386,7 @@ func _lane_target():
 					best_z = z
 	for ob in obstacles:
 		var z := float(ob["z"])
-		if int(ob["lane"]) == lane and z >= -fire_range and z < 0.0 and float(ob["hp"]) > 0.0 and z > best_z:
+		if int(ob["lane"]) == lane and z >= -fire_range and z < 0.0 and float(ob["hp"]) > 0.0 and z > best_z and not ob.get("armed", false):
 			best = ob
 			best_z = z
 	return best
@@ -322,23 +402,31 @@ func _gunfire(dt: float) -> void:
 			if shield_t > 0.0:
 				out.append({"type": "blocked", "horde": h["id"], "n": h["count"]})
 			else:
-				_hurt(int(h["count"]), "gunman", h["id"])
+				_hurt(int(h["count"]) * int(h["shot_dmg"]), String(h["enemy"]), h["id"])
 			if state != "run":
 				return
 
 
-func _contacts() -> void:
+func _contacts(dt: float) -> void:
 	for h in hordes.duplicate():
-		if float(h["z"]) < contact_z:
+		if not h["melee"]:
+			if front_z(h) < contact_z:
+				continue
+			h["melee"] = true
+			h["melee_t"] = 0.0
+			out.append({"type": "melee_start", "horde": h["id"]})
+		h["melee_t"] = float(h["melee_t"]) - dt
+		if float(h["melee_t"]) > 0.0:
 			continue
-		var power := int(h["count"]) * int(h["power"])
-		hordes.erase(h)
-		if shield_t > 0.0:
-			kills += int(h["count"])
-			out.append({"type": "contact", "horde": h["id"], "power": power, "lost": 0, "shielded": true})
-		else:
-			var lost := _hurt(power, String(h["enemy"]), h["id"], false)
-			out.append({"type": "contact", "horde": h["id"], "power": power, "lost": lost, "shielded": false})
+		h["melee_t"] = melee_tick
+		# The front row strikes: each enemy takes `power` troops and falls.
+		var row := mini(int(h["cols"]), int(h["count"]))
+		var power := row * int(h["power"])
+		var lost := 0
+		if shield_t <= 0.0:
+			lost = _hurt(power, String(h["enemy"]), h["id"], false)
+		out.append({"type": "melee", "horde": h["id"], "enemies": row, "lost": lost, "shielded": shield_t > 0.0})
+		_kill(h, row)
 		if state != "run":
 			return
 
@@ -397,10 +485,19 @@ func _apply_gate(g: Dictionary) -> int:
 			var id := String(g["id"])
 			charges[id] = int(charges.get(id, 0)) + int(g.get("n", 1))
 			return 0
-		"foe_div", "foe_strip":
+		"foe_div", "foe_strip", "turncoat":
+			var before := squad.total()
 			_apply_foe_mod(g)
-			return 0
+			return squad.total() - before
 	return 0
+
+
+## Moves `k` gang members from the front of `h` into the squad as constables.
+func _turn(h: Dictionary, k: int) -> void:
+	h["count"] = int(h["count"]) - k
+	h["start"] = int(h["start"]) - k
+	squad.add("constable", k)
+	out.append({"type": "turncoat", "horde": h["id"], "n": k})
 
 
 func _apply_foe_mod(g: Dictionary) -> void:
@@ -412,18 +509,36 @@ func _apply_foe_mod(g: Dictionary) -> void:
 	if wave < 0:
 		return
 	var mods: Dictionary = _wave_mods.get(wave, {})
-	if g["op"] == "foe_div":
-		mods["div"] = int(g["k"])
-	else:
-		mods["strip"] = true
+	var spawned: Array = hordes.filter(func(x): return int(x["wave"]) == wave)
+	match String(g["op"]):
+		"foe_div":
+			mods["div"] = int(g["k"])
+		"foe_strip":
+			mods["strip"] = true
+		"turncoat":
+			# Converts from the gangs of that wave already on screen; the rest applies at spawn.
+			var left := int(g.get("n", 5))
+			for h in spawned:
+				var k := mini(left, int(h["count"]))
+				if k > 0:
+					_turn(h, k)
+					left -= k
+			if left > 0:
+				mods["turncoat"] = int(mods.get("turncoat", 0)) + left
+			_wave_mods[wave] = mods
+			for h in hordes.duplicate():
+				if int(h["count"]) <= 0:
+					hordes.erase(h)
+					out.append({"type": "horde_cleared", "horde": h["id"]})
+			return
 	_wave_mods[wave] = mods
-	for h in hordes:
-		if int(h["wave"]) != wave:
-			continue
+	for h in spawned:
 		var before: int = h["count"]
 		if g["op"] == "foe_div":
+			var killed := int(h["start"]) - before
 			h["count"] = int(floor(before / float(g["k"])))
-			h["start"] = maxi(int(h["start"]) / int(g["k"]), 1)
+			h["start"] = int(h["count"]) + killed  # halved from the back; the front stays put
+			h["shield"] = float(h["shield"]) / float(g["k"])
 		else:
 			h["armour"] = 0
 		out.append({"type": "foe_mod", "horde": h["id"], "op": g["op"], "from": before, "to": h["count"]})
@@ -438,8 +553,8 @@ func _pass_obstacles() -> void:
 		if float(ob["z"]) < 0.0:
 			continue
 		obstacles.erase(ob)
-		if int(ob["lane"]) == lane and float(ob["hp"]) > 0.0:
-			var lost := _hurt(int(ob.get("dmg", 5)), "barricade", ob["id"], false)
+		if int(ob["lane"]) == lane and float(ob["hp"]) > 0.0 and not ob.get("armed", false):
+			var lost := _hurt(int(ob.get("dmg", 5)), String(ob.get("kind", "barricade")), ob["id"], false)
 			out.append({"type": "obstacle_hit", "ob": ob, "lost": lost})
 			if state != "run":
 				return

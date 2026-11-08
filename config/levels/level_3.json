@@ -1,40 +1,28 @@
 {
-  "_design": "Kingpin. Combines everything, adds the hero's pistol, percent gates, BOMB and halving the next gang. A greedy 'biggest number' route struggles; a planned route wins big.",
-  "id": 3,
-  "name": "Kingpin",
-  "charges": { "shield": 1, "bomb": 1 },
+  "_design": "Crossfire. Teaches: gunmen stop and shoot (SHIELD), barrels blow up gangs running past them, percent gates.",
+  "id": 3, "name": "Crossfire", "charges": { "shield": 1 },
   "events": [
-    { "at": 34,  "type": "gates", "gates": [
-      { "lane": 0, "op": "weapon", "id": "pistol" },
-      { "lane": 1, "op": "num", "v": 6 },
-      { "lane": 2, "op": "recruit", "unit": "inspector", "n": 2 } ] },
-    { "at": 62,  "type": "wave", "groups": [ { "enemy": "knifer", "n": 14 } ] },
-    { "at": 70,  "type": "hint", "text": "PERCENT GATES: SHOOT THEM UP", "dur": 3.0 },
-    { "at": 92,  "type": "gates", "gates": [
-      { "lane": 0, "op": "pct", "v": -40, "inc": 10, "step": 5, "max": 60 },
-      { "lane": 1, "op": "num", "v": 12 },
-      { "lane": 2, "op": "mul", "k": 2 } ] },
-    { "at": 120, "type": "gates", "gates": [
-      { "lane": 0, "op": "foe_div", "k": 2 },
-      { "lane": 1, "op": "power", "id": "bomb", "n": 1 },
+    { "at": 36,  "type": "gates", "gates": [
+      { "lane": 0, "op": "num", "v": 10 },
+      { "lane": 1, "op": "recruit", "unit": "inspector", "n": 2 },
+      { "lane": 2, "op": "weapon", "id": "pistol" } ] },
+    { "at": 70,  "type": "wave", "groups": [ { "enemy": "thug", "n": 34 }, { "enemy": "gunman", "n": 8, "gap": 10 } ] },
+    { "at": 62,  "type": "hint", "id": "shield", "icon": "shield", "power": "shield" },
+    { "at": 104, "type": "gates", "gates": [
+      { "lane": 0, "op": "pct", "v": -40, "inc": 10, "step": 4, "max": 60 },
+      { "lane": 1, "op": "mul", "k": 2 },
       { "lane": 2, "op": "num", "v": 15 } ] },
-    { "at": 152, "type": "wave", "label": "GANG WAR", "groups": [
-      { "enemy": "thug", "n": 110 },
-      { "enemy": "gunman", "n": 8, "gap": 8 },
-      { "enemy": "brute", "n": 6, "gap": 14 } ] },
-    { "at": 146, "type": "hint", "text": "TAP BOMB: WIPES HALF A GANG", "icon": "bomb", "power": "bomb", "dur": 3.0 },
-    { "at": 186, "type": "gates", "slowmo": true, "gates": [
-      { "lane": 0, "op": "mul", "k": 2 },
-      { "lane": 1, "op": "num", "v": -15, "step": 3, "max": 20 },
+    { "at": 138, "type": "obstacle", "kind": "barrel", "lane": 1, "hp": 10, "radius": 8, "kill": 60, "dmg": 4 },
+    { "at": 132, "type": "hint", "id": "barrel", "icon": "barrel" },
+    { "at": 150, "type": "wave", "groups": [ { "enemy": "thug", "n": 90 } ] },
+    { "at": 186, "type": "gates", "gates": [
+      { "lane": 0, "op": "num", "v": 12 },
+      { "lane": 1, "op": "num", "v": -15, "step": 3, "max": 15 },
       { "lane": 2, "op": "recruit", "unit": "inspector", "n": 3 } ] },
-    { "at": 214, "type": "gates", "gates": [
-      { "lane": 0, "op": "foe_strip" },
-      { "lane": 1, "op": "foe_div", "k": 2 },
-      { "lane": 2, "op": "num", "v": 20 } ] },
-    { "at": 246, "type": "wave", "label": "KINGPIN'S ARMY", "groups": [
-      { "enemy": "thug", "n": 180 },
-      { "enemy": "knifer", "n": 50, "gap": 6 },
-      { "enemy": "brute", "n": 10, "gap": 14 } ] },
-    { "at": 272, "type": "finish" }
+    { "at": 230, "type": "wave", "label": "CROSSFIRE", "groups": [
+      { "enemy": "knifer", "n": 80 },
+      { "enemy": "gunman", "n": 18, "gap": 8 },
+      { "enemy": "brute", "n": 8, "gap": 14 } ] },
+    { "at": 254, "type": "finish" }
   ]
 }

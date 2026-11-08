@@ -8,9 +8,9 @@ extends RefCounted
 ##   rank, and the hero (who can't be copied) brings k-1 constables.
 ## - Losses take the lowest rank first; the hero falls last, and that ends the level.
 
-const LOSS_ORDER := ["constable", "inspector", "hero"]
+const LOSS_ORDER := ["constable", "inspector", "swat", "hero"]
 
-var counts: Dictionary = {"hero": 1, "constable": 0, "inspector": 0}
+var counts: Dictionary = {"hero": 1, "constable": 0, "inspector": 0, "swat": 0}
 var hero_weapon: String = ""
 
 
@@ -75,24 +75,39 @@ func divide(k: int) -> int:
 
 
 ## Damage per second against one enemy type. `stats` is the effective ally table
-## (after upgrades); armour comes off every hit unless the attacker pierces.
-func dps(stats: Dictionary, weapons: Dictionary, armour: int) -> float:
+## (after upgrades); armour comes off every hit unless the attacker pierces. A unit with
+## `multi` > 1 (SWAT bursts) hits that many weak enemies per shot: it counts only when the
+## enemy dies to one hit (hp <= damage after armour).
+func dps(stats: Dictionary, weapons: Dictionary, armour: int, hp := 1.0) -> float:
 	var sum := 0.0
 	for rank in counts:
 		var n := count(rank)
 		if n <= 0 or not stats.has(rank):
 			continue
-		sum += n * hit_value(stats[rank], armour)
+		sum += n * hit_value(stats[rank], armour, hp)
 	if hero_weapon != "" and hero_alive() and weapons.has(hero_weapon):
-		sum += hit_value(weapons[hero_weapon], armour)
+		sum += hit_value(weapons[hero_weapon], armour, hp)
 	return sum
 
 
-static func hit_value(unit: Dictionary, armour: int) -> float:
+## The part of dps() that comes from piercing attackers (passes riot shields).
+func pierce_dps(stats: Dictionary, weapons: Dictionary, hp := 1.0) -> float:
+	var sum := 0.0
+	for rank in counts:
+		var n := count(rank)
+		if n > 0 and stats.has(rank) and bool(stats[rank].get("pierce", false)):
+			sum += n * hit_value(stats[rank], 0, hp)
+	return sum
+
+
+static func hit_value(unit: Dictionary, armour: int, hp := 1.0) -> float:
 	var dmg := float(unit.get("dmg", 1))
 	if not bool(unit.get("pierce", false)):
 		dmg = maxf(dmg - armour, 0.0)
-	return dmg * float(unit.get("rate", 1.0))
+	var multi := float(unit.get("multi", 1))
+	if multi > 1.0 and hp > dmg:
+		multi = 1.0
+	return dmg * float(unit.get("rate", 1.0)) * multi
 
 
 func duplicate_squad() -> Squad:

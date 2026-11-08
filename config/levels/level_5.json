@@ -1,0 +1,29 @@
+{
+  "_design": "Kingpin. Boss level: everything combined. The Kingpin stops at range and smashes troops until killed; SMG for the hero.",
+  "id": 5, "name": "Kingpin", "charges": { "shield": 1, "bomb": 1 },
+  "events": [
+    { "at": 36,  "type": "gates", "gates": [
+      { "lane": 0, "op": "weapon", "id": "smg" },
+      { "lane": 1, "op": "num", "v": 14 },
+      { "lane": 2, "op": "recruit", "unit": "swat", "n": 3 } ] },
+    { "at": 70,  "type": "wave", "groups": [ { "enemy": "knifer", "n": 60 }, { "enemy": "gunman", "n": 10, "gap": 8 } ] },
+    { "at": 104, "type": "gates", "gates": [
+      { "lane": 0, "op": "recruit", "unit": "inspector", "n": 4 },
+      { "lane": 1, "op": "pct", "v": -30, "inc": 10, "step": 4, "max": 50 },
+      { "lane": 2, "op": "mul", "k": 2 } ] },
+    { "at": 120, "type": "obstacle", "kind": "barrel", "lane": 0, "hp": 10, "radius": 8, "kill": 70, "dmg": 4 },
+    { "at": 136, "type": "wave", "groups": [ { "enemy": "thug", "n": 140 } ] },
+    { "at": 170, "type": "gates", "gates": [
+      { "lane": 0, "op": "turncoat", "n": 30 },
+      { "lane": 1, "op": "mul", "k": 2 },
+      { "lane": 2, "op": "power", "id": "bomb", "n": 1 } ] },
+    { "at": 206, "type": "wave", "groups": [ { "enemy": "riot", "n": 49 }, { "enemy": "biker", "n": 15, "gap": 6 } ] },
+    { "at": 236, "type": "gates", "gates": [
+      { "lane": 0, "op": "foe_strip" },
+      { "lane": 1, "op": "num", "v": -25, "step": 2.5, "max": 25 },
+      { "lane": 2, "op": "recruit", "unit": "inspector", "n": 5 } ] },
+    { "at": 280, "type": "wave", "label": "KINGPIN", "groups": [
+      { "enemy": "thug", "n": 120 }, { "enemy": "brute", "n": 10, "gap": 10 }, { "enemy": "boss", "n": 1, "gap": 22 } ] },
+    { "at": 320, "type": "finish" }
+  ]
+}

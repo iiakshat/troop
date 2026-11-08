@@ -1,27 +1,24 @@
 {
-  "_design": "First Blood. Teaches: move, recruit, x2, shooting a red gate until it flips. Every sensible path wins big; the point is to feel powerful within 30 seconds.",
-  "id": 1,
-  "name": "First Blood",
-  "charges": {},
+  "_design": "First Blood. Teaches: move, recruit, x2, shooting a red gate until it flips. Big crowds early: feel powerful in 30 seconds.",
+  "id": 1, "name": "First Blood", "charges": {},
   "events": [
-    { "at": 26,  "type": "wave", "groups": [ { "enemy": "thug", "n": 4 } ] },
-    { "at": 30,  "type": "hint", "text": "SWIPE TO MOVE", "icon": "swipe", "dur": 3.0 },
-    { "at": 52,  "type": "gates", "slowmo": true, "tutorial": "swipe", "gates": [
-      { "lane": 0, "op": "num", "v": 3 },
-      { "lane": 2, "op": "num", "v": 8 } ] },
-    { "at": 80,  "type": "wave", "groups": [ { "enemy": "thug", "n": 10 } ] },
-    { "at": 92,  "type": "hint", "text": "x2 DOUBLES YOUR SQUAD", "dur": 2.5 },
-    { "at": 110, "type": "gates", "slowmo": true, "gates": [
+    { "at": 30,  "type": "wave", "groups": [ { "enemy": "thug", "n": 10 } ] },
+    { "at": 34,  "type": "hint", "id": "swipe", "icon": "swipe" },
+    { "at": 58,  "type": "gates", "tutorial": "swipe", "gates": [
       { "lane": 0, "op": "num", "v": 4 },
+      { "lane": 2, "op": "num", "v": 10 } ] },
+    { "at": 92,  "type": "wave", "groups": [ { "enemy": "thug", "n": 34 } ] },
+    { "at": 124, "type": "gates", "gates": [
+      { "lane": 0, "op": "num", "v": 6 },
       { "lane": 1, "op": "mul", "k": 2 },
-      { "lane": 2, "op": "num", "v": 6 } ] },
-    { "at": 138, "type": "wave", "groups": [ { "enemy": "thug", "n": 24 } ] },
-    { "at": 146, "type": "hint", "text": "SHOOT RED GATES TO FLIP THEM", "dur": 3.0 },
-    { "at": 170, "type": "gates", "slowmo": true, "gates": [
-      { "lane": 0, "op": "num", "v": 4 },
-      { "lane": 1, "op": "num", "v": -8, "step": 3, "max": 15 },
-      { "lane": 2, "op": "num", "v": 4 } ] },
-    { "at": 204, "type": "wave", "label": "BIG GANG", "groups": [ { "enemy": "thug", "n": 50 } ] },
-    { "at": 222, "type": "finish" }
+      { "lane": 2, "op": "num", "v": 8 } ] },
+    { "at": 158, "type": "wave", "groups": [ { "enemy": "thug", "n": 80 } ] },
+    { "at": 168, "type": "hint", "id": "red_gate", "icon": "aim" },
+    { "at": 196, "type": "gates", "gates": [
+      { "lane": 0, "op": "num", "v": 5 },
+      { "lane": 1, "op": "num", "v": -10, "step": 2.5, "max": 20 },
+      { "lane": 2, "op": "num", "v": 5 } ] },
+    { "at": 236, "type": "wave", "label": "BIG GANG", "groups": [ { "enemy": "thug", "n": 150 } ] },
+    { "at": 256, "type": "finish" }
   ]
 }

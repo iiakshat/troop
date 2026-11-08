@@ -1,0 +1,26 @@
+{
+  "_design": "Riot. Teaches: SWAT bursts shred crowds, riot shields soak bullets (Inspectors pierce, BOMB breaks), bikers rush, TURNCOAT.",
+  "id": 4, "name": "Riot", "charges": { "shield": 1, "bomb": 1 },
+  "events": [
+    { "at": 36,  "type": "gates", "gates": [
+      { "lane": 0, "op": "recruit", "unit": "swat", "n": 3 },
+      { "lane": 1, "op": "num", "v": 12 },
+      { "lane": 2, "op": "recruit", "unit": "inspector", "n": 2 } ] },
+    { "at": 70,  "type": "wave", "groups": [ { "enemy": "thug", "n": 70 } ] },
+    { "at": 98,  "type": "gates", "gates": [
+      { "lane": 0, "op": "num", "v": 10 },
+      { "lane": 1, "op": "mul", "k": 2 },
+      { "lane": 2, "op": "turncoat", "n": 20 } ] },
+    { "at": 138, "type": "wave", "groups": [ { "enemy": "riot", "n": 42 }, { "enemy": "thug", "n": 60, "gap": 8 } ] },
+    { "at": 128, "type": "hint", "id": "bomb", "icon": "bomb", "power": "bomb" },
+    { "at": 172, "type": "gates", "gates": [
+      { "lane": 0, "op": "num", "v": -20, "step": 2.5, "max": 20 },
+      { "lane": 1, "op": "recruit", "unit": "swat", "n": 4 },
+      { "lane": 2, "op": "foe_div", "k": 2 } ] },
+    { "at": 190, "type": "obstacle", "kind": "car", "lane": 1, "hp": 40, "dmg": 8 },
+    { "at": 212, "type": "wave", "groups": [ { "enemy": "biker", "n": 20 } ] },
+    { "at": 250, "type": "wave", "label": "RIOT", "groups": [
+      { "enemy": "riot", "n": 56 }, { "enemy": "thug", "n": 120, "gap": 8 }, { "enemy": "brute", "n": 10, "gap": 18 } ] },
+    { "at": 274, "type": "finish" }
+  ]
+}
