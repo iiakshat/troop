@@ -16,6 +16,8 @@ extends SceneTree
 const DT := 1.0 / 30.0
 const BRUTE_MAX := 6     # rows up to which every route is played
 const MAX_TIME := 92.0   # seconds the best route may take (levels last 60-90 s)
+const KF_MAX := 4.0      # largest extra scale for the last wave
+const KF_FALLBACK := 1.5 # last-wave scale when no kf can reach the best-route target
 
 var units: Dictionary
 var upgrades := {}
@@ -134,6 +136,12 @@ func calibrate_level(n: int, base: Dictionary) -> Dictionary:
 	if ratio_target > 0.0:
 		for round_i in 2:
 			kf = _fit_ratio(base, k, ratio_target)
+			if kf >= KF_MAX * 0.97:
+				# Even a huge last gang can't dent the best route: keep a modest climax
+				# instead, so the share of winning routes isn't sacrificed for nothing.
+				kf = KF_FALLBACK
+				k = _fit_win(base, routes, target, kf)
+				break
 			k = _fit_win(base, routes, target, kf)
 	for i in 14:
 		var lv := scaled_level(base, k, kf)
@@ -153,7 +161,7 @@ func calibrate_level(n: int, base: Dictionary) -> Dictionary:
 
 
 func _fit_win(base: Dictionary, routes: Array, target: float, kf: float) -> float:
-	var lo := log(0.2)
+	var lo := log(0.15)
 	var hi := log(5.0)
 	for i in 9:
 		var mid := (lo + hi) * 0.5
@@ -172,7 +180,7 @@ func _fit_win(base: Dictionary, routes: Array, target: float, kf: float) -> floa
 ## kf (final wave only, on top of k) that leaves the best route about `want` of its peak.
 func _fit_ratio(base: Dictionary, k: float, want: float) -> float:
 	var lo := log(0.4)
-	var hi := log(4.0)
+	var hi := log(KF_MAX)
 	for i in 8:
 		var mid := (lo + hi) * 0.5
 		var r := _ratio(best_route(scaled_level(base, k, exp(mid)), true)["result"])
