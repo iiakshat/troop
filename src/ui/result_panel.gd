@@ -37,6 +37,7 @@ var _coins := 0
 var _x2: Button
 var _ad_busy := false
 var _doubled := false
+var _station: Button
 
 
 func _ready() -> void:
@@ -113,6 +114,7 @@ func show_win(level: int, r: Dictionary, has_next: bool) -> void:
 	var station := UiKit.icon_button("station", "blue", 130)
 	station.pressed.connect(func(): station_pressed.emit())
 	row.add_child(station)
+	_station = station
 	UiKit.set_alert(station, _station_alert())
 	if has_next:
 		var nxt := UiKit.icon_button("play", "green", 130)
@@ -205,6 +207,7 @@ func show_loss(level: int, cause: String, progress := -1.0, peak := 0) -> void:
 	var station := UiKit.icon_button("station", "blue", 140)
 	station.pressed.connect(func(): station_pressed.emit())
 	row.add_child(station)
+	_station = station
 	UiKit.set_alert(station, _station_alert())
 	var retry := UiKit.icon_button("retry", "green", 140)
 	retry.custom_minimum_size.x = 220
@@ -296,6 +299,12 @@ func _ad_button(placement: String, text: String) -> Button:
 	if ads:
 		ads.note_offer(placement)
 	return b
+
+
+## Re-checks the Station "!" (e.g. after the Station panel opened from here closes).
+func refresh_alerts() -> void:
+	if is_instance_valid(_station):
+		UiKit.set_alert(_station, _station_alert())
 
 
 func _station_alert() -> bool:

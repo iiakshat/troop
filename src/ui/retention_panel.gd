@@ -27,6 +27,9 @@ var hold_coins := false            # true: the pill waits for count_coins() (che
 func _frame(icon_name: String, min_height: float, title := "", with_coins := true, color := UiKit.CREAM) -> VBoxContainer:
 	UiKit.full_rect(self)
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	# Modal UI: keeps working if the game below is paused (e.g. the level frozen behind the
+	# revive offer). The placeholder ad still covers it and eats every tap while it shows.
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.62)
 	UiKit.full_rect(dim)
@@ -72,6 +75,9 @@ func close() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	var ads := _ads()
+	if ads and ads.has_method("is_showing") and ads.is_showing():
+		return
 	if not _closing and event.is_action_pressed("ui_cancel"):
 		get_viewport().set_input_as_handled()
 		close()
