@@ -40,7 +40,7 @@ const THEMES := {
 		"sun_pitch": -20.0, "sun_yaw": 158.0, "sun_color": "ffb25e", "sun_energy": 1.45, "sun_size": 14.0,
 		"fill_color": "b9b2ff", "fill_energy": 0.32, "ambient": "b49a88", "ambient_energy": 0.62,
 		"fog": "f4b77a", "fog_density": 0.0065, "exposure": 1.0, "glow": 0.38, "saturation": 1.22,
-		"tint": "ffe4c2", "walk": "ffe9cf", "windows": 0.0, "lamps": 0.15, "neon": 0.0, "wet": 0.0},
+		"tint": "ffe4c2", "walk": "ffe9cf", "windows": 0.0, "lamps": 0.0, "neon": 0.0, "wet": 0.0},
 	4: {"sky_top": "2e3570", "sky_hor": "ff8a4a", "ground_hor": "e07a4c", "ground_bot": "4a3040", "sky_energy": 1.0,
 		"sun_pitch": -9.0, "sun_yaw": 162.0, "sun_color": "ff7a3a", "sun_energy": 1.0, "sun_size": 10.0,
 		"fill_color": "8e86ff", "fill_energy": 0.38, "ambient": "8d7592", "ambient_energy": 0.72,
@@ -67,8 +67,7 @@ var _neon: Array[Node3D] = []
 var _lamp_mat: StandardMaterial3D
 var _pool_mat: StandardMaterial3D
 var _refl_mat: StandardMaterial3D
-var _bulb_mat: StandardMaterial3D
-var _neon_mats: Array = []
+var _neon_mat: ShaderMaterial
 var _wet := 0.0
 
 
@@ -346,46 +345,42 @@ func _facade_building(f: int, side: int) -> Node3D:
 
 
 ## Neon for the night districts: a vertical bar by one edge, a strip over the shopfront, or
-## both. Plain glowing shapes (no lettering). Hidden by day.
+## both. Plain glowing shapes (no lettering), one mesh per building (vertex colours, one
+## shared unshaded material) so the night costs one draw per building. Hidden by day.
 func _add_neon(root: Node3D, side: int) -> void:
+	if _neon_mat == null:
+		_neon_mat = ShaderMaterial.new()
+		_neon_mat.shader = load("res://src/game/neon.gdshader")
 	var kind := _rng.randi() % 3
 	var c := _rng.randi() % NEON_COLORS.size()
 	var x := -side * 0.09
-	var parts: Array = []
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	if kind != 1:
 		var edge := (FACADE_W * 0.5 - 0.45) * (1.0 if _rng.randf() < 0.5 else -1.0)
-		var bar := _neon_box(Vector3(0.1, 4.6, 0.16), c)
-		bar.position = Vector3(x, 7.6, edge)
-		parts.append(bar)
-		var cap := _neon_box(Vector3(0.1, 0.16, 1.0), (c + 1) % NEON_COLORS.size())
-		cap.position = Vector3(x, 10.0, edge - signf(edge) * 0.42)
-		parts.append(cap)
+		_neon_tube(st, Vector3(0.1, 4.6, 0.16), Vector3(x, 7.6, edge), c)
+		_neon_tube(st, Vector3(0.1, 0.16, 1.0), Vector3(x, 10.0, edge - signf(edge) * 0.42), c + 1)
 	if kind != 0:
-		var strip := _neon_box(Vector3(0.1, 0.13, FACADE_W - 1.6), (c + 2) % NEON_COLORS.size())
-		strip.position = Vector3(x, 4.55, 0)
-		parts.append(strip)
-	for n in parts:
-		root.add_child(n)
-		_neon.append(n)
-
-
-func _neon_box(size: Vector3, color_i: int) -> MeshInstance3D:
-	if _neon_mats.is_empty():
-		for h in NEON_COLORS:
-			var m := StandardMaterial3D.new()
-			m.albedo_color = Color.BLACK
-			m.emission_enabled = true
-			m.emission = Color(h)
-			m.emission_energy_multiplier = 3.0
-			_neon_mats.append(m)
+		_neon_tube(st, Vector3(0.1, 0.13, FACADE_W - 1.6), Vector3(x, 4.55, 0), c + 2)
 	var mi := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = size
-	mi.mesh = bm
-	mi.material_override = _neon_mats[color_i]
+	mi.mesh = st.commit()
+	mi.material_override = _neon_mat
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mi.visible = false
-	return mi
+	root.add_child(mi)
+	_neon.append(mi)
+
+
+## A box of neon (colour NEON_COLORS[i], wrapping) added to a SurfaceTool.
+static func _neon_tube(st: SurfaceTool, size: Vector3, at: Vector3, i: int) -> void:
+	const CORNERS := [Vector3(-1, -1, -1), Vector3(1, -1, -1), Vector3(1, 1, -1), Vector3(-1, 1, -1),
+		Vector3(-1, -1, 1), Vector3(1, -1, 1), Vector3(1, 1, 1), Vector3(-1, 1, 1)]
+	const FACES := [[0, 1, 2, 3], [5, 4, 7, 6], [4, 0, 3, 7], [1, 5, 6, 2], [3, 2, 6, 7], [4, 5, 1, 0]]
+	st.set_color(Color(NEON_COLORS[i % NEON_COLORS.size()]).srgb_to_linear())
+	var h := size * 0.5
+	for f in FACES:
+		for k in [0, 1, 2, 0, 2, 3]:
+			st.add_vertex(at + (CORNERS[f[k]] as Vector3) * h)
 
 
 func _props() -> void:
@@ -421,22 +416,13 @@ const PROP_Y := 0.2
 
 
 ## Night glow for one street lamp, all unlit and unshadowed (no real lights, phone-friendly):
-## a hot bulb, a soft halo, a pool of light on the road under it and a smaller one on the
-## pavement, plus a reflection streak on the wet road that World moves every frame.
+## a soft halo with a hot core at the bulb and a pool of light on the road under it, plus a
+## reflection streak on the wet road that World moves every frame. Three draws per lamp.
 func _add_lamp_glow(prop: Node3D, head: Vector3) -> void:
 	if _lamp_mat == null:
 		_make_glow_materials()
 	var parts: Array = []
 	var inv := Vector3.ONE / LAMP_SCALE
-	var bulb := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = Vector3(0.32, 0.05, 0.36)
-	bulb.mesh = bm
-	bulb.material_override = _bulb_mat
-	bulb.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	bulb.scale = inv
-	bulb.position = head - Vector3(0, 0.002, 0)
-	parts.append(bulb)
 	var halo := _glow_quad(Vector2(2.4, 2.4), _lamp_mat)
 	halo.scale = inv
 	halo.position = head - Vector3(0, 0.01, 0)
@@ -446,11 +432,6 @@ func _add_lamp_glow(prop: Node3D, head: Vector3) -> void:
 	pool.scale = inv
 	pool.position = Vector3(head.x, (0.015 - PROP_Y) / LAMP_SCALE, head.z)
 	parts.append(pool)
-	var walk := _glow_quad(Vector2(2.2, 2.2), _pool_mat)
-	walk.rotation.x = -PI * 0.5
-	walk.scale = inv
-	walk.position = Vector3(0, (0.207 - PROP_Y) / LAMP_SCALE, 0.04)
-	parts.append(walk)
 	for n in parts:
 		(n as Node3D).visible = false
 		prop.add_child(n)
@@ -475,11 +456,6 @@ func _make_glow_materials() -> void:
 	_lamp_mat = _additive(tex, true)
 	_pool_mat = _additive(tex, false)
 	_refl_mat = _additive(tex, false)
-	_bulb_mat = StandardMaterial3D.new()
-	_bulb_mat.albedo_color = Color(LAMP_LIGHT)
-	_bulb_mat.emission_enabled = true
-	_bulb_mat.emission = Color(LAMP_LIGHT)
-	_bulb_mat.emission_energy_multiplier = 0.0
 
 
 func _additive(tex: Texture2D, billboard: bool) -> StandardMaterial3D:
@@ -560,9 +536,8 @@ func _apply_theme() -> void:
 	_road_mat.set_shader_parameter("wet", _wet)
 	var lamps := float(t["lamps"])
 	var lamp_col := Color(LAMP_LIGHT)
-	if _bulb_mat:
-		_bulb_mat.emission_energy_multiplier = lamps * 5.0
-		_lamp_mat.albedo_color = Color(lamp_col, 0.75 * lamps)
+	if _lamp_mat:
+		_lamp_mat.albedo_color = Color(lamp_col, 0.95 * lamps)
 		_pool_mat.albedo_color = Color(lamp_col, 0.5 * lamps)
 		_refl_mat.albedo_color = Color(lamp_col, 0.3 * _wet)
 	for l in _lamps:
@@ -571,8 +546,8 @@ func _apply_theme() -> void:
 		if _wet <= 0.0:
 			(l["refl"] as Node3D).visible = false
 	var neon := float(t["neon"])
-	for m in _neon_mats:
-		(m as StandardMaterial3D).emission_energy_multiplier = 3.2 * neon
+	if _neon_mat:
+		_neon_mat.set_shader_parameter("energy", 3.2 * neon)
 	for n in _neon:
 		n.visible = neon > 0.0
 	if _wet > 0.0:
