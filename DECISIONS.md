@@ -55,4 +55,12 @@ Unity wasn't installed, would need about 15 GB plus a licence sign-in, and is he
 
 **APK builds blocked by GitHub billing** (2026-11-08). Every Actions run on the account fails with "account is locked due to a billing issue", including on public repos. The owner has to clear it on GitHub. Code still pushes to `dev`.
 
+**v0.3 look: textured cartoon on the Mobile renderer** (owner: "textured cartoon", Mixamo + AI art, OK to drop pre-2017 phones). Forward Mobile with automatic GL fallback. Facades, ground and icons are Gemini-painted sheets sliced locally; the shared key gets few requests (owner). Crowds keep VAT but bake smooth normals for two-tone light, rim and ink outline.
+
+**Armour halves, never blocks** (owner: "some enemies never go to 0"). Zero-damage immunity made brutes and the Kingpin unkillable without Inspectors. Inspectors still pierce, so they stay the counter.
+
+**Squad cap** (owner: "keep track of how many max char can be added, add a bar"). 150 from `units.json`, plus 25 per Barracks level; overflow gains are dropped, lowest rank first, and the HUD bar turns gold when full.
+
+**Station without the front desk** (owner: "upgrades do not make sense"). Every room is open; each row shows the real value now ▸ next.
+
 **Local APK builds, minimal toolchain** (owner: "setup locally… only install what's needed", 2026-11-08). Godot's non-Gradle export only needs adb, apksigner and a Java runtime, so `tools/setup_android.py` installs platform-tools, build-tools 36 and a Temurin 17 JRE (not the JDK), and pulls just the Android templates out of Godot's 1 GB pack with HTTP range requests. About 500 MB total; no Android Studio. The build runs at below-normal CPU priority. After a green local build, `main` is fast-forwarded to `dev` by hand (replacing the CI promote job while Actions is locked). The debug APK is about 70 MB because it carries the engine for both 32- and 64-bit phones; Play's per-device split will make a store download much smaller.

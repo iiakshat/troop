@@ -19,6 +19,15 @@ A 2.5D arithmetic army game for Android (portrait, offline). The squad stays put
 
 ## Status
 
+- **2026-11-08, v0.3 (round-3 feedback, on `dev`, APK built locally):**
+  - Fixes: camera stuck in the finale view after level 1; armour now halves damage instead of blocking it (level 5's Kingpin could not die); notch-safe HUD; drag-to-steer; one knife per bottle; single knife whoosh.
+  - Look: Vulkan Mobile renderer with shadows, glow and ACES; Gemini-painted facades and ground; toon-shaded, outlined crowds (sRGB fix); glossy Gemini icons, and road signs use icons, never words.
+  - Feel: no sideways body twist; bodies topple, lie, then dissolve; big crowds shrink a little; squad cap 150 with a HUD bar.
+  - Bottle Shot: refractive glass, layout-fitted telephoto lens, lit plank gallery, shards and splash.
+  - Station: before ▸ after rows, Barracks (squad cap), "!" badges, reachable from the result screen.
+  - Sound: recorded gunshots.
+  - **Waiting on the owner: Mixamo characters and animations** in `art_src/mixamo/{characters,anims}` (list in chat, 2026-11-08). The bake tool needs a Mixamo path (textures, UVs) when they arrive.
+
 - **2026-11-08, v0.2 (in progress, on `dev`):** owner's round-2 feedback is done:
   - Honest row-by-row melee, 45 m lane-first bullet streams.
   - New SWAT, riot, biker, boss, turncoat, SMG, barrels, cars.
@@ -37,6 +46,7 @@ A 2.5D arithmetic army game for Android (portrait, offline). The squad stays put
 
 - Play on PC: double-click `play.bat` (arrows or A/D or swipe to change lane, S = shield, B = bomb). `play.bat -- lobby=1` opens the menu; `-- coins=2000` unlocks everything for testing.
 - Android APK: `build_apk.bat` runs the tests, exports `build/troop-debug.apk` at low CPU priority, and installs it on a USB-connected phone if there is one (`build_apk.bat noinstall` skips that). One-time setup: `python -I tools/setup_android.py` installs only adb, apksigner (build-tools 36), a Java 17 runtime into `../_tools` (~280 MB), the Godot Android templates (only those files, ~220 MB) and a debug keystore, and points Godot's editor settings at them. No Android Studio, NDK or Gradle.
+- Art with Gemini (shared key, keep requests few, many assets per sheet): `python -I tools/gemini_image.py <out.png> <aspect> <prompt.txt>`; sheets live in `art_src/gen/`, then `tools/slice_env.py` / `tools/slice_icons.py`.
 - Re-bake characters after editing `config/characters.json`: `$G --headless --path . --script res://tools/bake_vat.gd [-- only=hero]`; preview: `$G --path . res://tools/preview_chars.tscn -- clip=run`.
 - Godot: `../_tools/godot/Godot_v4.7.2-stable_win64_console.exe` (call it `$G`).
 - Import: `$G --headless --path . --import`
