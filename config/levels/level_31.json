@@ -22,17 +22,20 @@
     {"at": 296, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "pct", "v": 40}, {"lane": 2, "op": "power", "id": "bomb", "n": 1}]},
     {"at": 322, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 55}, {"lane": 2, "op": "mul", "k": 2}]},
     {"at": 322, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 460, "dmg": 20},
-    {"at": 356, "type": "wave", "groups": [{"enemy": "thug", "n": 419}, {"enemy": "grenadier", "n": 40, "gap": 10}]},
+    {"at": 356, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "grenadier", "n": 40, "gap": 10}]},
     {"at": 376, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 375, "dmg": 18, "block_reach": 12},
     {"at": 384, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "sniper", "n": 16}, {"lane": 2, "op": "num", "v": 60}]},
     {"at": 384, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 485, "dmg": 28},
     {"at": 410, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "sniper", "n": 12}]},
     {"at": 410, "type": "obstacle", "kind": "pothole", "lane": 2, "fall": 45},
     {"at": 410, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 655, "dmg": 36},
-    {"at": 444, "type": "wave", "groups": [{"enemy": "thug", "n": 419}, {"enemy": "grenadier", "n": 40, "gap": 10}]},
-    {"at": 472, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 2, "op": "foe_strip"}]},
-    {"at": 472, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 675, "dmg": 36},
-    {"at": 506, "type": "wave", "groups": [{"enemy": "thug", "n": 459}, {"enemy": "brute", "n": 40, "gap": 6}], "label": "BIG GANG"},
-    {"at": 534, "type": "finish"}
+    {"at": 444, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "grenadier", "n": 40, "gap": 10}]},
+    {"at": 472, "type": "gates", "gates": [{"lane": 1, "op": "pct", "v": 30}, {"lane": 2, "op": "foe_div", "k": 2}]},
+    {"at": 472, "type": "obstacle", "kind": "barrel", "lane": 0, "hp": 215, "dmg": 16, "radius": 8, "kill": 225},
+    {"at": 506, "type": "wave", "groups": [{"enemy": "thug", "n": 360}]},
+    {"at": 530, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 375, "dmg": 18, "block_reach": 12},
+    {"at": 538, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "num", "v": -50, "step": 26.7, "max": 55, "inc": 4}, {"lane": 2, "op": "recruit", "unit": "sniper", "n": 14}]},
+    {"at": 572, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "grenadier", "n": 40, "gap": 10}], "label": "AMBUSH"},
+    {"at": 604, "type": "finish"}
   ]
 }

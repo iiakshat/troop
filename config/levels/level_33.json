@@ -25,18 +25,22 @@
     {"at": 283, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "swat", "n": 11}]},
     {"at": 283, "type": "obstacle", "kind": "barrel", "lane": 2, "hp": 145, "dmg": 10, "radius": 8, "kill": 140},
     {"at": 283, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 315, "dmg": 24},
-    {"at": 317, "type": "wave", "groups": [{"enemy": "thug", "n": 600}]},
+    {"at": 317, "type": "wave", "groups": [{"enemy": "thug", "n": 360}]},
     {"at": 336, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 305, "dmg": 12, "block_reach": 12},
     {"at": 344, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 65}, {"lane": 2, "op": "num", "v": 55}]},
     {"at": 344, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 370, "dmg": 24},
-    {"at": 378, "type": "wave", "groups": [{"enemy": "thug", "n": 563}, {"enemy": "gunman", "n": 60, "gap": 10}]},
+    {"at": 378, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "gunman", "n": 60, "gap": 10}]},
     {"at": 401, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 405, "dmg": 18, "block_reach": 12},
     {"at": 409, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -50, "step": 29.9, "max": 50, "inc": 4}, {"lane": 2, "op": "num", "v": 120}]},
     {"at": 409, "type": "obstacle", "kind": "barrel", "lane": 1, "hp": 230, "dmg": 16, "radius": 8, "kill": 225},
-    {"at": 443, "type": "wave", "groups": [{"enemy": "thug", "n": 563}, {"enemy": "gunman", "n": 60, "gap": 10}]},
+    {"at": 443, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "gunman", "n": 60, "gap": 10}]},
     {"at": 475, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "swat", "n": 12}, {"lane": 1, "op": "mul", "k": 2}]},
     {"at": 475, "type": "obstacle", "kind": "pothole", "lane": 2, "fall": 36},
-    {"at": 509, "type": "wave", "groups": [{"enemy": "thug", "n": 600}, {"enemy": "riot", "n": 160, "gap": 6}], "label": "GANG WAR"},
-    {"at": 537, "type": "finish"}
+    {"at": 501, "type": "gates", "gates": [{"lane": 0, "op": "pct", "v": 50}, {"lane": 1, "op": "recruit", "unit": "sniper", "n": 16}]},
+    {"at": 501, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 720, "dmg": 28},
+    {"at": 535, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "gunman", "n": 60, "gap": 10}]},
+    {"at": 568, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 120}, {"lane": 1, "op": "pct", "v": -40, "inc": 10, "step": 108.6, "max": 40}, {"lane": 2, "op": "num", "v": 90}]},
+    {"at": 602, "type": "wave", "groups": [{"enemy": "knifer", "n": 300}, {"enemy": "biker", "n": 90, "gap": 8}, {"enemy": "molotov", "n": 30, "gap": 16}], "label": "BIG GANG"},
+    {"at": 640, "type": "finish"}
   ]
 }

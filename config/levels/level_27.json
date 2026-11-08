@@ -17,19 +17,19 @@
     {"at": 164, "type": "gates", "gates": [{"lane": 0, "op": "pct", "v": -30, "inc": 10, "step": 14.8, "max": 40}, {"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "num", "v": 28}]},
     {"at": 190, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 28}, {"lane": 1, "op": "mul", "k": 2}]},
     {"at": 190, "type": "obstacle", "kind": "pothole", "lane": 2, "fall": 16},
-    {"at": 224, "type": "wave", "groups": [{"enemy": "knifer", "n": 309}, {"enemy": "biker", "n": 90, "gap": 8}, {"enemy": "molotov", "n": 30, "gap": 16}]},
+    {"at": 224, "type": "wave", "groups": [{"enemy": "knifer", "n": 300}, {"enemy": "biker", "n": 90, "gap": 8}, {"enemy": "molotov", "n": 30, "gap": 16}]},
     {"at": 252, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "sniper", "n": 8}, {"lane": 2, "op": "foe_div", "k": 2}]},
     {"at": 252, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 24},
     {"at": 286, "type": "wave", "groups": [{"enemy": "riot", "n": 81}, {"enemy": "brute", "n": 40, "gap": 8}, {"enemy": "gunman", "n": 60, "gap": 16}]},
     {"at": 318, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 60}, {"lane": 1, "op": "pct", "v": -40, "inc": 10, "step": 71.2, "max": 40}]},
     {"at": 318, "type": "obstacle", "kind": "barrel", "lane": 2, "hp": 175, "dmg": 11, "radius": 8, "kill": 170},
-    {"at": 352, "type": "wave", "groups": [{"enemy": "thug", "n": 515}, {"enemy": "knifer", "n": 500, "gap": 8}]},
+    {"at": 352, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "knifer", "n": 300, "gap": 8}]},
     {"at": 383, "type": "gates", "gates": [{"lane": 1, "op": "recruit", "unit": "inspector", "n": 16}, {"lane": 2, "op": "recruit", "unit": "sniper", "n": 11}]},
     {"at": 383, "type": "obstacle", "kind": "car", "lane": 0, "hp": 915, "dmg": 32},
-    {"at": 417, "type": "wave", "groups": [{"enemy": "thug", "n": 515}, {"enemy": "molotov", "n": 30, "gap": 10}]},
+    {"at": 417, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "molotov", "n": 30, "gap": 10}]},
     {"at": 449, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "sniper", "n": 14}, {"lane": 1, "op": "num", "v": -65, "step": 29.1, "max": 85, "inc": 6}, {"lane": 2, "op": "weapon", "id": "pistol"}]},
     {"at": 475, "type": "hint", "id": "grenadier", "icon": "grenadier"},
-    {"at": 483, "type": "wave", "groups": [{"enemy": "thug", "n": 515}, {"enemy": "grenadier", "n": 40, "gap": 10}], "label": "AMBUSH"},
+    {"at": 483, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "grenadier", "n": 40, "gap": 10}], "label": "AMBUSH"},
     {"at": 515, "type": "finish"}
   ]
 }

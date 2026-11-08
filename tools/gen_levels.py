@@ -55,6 +55,8 @@ NAMES = ["Main Street", "Back Alley", "Crossing", "Flyover", "Night Shift", "Hea
 
 # Lucky rows (offers in all three lanes): at most one, only in every third level.
 LUCKY_EVERY = 3
+# Shortest track, in seconds of running (spec: levels last 60-90 s; halts add time).
+MIN_SECS = 62.0
 
 # Target share of random routes that win (tests/tune.gd fits a scale to hit it):
 # about 70% in levels 1-5 falling to 15-25% in 40-50; sawtooth inside each district.
@@ -346,7 +348,7 @@ MIXES = {
 
 MIN_COUNT = {"thug": 6, "knifer": 6, "gunman": 3, "brute": 2, "biker": 3, "riot": 5,
              "molotov": 2, "sniper_foe": 2, "grenadier": 2, "boss": 1}
-MAX_COUNT = {"thug": 600, "knifer": 500, "gunman": 60, "brute": 40, "biker": 90, "riot": 160,
+MAX_COUNT = {"thug": 360, "knifer": 300, "gunman": 60, "brute": 40, "biker": 90, "riot": 160,
              "molotov": 30, "sniper_foe": 24, "grenadier": 40, "boss": 1}
 
 
@@ -664,7 +666,8 @@ def level_1() -> dict:
         {"at": 30, "type": "wave", "groups": [{"enemy": "thug", "n": 8}]},
         {"at": 34, "type": "hint", "id": "swipe", "icon": "swipe"},
         {"at": 58, "type": "gates", "tutorial": "swipe", "gates": [
-            {"lane": 0, "op": "num", "v": 4}, {"lane": 2, "op": "num", "v": 10}]},
+            {"lane": 0, "op": "num", "v": 4}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 3},
+            {"lane": 2, "op": "num", "v": 10}]},
         {"at": 92, "type": "wave", "groups": [{"enemy": "thug", "n": 34}]},
         {"at": 124, "type": "gates", "gates": [
             {"lane": 0, "op": "num", "v": 6}, {"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "num", "v": 8}]},
@@ -776,7 +779,7 @@ def generate(level: int) -> dict:
     sq = Sq()
     events: list[dict] = []
     ctx: dict = {}
-    run_secs = 62 + 8 * (level - 1) / (LEVELS - 1)
+    run_secs = 64 + 14 * (level - 1) / (LEVELS - 1)
     track = run_secs * S0 - (60 if boss else 0)
     pos = 36
     lucky_left = 1 if level % LUCKY_EVERY == 1 else 0
@@ -909,10 +912,21 @@ def generate(level: int) -> dict:
 
 # ------------------------------------------------------------------ output
 
+def stretch(events: list[dict]) -> None:
+    """Spreads a short level out (every `at` x f) so it runs at least MIN_SECS."""
+    finish = max(float(e["at"]) for e in events if e["type"] == "finish")
+    f = MIN_SECS * S0 / finish
+    if f <= 1.0:
+        return
+    for e in events:
+        e["at"] = int(round(float(e["at"]) * f))
+
+
 def build(level: int, seen: set, cal_all: dict) -> dict:
     cal = cal_all.get(str(level), {})
     lv = HAND[level]() if level in HAND else generate(level)
     events = lv["events"]
+    stretch(events)
     apply_scale(events, float(cal.get("k", 1.0)), float(cal.get("kf", 1.0)))
     # One-time icon hints: the first time ever each mechanic shows up. A bomb charge at the
     # start counts as the bomb's debut: point at its button before the first wave.
@@ -937,7 +951,7 @@ def build(level: int, seen: set, cal_all: dict) -> dict:
             have.add(hid)
     events = sorted(events + hints, key=lambda e: (float(e["at"]), e["type"] != "hint"))
     d = district(level)
-    return {
+    out = {
         "_design": lv["_design"],
         "id": level,
         "name": NAMES[(level * 7) % len(NAMES)] if not is_boss(level) else BOSS_BANNERS[d - 1].title(),
@@ -947,8 +961,13 @@ def build(level: int, seen: set, cal_all: dict) -> dict:
         "target_ratio": target_ratio(level),
         "stars": star_thresholds(level, cal),
         "charges": lv["charges"],
-        "events": events,
     }
+    # A lane route tests/tune.gd found to win (route_np: without powers, levels 1-10).
+    for key in ("route", "route_np"):
+        if cal.get(key):
+            out[key] = cal[key]
+    out["events"] = events
+    return out
 
 
 def dump(lv: dict) -> str:
@@ -972,10 +991,17 @@ def merge(paths: list[str]) -> None:
         for r in json.loads(Path(p).read_text(encoding="utf-8")):
             key = str(int(r["level"]))
             old = cal.get(key, {})
-            cal[key] = {"k": round(float(old.get("k", 1.0)) * float(r["k"]), 4),
-                        "kf": round(float(old.get("kf", 1.0)) * float(r.get("kf", 1.0)), 4),
-                        "best_ratio": round(float(r["best_ratio"]), 3),
-                        "win_rate": round(float(r["win_rate"]), 3)}
+            entry = {"k": round(float(old.get("k", 1.0)) * float(r["k"]), 4),
+                     "kf": round(float(old.get("kf", 1.0)) * float(r.get("kf", 1.0)), 4),
+                     "best_ratio": round(float(r["best_ratio"]), 3),
+                     "win_rate": round(float(r["win_rate"]), 3)}
+            # Routes are only valid for the exact level they were found on: keep them from
+            # a plain report (k = kf = 1), drop them when the gangs were rescaled.
+            if abs(float(r["k"]) - 1.0) < 1e-9 and abs(float(r.get("kf", 1.0)) - 1.0) < 1e-9:
+                for rk in ("route", "route_np"):
+                    if r.get(rk):
+                        entry[rk] = [int(x) for x in r[rk]]
+            cal[key] = entry
     ordered = {k: cal[k] for k in sorted(cal, key=int)}
     CAL_PATH.write_text(json.dumps(ordered, indent=1) + "\n", encoding="utf-8", newline="\n")
     print(f"calibration: {len(ordered)} levels")

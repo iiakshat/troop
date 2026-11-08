@@ -29,10 +29,12 @@
     {"at": 355, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 140, "dmg": 6},
     {"at": 355, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 5},
     {"at": 389, "type": "wave", "groups": [{"enemy": "thug", "n": 290}, {"enemy": "brute", "n": 40, "gap": 6}]},
-    {"at": 410, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 150, "dmg": 6, "block_reach": 12},
-    {"at": 418, "type": "gates", "gates": [{"lane": 1, "op": "recruit", "unit": "commando", "n": 3}, {"lane": 2, "op": "num", "v": 50}]},
-    {"at": 418, "type": "obstacle", "kind": "car", "lane": 0, "hp": 300, "dmg": 14},
-    {"at": 452, "type": "wave", "groups": [{"enemy": "thug", "n": 444}, {"enemy": "riot", "n": 160, "gap": 6}], "label": "RUSH"},
-    {"at": 480, "type": "finish"}
+    {"at": 418, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 36}, {"lane": 2, "op": "mul", "k": 2}]},
+    {"at": 418, "type": "obstacle", "kind": "barrel", "lane": 0, "hp": 85, "dmg": 5, "radius": 8, "kill": 75},
+    {"at": 452, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "knifer", "n": 300, "gap": 8}]},
+    {"at": 481, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -50, "step": 22.1, "max": 50, "inc": 4}, {"lane": 2, "op": "mul", "k": 2}]},
+    {"at": 481, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 16},
+    {"at": 515, "type": "wave", "groups": [{"enemy": "knifer", "n": 300}, {"enemy": "sniper_foe", "n": 24, "gap": 14}], "label": "BIG GANG"},
+    {"at": 551, "type": "finish"}
   ]
 }

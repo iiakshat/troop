@@ -20,12 +20,15 @@
     {"at": 197, "type": "wave", "groups": [{"enemy": "thug", "n": 51}, {"enemy": "riot", "n": 40, "gap": 6}]},
     {"at": 230, "type": "gates", "gates": [{"lane": 1, "op": "mul", "k": 3}, {"lane": 2, "op": "weapon", "id": "pistol"}]},
     {"at": 230, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 70, "dmg": 3},
-    {"at": 264, "type": "wave", "groups": [{"enemy": "riot", "n": 30}, {"enemy": "brute", "n": 40, "gap": 8}, {"enemy": "gunman", "n": 60, "gap": 16}]},
-    {"at": 293, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "inspector", "n": 9}, {"lane": 1, "op": "pct", "v": -40, "inc": 10, "step": 36.3, "max": 40}, {"lane": 2, "op": "recruit", "unit": "inspector", "n": 9}]},
-    {"at": 327, "type": "wave", "groups": [{"enemy": "thug", "n": 600}]},
-    {"at": 356, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "inspector", "n": 9}, {"lane": 2, "op": "num", "v": 32}]},
-    {"at": 356, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 12},
-    {"at": 390, "type": "wave", "groups": [{"enemy": "thug", "n": 274}, {"enemy": "gunman", "n": 60, "gap": 10}], "label": "LAST STAND"},
-    {"at": 422, "type": "finish"}
+    {"at": 265, "type": "wave", "groups": [{"enemy": "riot", "n": 30}, {"enemy": "brute", "n": 40, "gap": 8}, {"enemy": "gunman", "n": 60, "gap": 16}]},
+    {"at": 294, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "inspector", "n": 9}, {"lane": 1, "op": "pct", "v": -40, "inc": 10, "step": 36.3, "max": 40}, {"lane": 2, "op": "recruit", "unit": "inspector", "n": 9}]},
+    {"at": 328, "type": "wave", "groups": [{"enemy": "thug", "n": 360}]},
+    {"at": 357, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 2, "op": "num", "v": 50}]},
+    {"at": 357, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 340, "dmg": 11},
+    {"at": 391, "type": "wave", "groups": [{"enemy": "riot", "n": 82}, {"enemy": "brute", "n": 40, "gap": 8}, {"enemy": "gunman", "n": 60, "gap": 16}]},
+    {"at": 424, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "inspector", "n": 14}, {"lane": 2, "op": "recruit", "unit": "inspector", "n": 20}]},
+    {"at": 424, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 735, "dmg": 20},
+    {"at": 458, "type": "wave", "groups": [{"enemy": "riot", "n": 105}, {"enemy": "brute", "n": 40, "gap": 8}, {"enemy": "gunman", "n": 60, "gap": 16}], "label": "AMBUSH"},
+    {"at": 496, "type": "finish"}
   ]
 }

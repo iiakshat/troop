@@ -17,7 +17,7 @@
     {"at": 137, "type": "wave", "groups": [{"enemy": "riot", "n": 6}, {"enemy": "brute", "n": 7, "gap": 8}, {"enemy": "gunman", "n": 9, "gap": 16}]},
     {"at": 165, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 16}, {"lane": 1, "op": "num", "v": -4, "step": 7.7, "max": 4, "inc": 1}, {"lane": 2, "op": "mul", "k": 2}]},
     {"at": 191, "type": "gates", "gates": [{"lane": 0, "op": "pct", "v": -30, "inc": 10, "step": 18.3, "max": 40}, {"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "num", "v": 16}]},
-    {"at": 225, "type": "wave", "groups": [{"enemy": "thug", "n": 600}]},
+    {"at": 225, "type": "wave", "groups": [{"enemy": "thug", "n": 360}]},
     {"at": 258, "type": "gates", "gates": [{"lane": 0, "op": "pct", "v": 30}, {"lane": 1, "op": "turncoat", "n": 22}, {"lane": 2, "op": "pct", "v": -30, "inc": 10, "step": 50.6, "max": 20}]},
     {"at": 292, "type": "wave", "groups": [{"enemy": "thug", "n": 160}, {"enemy": "molotov", "n": 30, "gap": 10}]},
     {"at": 311, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 170, "dmg": 8, "block_reach": 12},

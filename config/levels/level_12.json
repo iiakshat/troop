@@ -23,10 +23,15 @@
     {"at": 253, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "pct", "v": -30, "inc": 10, "step": 14.0, "max": 20}, {"lane": 2, "op": "recruit", "unit": "inspector", "n": 2}]},
     {"at": 287, "type": "wave", "groups": [{"enemy": "knifer", "n": 60}, {"enemy": "biker", "n": 90, "gap": 8}, {"enemy": "molotov", "n": 30, "gap": 16}]},
     {"at": 319, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "inspector", "n": 4}, {"lane": 1, "op": "num", "v": -7, "step": 9.1, "max": 8, "inc": 1}, {"lane": 2, "op": "pct", "v": 60}]},
-    {"at": 353, "type": "wave", "groups": [{"enemy": "thug", "n": 82}, {"enemy": "knifer", "n": 500, "gap": 8}]},
+    {"at": 353, "type": "wave", "groups": [{"enemy": "thug", "n": 82}, {"enemy": "knifer", "n": 300, "gap": 8}]},
     {"at": 373, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 100, "dmg": 3, "block_reach": 12},
-    {"at": 381, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -8, "step": 11.0, "max": 9, "inc": 1}, {"lane": 1, "op": "num", "v": 16}, {"lane": 2, "op": "num", "v": 22}]},
-    {"at": 415, "type": "wave", "groups": [{"enemy": "knifer", "n": 122}, {"enemy": "biker", "n": 90, "gap": 8}, {"enemy": "molotov", "n": 30, "gap": 16}], "label": "RUSH"},
-    {"at": 453, "type": "finish"}
+    {"at": 381, "type": "gates", "gates": [{"lane": 1, "op": "recruit", "unit": "inspector", "n": 4}, {"lane": 2, "op": "turncoat", "n": 7}]},
+    {"at": 381, "type": "obstacle", "kind": "car", "lane": 0, "hp": 210, "dmg": 5},
+    {"at": 414, "type": "hint", "id": "smg", "icon": "smg"},
+    {"at": 415, "type": "wave", "groups": [{"enemy": "riot", "n": 21}, {"enemy": "brute", "n": 40, "gap": 8}, {"enemy": "gunman", "n": 60, "gap": 16}]},
+    {"at": 444, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 18}, {"lane": 2, "op": "weapon", "id": "smg"}]},
+    {"at": 444, "type": "obstacle", "kind": "pothole", "lane": 0, "fall": 5},
+    {"at": 478, "type": "wave", "groups": [{"enemy": "thug", "n": 137}, {"enemy": "brute", "n": 40, "gap": 6}], "label": "RUSH"},
+    {"at": 506, "type": "finish"}
   ]
 }

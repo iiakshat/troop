@@ -492,8 +492,8 @@ func _damage_horde(h: Dictionary, dmg: float, pierce: float) -> void:
 	if k > 0:
 		h["acc"] = float(h["acc"]) - k * hp
 		_kill(h, k)
-	if h["boss"] and dmg > 0.0:
-		_boss_hit(h)
+	if h["boss"] and int(h["count"]) > 0:
+		_boss_hit(h)  # (a kill already reported the death)
 
 
 ## Boss health for the big bar, at most every boss_hit_every seconds (always on death or

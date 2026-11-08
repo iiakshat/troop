@@ -26,14 +26,19 @@
     {"at": 287, "type": "wave", "groups": [{"enemy": "thug", "n": 253}, {"enemy": "grenadier", "n": 40, "gap": 10}]},
     {"at": 318, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 32}, {"lane": 2, "op": "recruit", "unit": "swat", "n": 4}]},
     {"at": 318, "type": "obstacle", "kind": "car", "lane": 1, "hp": 270, "dmg": 9},
-    {"at": 352, "type": "wave", "groups": [{"enemy": "thug", "n": 378}, {"enemy": "grenadier", "n": 40, "gap": 10}]},
+    {"at": 352, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "grenadier", "n": 40, "gap": 10}]},
     {"at": 382, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "swat", "n": 6}, {"lane": 1, "op": "mul", "k": 2}]},
     {"at": 382, "type": "obstacle", "kind": "car", "lane": 2, "hp": 475, "dmg": 16},
     {"at": 408, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "commando", "n": 10}, {"lane": 1, "op": "num", "v": -45, "step": 29.7, "max": 36, "inc": 3}, {"lane": 2, "op": "pct", "v": -40, "inc": 10, "step": 133.7, "max": 20}]},
-    {"at": 442, "type": "wave", "groups": [{"enemy": "thug", "n": 600}, {"enemy": "grenadier", "n": 40, "gap": 10}]},
-    {"at": 474, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 55}, {"lane": 1, "op": "recruit", "unit": "swat", "n": 11}]},
-    {"at": 474, "type": "obstacle", "kind": "car", "lane": 2, "hp": 945, "dmg": 32},
-    {"at": 508, "type": "wave", "groups": [{"enemy": "riot", "n": 160}, {"enemy": "brute", "n": 40, "gap": 8}, {"enemy": "gunman", "n": 60, "gap": 16}], "label": "STREET WAR"},
-    {"at": 546, "type": "finish"}
+    {"at": 442, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "grenadier", "n": 40, "gap": 10}]},
+    {"at": 474, "type": "gates", "gates": [{"lane": 1, "op": "recruit", "unit": "commando", "n": 7}, {"lane": 2, "op": "mul", "k": 2}]},
+    {"at": 474, "type": "obstacle", "kind": "pothole", "lane": 0, "fall": 24},
+    {"at": 508, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "riot", "n": 160, "gap": 6}]},
+    {"at": 532, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 635, "dmg": 18, "block_reach": 12},
+    {"at": 540, "type": "gates", "gates": [{"lane": 2, "op": "num", "v": 125}]},
+    {"at": 540, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 860, "dmg": 30},
+    {"at": 540, "type": "obstacle", "kind": "pothole", "lane": 0, "fall": 32},
+    {"at": 574, "type": "wave", "groups": [{"enemy": "riot", "n": 160}, {"enemy": "brute", "n": 40, "gap": 8}, {"enemy": "gunman", "n": 60, "gap": 16}], "label": "STREET WAR"},
+    {"at": 612, "type": "finish"}
   ]
 }

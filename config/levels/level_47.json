@@ -29,15 +29,19 @@
     {"at": 345, "type": "gates", "gates": [{"lane": 1, "op": "recruit", "unit": "sniper", "n": 7}]},
     {"at": 345, "type": "obstacle", "kind": "pothole", "lane": 0, "fall": 24},
     {"at": 345, "type": "obstacle", "kind": "barrel", "lane": 2, "hp": 140, "dmg": 9, "radius": 8, "kill": 140},
-    {"at": 379, "type": "wave", "groups": [{"enemy": "thug", "n": 515}, {"enemy": "grenadier", "n": 40, "gap": 10}]},
+    {"at": 379, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "grenadier", "n": 40, "gap": 10}]},
     {"at": 410, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 85}]},
     {"at": 410, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 495, "dmg": 16},
     {"at": 410, "type": "obstacle", "kind": "car", "lane": 2, "hp": 640, "dmg": 22},
     {"at": 436, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "commando", "n": 7}, {"lane": 1, "op": "pct", "v": 30}]},
     {"at": 436, "type": "obstacle", "kind": "pothole", "lane": 2, "fall": 32},
-    {"at": 470, "type": "wave", "groups": [{"enemy": "thug", "n": 600}, {"enemy": "grenadier", "n": 40, "gap": 10}]},
+    {"at": 470, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "grenadier", "n": 40, "gap": 10}]},
     {"at": 497, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "pct", "v": -30, "inc": 10, "step": 156.3, "max": 20}, {"lane": 2, "op": "recruit", "unit": "swat", "n": 11}]},
-    {"at": 531, "type": "wave", "groups": [{"enemy": "knifer", "n": 500}, {"enemy": "biker", "n": 90, "gap": 8}, {"enemy": "molotov", "n": 30, "gap": 16}], "label": "BIG GANG"},
-    {"at": 569, "type": "finish"}
+    {"at": 531, "type": "wave", "groups": [{"enemy": "knifer", "n": 300}, {"enemy": "biker", "n": 90, "gap": 8}, {"enemy": "molotov", "n": 30, "gap": 16}]},
+    {"at": 558, "type": "gates", "gates": [{"lane": 2, "op": "recruit", "unit": "commando", "n": 9}]},
+    {"at": 558, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 750, "dmg": 24},
+    {"at": 558, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 30},
+    {"at": 592, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "riot", "n": 160, "gap": 6}], "label": "GANG WAR"},
+    {"at": 620, "type": "finish"}
   ]
 }

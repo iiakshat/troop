@@ -23,13 +23,16 @@
     {"at": 252, "type": "gates", "gates": [{"lane": 2, "op": "num", "v": 16}]},
     {"at": 252, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 210, "dmg": 11},
     {"at": 252, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 285, "dmg": 12},
-    {"at": 286, "type": "wave", "groups": [{"enemy": "thug", "n": 168}, {"enemy": "knifer", "n": 500, "gap": 8}]},
+    {"at": 286, "type": "wave", "groups": [{"enemy": "thug", "n": 168}, {"enemy": "knifer", "n": 300, "gap": 8}]},
     {"at": 311, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 190, "dmg": 10, "block_reach": 12},
     {"at": 319, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 55}, {"lane": 1, "op": "recruit", "unit": "sergeant", "n": 16}]},
     {"at": 319, "type": "obstacle", "kind": "barrel", "lane": 2, "hp": 110, "dmg": 8, "radius": 8, "kill": 125},
     {"at": 353, "type": "wave", "groups": [{"enemy": "biker", "n": 90}]},
-    {"at": 381, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -75, "step": 23.3, "max": 75, "inc": 6}, {"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "recruit", "unit": "sergeant", "n": 32}]},
-    {"at": 415, "type": "wave", "groups": [{"enemy": "thug", "n": 321}, {"enemy": "gunman", "n": 60, "gap": 10}], "label": "STREET WAR"},
-    {"at": 447, "type": "finish"}
+    {"at": 381, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -55, "step": 23.3, "max": 45, "inc": 4}, {"lane": 2, "op": "recruit", "unit": "sergeant", "n": 32}]},
+    {"at": 381, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 445, "dmg": 30},
+    {"at": 415, "type": "wave", "groups": [{"enemy": "thug", "n": 360}]},
+    {"at": 444, "type": "gates", "gates": [{"lane": 0, "op": "pct", "v": -50, "inc": 10, "step": 96.2, "max": 20}, {"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "num", "v": 80}]},
+    {"at": 478, "type": "wave", "groups": [{"enemy": "thug", "n": 343}, {"enemy": "gunman", "n": 60, "gap": 10}], "label": "AMBUSH"},
+    {"at": 510, "type": "finish"}
   ]
 }

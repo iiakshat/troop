@@ -101,6 +101,8 @@ func evaluate(n: int, base: Dictionary, k: float, kf := 1.0, samples := -1) -> D
 		"best_win": br["state"] == "strike", "best_route": best["route"], "best_troops": br["troops"],
 		"best_peak": br["peak"], "best_ratio": _ratio(br),
 		"best_stars": br["stars"], "best_time": br["time"], "np_win": np["result"]["state"] == "strike" or n > 10,
+		"route": best["route"] if br["state"] == "strike" else [],
+		"route_np": np["route"] if n <= 10 and np["result"]["state"] == "strike" else [],
 		"k": k, "kf": kf}
 
 

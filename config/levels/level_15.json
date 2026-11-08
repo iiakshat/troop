@@ -19,7 +19,7 @@
     {"at": 193, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 6}]},
     {"at": 193, "type": "obstacle", "kind": "car", "lane": 2, "hp": 75, "dmg": 4},
     {"at": 193, "type": "obstacle", "kind": "pothole", "lane": 0, "fall": 2},
-    {"at": 227, "type": "wave", "groups": [{"enemy": "thug", "n": 92}, {"enemy": "knifer", "n": 467, "gap": 8}]},
+    {"at": 227, "type": "wave", "groups": [{"enemy": "thug", "n": 92}, {"enemy": "knifer", "n": 300, "gap": 8}]},
     {"at": 255, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 12}, {"lane": 1, "op": "num", "v": 16}]},
     {"at": 255, "type": "obstacle", "kind": "pothole", "lane": 2, "fall": 3},
     {"at": 289, "type": "wave", "groups": [{"enemy": "thug", "n": 128}, {"enemy": "molotov", "n": 30, "gap": 10}]},
@@ -32,7 +32,7 @@
     {"at": 383, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 16},
     {"at": 417, "type": "wave", "groups": [{"enemy": "thug", "n": 317}, {"enemy": "molotov", "n": 30, "gap": 10}]},
     {"at": 449, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "num", "v": -50, "step": 20.6, "max": 60, "inc": 5}, {"lane": 2, "op": "num", "v": 40}]},
-    {"at": 483, "type": "wave", "groups": [{"enemy": "thug", "n": 556}, {"enemy": "gunman", "n": 60, "gap": 10}], "label": "STREET WAR"},
+    {"at": 483, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "gunman", "n": 60, "gap": 10}], "label": "STREET WAR"},
     {"at": 515, "type": "finish"}
   ]
 }

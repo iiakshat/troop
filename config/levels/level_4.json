@@ -24,13 +24,18 @@
     {"at": 215, "type": "obstacle", "kind": "pothole", "lane": 2, "fall": 6},
     {"at": 249, "type": "wave", "groups": [{"enemy": "thug", "n": 100}, {"enemy": "gunman", "n": 60, "gap": 10}]},
     {"at": 277, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "recruit", "unit": "sergeant", "n": 10}, {"lane": 2, "op": "num", "v": 32}]},
-    {"at": 311, "type": "wave", "groups": [{"enemy": "thug", "n": 199}, {"enemy": "knifer", "n": 500, "gap": 8}]},
+    {"at": 311, "type": "wave", "groups": [{"enemy": "thug", "n": 199}, {"enemy": "knifer", "n": 300, "gap": 8}]},
     {"at": 344, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 65}, {"lane": 1, "op": "power", "id": "shield", "n": 1}]},
     {"at": 344, "type": "obstacle", "kind": "barrel", "lane": 2, "hp": 150, "dmg": 8, "radius": 8, "kill": 115},
     {"at": 378, "type": "wave", "groups": [{"enemy": "thug", "n": 310}, {"enemy": "gunman", "n": 60, "gap": 10}]},
-    {"at": 407, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "sergeant", "n": 20}, {"lane": 1, "op": "recruit", "unit": "sergeant", "n": 30}]},
-    {"at": 407, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 660, "dmg": 36},
-    {"at": 441, "type": "wave", "groups": [{"enemy": "thug", "n": 340}, {"enemy": "gunman", "n": 60, "gap": 10}], "label": "AMBUSH"},
-    {"at": 473, "type": "finish"}
+    {"at": 407, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "num", "v": -70, "step": 30.3, "max": 85, "inc": 6}, {"lane": 2, "op": "num", "v": 60}]},
+    {"at": 433, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 60}, {"lane": 1, "op": "mul", "k": 2}]},
+    {"at": 433, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 630, "dmg": 32},
+    {"at": 467, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "gunman", "n": 60, "gap": 10}]},
+    {"at": 491, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 670, "dmg": 18, "block_reach": 12},
+    {"at": 499, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 125}, {"lane": 2, "op": "num", "v": 100}]},
+    {"at": 499, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 785, "dmg": 28},
+    {"at": 533, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "gunman", "n": 60, "gap": 10}], "label": "BIG GANG"},
+    {"at": 565, "type": "finish"}
   ]
 }

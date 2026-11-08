@@ -19,17 +19,21 @@
     {"at": 165, "type": "obstacle", "kind": "barrel", "lane": 2, "hp": 14, "dmg": 2, "radius": 8, "kill": 20},
     {"at": 199, "type": "wave", "groups": [{"enemy": "knifer", "n": 214}, {"enemy": "sniper_foe", "n": 24, "gap": 14}]},
     {"at": 229, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "sniper", "n": 3}, {"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "num", "v": 16}]},
-    {"at": 263, "type": "wave", "groups": [{"enemy": "thug", "n": 425}, {"enemy": "riot", "n": 160, "gap": 6}]},
+    {"at": 263, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "riot", "n": 160, "gap": 6}]},
     {"at": 294, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "commando", "n": 4}, {"lane": 1, "op": "recruit", "unit": "sniper", "n": 6}]},
     {"at": 294, "type": "obstacle", "kind": "pothole", "lane": 2, "fall": 9},
     {"at": 320, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "num", "v": -24, "step": 8.0, "max": 32, "inc": 2}]},
     {"at": 320, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 195, "dmg": 12},
-    {"at": 354, "type": "wave", "groups": [{"enemy": "thug", "n": 600}, {"enemy": "gunman", "n": 60, "gap": 10}]},
+    {"at": 354, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "gunman", "n": 60, "gap": 10}]},
     {"at": 387, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "commando", "n": 7}, {"lane": 1, "op": "recruit", "unit": "commando", "n": 7}]},
     {"at": 387, "type": "obstacle", "kind": "pothole", "lane": 2, "fall": 28},
     {"at": 421, "type": "wave", "groups": [{"enemy": "riot", "n": 160}, {"enemy": "brute", "n": 40, "gap": 8}, {"enemy": "gunman", "n": 60, "gap": 16}]},
-    {"at": 453, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "inspector", "n": 12}, {"lane": 1, "op": "power", "id": "bomb", "n": 1}, {"lane": 2, "op": "pct", "v": -30, "inc": 10, "step": 80.2, "max": 30}]},
-    {"at": 489, "type": "wave", "label": "IRON BARON", "groups": [{"enemy": "thug", "n": 600}, {"enemy": "brute", "n": 40, "gap": 6}, {"enemy": "boss", "n": 1, "gap": 22, "hp": 3155, "shot_dmg": 10}]},
-    {"at": 537, "type": "finish"}
+    {"at": 453, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "sniper", "n": 9}]},
+    {"at": 453, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 390, "dmg": 24},
+    {"at": 453, "type": "obstacle", "kind": "barrel", "lane": 2, "hp": 150, "dmg": 11, "radius": 8, "kill": 160},
+    {"at": 487, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "grenadier", "n": 40, "gap": 10}]},
+    {"at": 518, "type": "gates", "gates": [{"lane": 0, "op": "power", "id": "bomb", "n": 1}, {"lane": 1, "op": "recruit", "unit": "sergeant", "n": 20}, {"lane": 2, "op": "num", "v": -60, "step": 27.4, "max": 55, "inc": 5}]},
+    {"at": 554, "type": "wave", "label": "IRON BARON", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "boss", "n": 1, "gap": 22, "hp": 3825, "shot_dmg": 10}]},
+    {"at": 602, "type": "finish"}
   ]
 }

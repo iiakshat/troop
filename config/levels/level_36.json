@@ -28,10 +28,11 @@
     {"at": 379, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 20}, {"lane": 2, "op": "num", "v": -10, "step": 11.1, "max": 12, "inc": 1}]},
     {"at": 379, "type": "obstacle", "kind": "car", "lane": 0, "hp": 265, "dmg": 5},
     {"at": 413, "type": "wave", "groups": [{"enemy": "thug", "n": 331}, {"enemy": "brute", "n": 40, "gap": 6}]},
-    {"at": 433, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 175, "dmg": 5, "block_reach": 12},
-    {"at": 441, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 2, "op": "recruit", "unit": "swat", "n": 5}]},
-    {"at": 441, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 6},
-    {"at": 475, "type": "wave", "groups": [{"enemy": "riot", "n": 132}, {"enemy": "brute", "n": 40, "gap": 8}, {"enemy": "gunman", "n": 60, "gap": 16}], "label": "BIG GANG"},
-    {"at": 513, "type": "finish"}
+    {"at": 441, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "num", "v": -12, "step": 12.6, "max": 14, "inc": 1}, {"lane": 2, "op": "recruit", "unit": "sniper", "n": 4}]},
+    {"at": 475, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "riot", "n": 160, "gap": 6}]},
+    {"at": 504, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 2, "op": "pct", "v": 60}]},
+    {"at": 504, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 22},
+    {"at": 538, "type": "wave", "groups": [{"enemy": "knifer", "n": 300}, {"enemy": "biker", "n": 90, "gap": 8}, {"enemy": "molotov", "n": 30, "gap": 16}], "label": "LAST STAND"},
+    {"at": 576, "type": "finish"}
   ]
 }

@@ -25,9 +25,14 @@
     {"at": 318, "type": "gates", "gates": [{"lane": 1, "op": "recruit", "unit": "inspector", "n": 14}, {"lane": 2, "op": "mul", "k": 2}]},
     {"at": 318, "type": "obstacle", "kind": "barrel", "lane": 0, "hp": 195, "dmg": 16, "radius": 8, "kill": 225},
     {"at": 352, "type": "wave", "groups": [{"enemy": "riot", "n": 68}, {"enemy": "brute", "n": 40, "gap": 8}, {"enemy": "gunman", "n": 60, "gap": 16}]},
-    {"at": 383, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 125}, {"lane": 2, "op": "num", "v": -80, "step": 28.5, "max": 80, "inc": 7}]},
-    {"at": 383, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 565, "dmg": 32},
-    {"at": 417, "type": "wave", "groups": [{"enemy": "thug", "n": 342}, {"enemy": "brute", "n": 40, "gap": 6}], "label": "STREET WAR"},
-    {"at": 445, "type": "finish"}
+    {"at": 383, "type": "gates", "gates": [{"lane": 1, "op": "recruit", "unit": "inspector", "n": 20}, {"lane": 2, "op": "mul", "k": 2}]},
+    {"at": 383, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 400, "dmg": 32},
+    {"at": 409, "type": "gates", "gates": [{"lane": 1, "op": "recruit", "unit": "inspector", "n": 22}, {"lane": 2, "op": "num", "v": 85}]},
+    {"at": 409, "type": "obstacle", "kind": "pothole", "lane": 0, "fall": 32},
+    {"at": 443, "type": "wave", "groups": [{"enemy": "riot", "n": 68}, {"enemy": "brute", "n": 40, "gap": 8}, {"enemy": "gunman", "n": 60, "gap": 16}]},
+    {"at": 470, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "num", "v": 60}]},
+    {"at": 470, "type": "obstacle", "kind": "pothole", "lane": 2, "fall": 38},
+    {"at": 504, "type": "wave", "groups": [{"enemy": "thug", "n": 342}, {"enemy": "brute", "n": 40, "gap": 6}], "label": "STREET WAR"},
+    {"at": 532, "type": "finish"}
   ]
 }

@@ -29,9 +29,12 @@
     {"at": 380, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 18}, {"lane": 2, "op": "num", "v": -10, "step": 9.1, "max": 12, "inc": 1}]},
     {"at": 380, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 170, "dmg": 4},
     {"at": 414, "type": "wave", "groups": [{"enemy": "thug", "n": 323}, {"enemy": "riot", "n": 160, "gap": 6}]},
-    {"at": 442, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 40}, {"lane": 2, "op": "pct", "v": -40, "inc": 10, "step": 46.0, "max": 20}]},
-    {"at": 442, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 9},
-    {"at": 476, "type": "wave", "groups": [{"enemy": "thug", "n": 485}, {"enemy": "grenadier", "n": 40, "gap": 10}], "label": "STREET WAR"},
-    {"at": 508, "type": "finish"}
+    {"at": 442, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 2, "op": "num", "v": 28}]},
+    {"at": 442, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 8},
+    {"at": 476, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "grenadier", "n": 40, "gap": 10}]},
+    {"at": 506, "type": "gates", "gates": [{"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "num", "v": 60}]},
+    {"at": 506, "type": "obstacle", "kind": "pothole", "lane": 0, "fall": 12},
+    {"at": 540, "type": "wave", "groups": [{"enemy": "riot", "n": 160}, {"enemy": "brute", "n": 40, "gap": 8}, {"enemy": "gunman", "n": 60, "gap": 16}], "label": "STREET WAR"},
+    {"at": 578, "type": "finish"}
   ]
 }

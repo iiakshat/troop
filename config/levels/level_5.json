@@ -24,11 +24,15 @@
     {"at": 286, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "sergeant", "n": 14}, {"lane": 1, "op": "num", "v": -36, "step": 13.5, "max": 40, "inc": 3}, {"lane": 2, "op": "recruit", "unit": "sergeant", "n": 14}]},
     {"at": 320, "type": "wave", "groups": [{"enemy": "thug", "n": 201}, {"enemy": "brute", "n": 40, "gap": 6}]},
     {"at": 348, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "recruit", "unit": "sergeant", "n": 16}, {"lane": 2, "op": "num", "v": -36, "step": 18.9, "max": 36, "inc": 3}]},
-    {"at": 382, "type": "wave", "groups": [{"enemy": "thug", "n": 374}, {"enemy": "brute", "n": 40, "gap": 6}]},
-    {"at": 401, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 455, "dmg": 18, "block_reach": 12},
-    {"at": 409, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 2, "op": "recruit", "unit": "sergeant", "n": 28}]},
-    {"at": 409, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 625, "dmg": 32},
-    {"at": 443, "type": "wave", "groups": [{"enemy": "thug", "n": 470}, {"enemy": "gunman", "n": 60, "gap": 10}], "label": "GANG WAR"},
-    {"at": 475, "type": "finish"}
+    {"at": 379, "type": "hint", "id": "no_armour", "icon": "armour_break"},
+    {"at": 382, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "brute", "n": 40, "gap": 6}]},
+    {"at": 409, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 75}, {"lane": 2, "op": "foe_strip"}]},
+    {"at": 409, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 40},
+    {"at": 443, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "brute", "n": 40, "gap": 6}]},
+    {"at": 467, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 455, "dmg": 18, "block_reach": 12},
+    {"at": 475, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "sergeant", "n": 32}, {"lane": 1, "op": "num", "v": -75, "step": 35.2, "max": 95, "inc": 7}]},
+    {"at": 475, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 770, "dmg": 24},
+    {"at": 509, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "brute", "n": 40, "gap": 6}], "label": "BIG GANG"},
+    {"at": 537, "type": "finish"}
   ]
 }

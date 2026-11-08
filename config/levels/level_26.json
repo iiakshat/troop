@@ -22,18 +22,17 @@
     {"at": 223, "type": "wave", "groups": [{"enemy": "thug", "n": 98}, {"enemy": "brute", "n": 21, "gap": 6}]},
     {"at": 250, "type": "gates", "gates": [{"lane": 0, "op": "pct", "v": 50}, {"lane": 1, "op": "mul", "k": 3}]},
     {"at": 250, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 85, "dmg": 3},
-    {"at": 284, "type": "wave", "groups": [{"enemy": "thug", "n": 600}]},
+    {"at": 284, "type": "wave", "groups": [{"enemy": "thug", "n": 360}]},
     {"at": 315, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 22}, {"lane": 1, "op": "recruit", "unit": "swat", "n": 3}]},
     {"at": 315, "type": "obstacle", "kind": "pothole", "lane": 2, "fall": 7},
-    {"at": 349, "type": "wave", "groups": [{"enemy": "knifer", "n": 350}, {"enemy": "sniper_foe", "n": 24, "gap": 14}]},
+    {"at": 349, "type": "wave", "groups": [{"enemy": "knifer", "n": 300}, {"enemy": "sniper_foe", "n": 24, "gap": 14}]},
     {"at": 376, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 40}, {"lane": 2, "op": "recruit", "unit": "inspector", "n": 9}]},
     {"at": 376, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 355, "dmg": 12},
     {"at": 402, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "inspector", "n": 14}, {"lane": 1, "op": "pct", "v": -40, "inc": 10, "step": 79.5, "max": 40}, {"lane": 2, "op": "num", "v": 40}]},
-    {"at": 434, "type": "hint", "id": "no_armour", "icon": "armour_break"},
-    {"at": 436, "type": "wave", "groups": [{"enemy": "thug", "n": 580}, {"enemy": "brute", "n": 40, "gap": 6}]},
+    {"at": 436, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "brute", "n": 40, "gap": 6}]},
     {"at": 464, "type": "gates", "gates": [{"lane": 1, "op": "recruit", "unit": "swat", "n": 11}, {"lane": 2, "op": "foe_strip"}]},
     {"at": 464, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 745, "dmg": 28},
-    {"at": 498, "type": "wave", "groups": [{"enemy": "thug", "n": 600}, {"enemy": "brute", "n": 40, "gap": 6}], "label": "LAST STAND"},
+    {"at": 498, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "brute", "n": 40, "gap": 6}], "label": "LAST STAND"},
     {"at": 526, "type": "finish"}
   ]
 }

@@ -22,17 +22,17 @@
     {"at": 252, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -24, "step": 7.3, "max": 32, "inc": 2}, {"lane": 1, "op": "num", "v": 26}, {"lane": 2, "op": "recruit", "unit": "swat", "n": 5}]},
     {"at": 278, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "turncoat", "n": 40}]},
     {"at": 278, "type": "obstacle", "kind": "barrel", "lane": 2, "hp": 95, "dmg": 7, "radius": 8, "kill": 110},
-    {"at": 312, "type": "wave", "groups": [{"enemy": "thug", "n": 419}, {"enemy": "molotov", "n": 30, "gap": 10}]},
+    {"at": 312, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "molotov", "n": 30, "gap": 10}]},
     {"at": 340, "type": "gates", "gates": [{"lane": 0, "op": "pct", "v": 30}, {"lane": 2, "op": "recruit", "unit": "inspector", "n": 18}]},
     {"at": 340, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 535, "dmg": 24},
-    {"at": 374, "type": "wave", "groups": [{"enemy": "knifer", "n": 436}, {"enemy": "sniper_foe", "n": 24, "gap": 14}]},
+    {"at": 374, "type": "wave", "groups": [{"enemy": "knifer", "n": 300}, {"enemy": "sniper_foe", "n": 24, "gap": 14}]},
     {"at": 401, "type": "gates", "gates": [{"lane": 2, "op": "num", "v": 95}]},
     {"at": 401, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 26},
     {"at": 401, "type": "obstacle", "kind": "pothole", "lane": 0, "fall": 28},
-    {"at": 435, "type": "wave", "groups": [{"enemy": "thug", "n": 436}, {"enemy": "riot", "n": 160, "gap": 6}]},
+    {"at": 435, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "riot", "n": 160, "gap": 6}]},
     {"at": 465, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 80}, {"lane": 1, "op": "num", "v": 70}]},
     {"at": 465, "type": "obstacle", "kind": "car", "lane": 2, "hp": 840, "dmg": 34},
-    {"at": 499, "type": "wave", "groups": [{"enemy": "thug", "n": 436}, {"enemy": "riot", "n": 160, "gap": 6}], "label": "GANG WAR"},
+    {"at": 499, "type": "wave", "groups": [{"enemy": "thug", "n": 360}, {"enemy": "riot", "n": 160, "gap": 6}], "label": "GANG WAR"},
     {"at": 527, "type": "finish"}
   ]
 }
