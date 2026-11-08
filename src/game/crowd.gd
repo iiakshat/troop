@@ -38,6 +38,21 @@ func setup(kind: String, capacity: int) -> Crowd:
 	return self
 
 
+## Swaps vertex colours (outfit cosmetics): {from Color: to Color}, matched loosely.
+func recolor(map: Dictionary) -> void:
+	var arrays := (multimesh.mesh as ArrayMesh).surface_get_arrays(0)
+	var cols: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+	for i in cols.size():
+		for from in map:
+			var f: Color = from
+			if absf(cols[i].r - f.r) + absf(cols[i].g - f.g) + absf(cols[i].b - f.b) < 0.03:
+				cols[i] = map[from]
+	arrays[Mesh.ARRAY_COLOR] = cols
+	var am := ArrayMesh.new()
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	multimesh.mesh = am
+
+
 func begin() -> void:
 	_n = 0
 

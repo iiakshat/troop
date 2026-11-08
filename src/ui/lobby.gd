@@ -1,14 +1,15 @@
 class_name Lobby
 extends Control
-## Title screen over the jogging squad: coins, level picker, upgrades, PLAY.
+## Title screen over the jogging squad: coins, settings, level picker, Station / Style and
+## a big Play button. Icons over words.
 
 signal play(level: int)
 
-var _coins: Label
+var _coins: HBoxContainer
 var _level := 1
 var _level_buttons: Array[Button] = []
 var _play: Button
-var _upgrade_rows: Dictionary = {}
+var _overlay: Control = null
 
 
 func _ready() -> void:
@@ -23,88 +24,70 @@ func _ready() -> void:
 	top.offset_top = 28
 	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(top)
+	var gear := UiKit.icon_button("settings", "yellow", 96)
+	gear.pressed.connect(func(): _open(SettingsPanel.new()))
+	top.add_child(gear)
 	var gap := Control.new()
 	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top.add_child(gap)
-	var coin_box := PanelContainer.new()
-	coin_box.add_theme_stylebox_override("panel", UiKit.box(Color(0, 0, 0, 0.5), 30))
-	coin_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top.add_child(coin_box)
-	_coins = UiKit.label("0", 42, UiKit.GOLD)
-	coin_box.add_child(_coins)
+	_coins = UiKit.pill("coin", "0", UiKit.YELLOW)
+	_coins.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	top.add_child(_coins)
 
-	var title := UiKit.label("TROOP", 150, Color.WHITE, 26)
+	var title := UiKit.label("TROOP", 170, UiKit.YELLOW, 30)
 	title.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	title.offset_top = 120
-	title.offset_bottom = 290
+	title.offset_top = 140
+	title.offset_bottom = 330
+	title.rotation_degrees = -4.0
 	add_child(title)
-	var tag := UiKit.label("OUTSMART THE GANG", 40, UiKit.GOLD, 10)
-	tag.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	tag.offset_top = 280
-	tag.offset_bottom = 330
-	add_child(tag)
 
 	var col := VBoxContainer.new()
 	col.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-	col.offset_left = 30
-	col.offset_right = -30
-	col.offset_top = -560
+	col.offset_left = 34
+	col.offset_right = -34
+	col.offset_top = -470
 	col.offset_bottom = -40
 	col.alignment = BoxContainer.ALIGNMENT_END
-	col.add_theme_constant_override("separation", 16)
+	col.add_theme_constant_override("separation", 22)
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(col)
 
-	var up_row := HBoxContainer.new()
-	up_row.add_theme_constant_override("separation", 12)
-	col.add_child(up_row)
-	for id in ["knife", "speed", "squad"]:
-		up_row.add_child(_upgrade_card(id))
-
 	var levels := HBoxContainer.new()
 	levels.alignment = BoxContainer.ALIGNMENT_CENTER
-	levels.add_theme_constant_override("separation", 16)
+	levels.add_theme_constant_override("separation", 14)
+	levels.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(levels)
 	for n in range(1, Config.LEVEL_COUNT + 1):
-		var b := UiKit.button(str(n), UiKit.BLUE, 44, Vector2(100, 90))
+		var b := UiKit.button(str(n), "blue", 48, Vector2(110, 110), "round")
 		b.pressed.connect(_pick_level.bind(n))
 		levels.add_child(b)
 		_level_buttons.append(b)
 
-	_play = UiKit.button("PLAY", UiKit.GREEN, 72, Vector2(0, 150))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 18)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(row)
+	var station := UiKit.icon_button("badge", "blue", 150)
+	station.pressed.connect(func(): _open(StationPanel.new()))
+	row.add_child(station)
+	_play = UiKit.icon_button("play", "green", 150)
+	_play.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_play.pressed.connect(func(): play.emit(_level))
-	col.add_child(_play)
+	row.add_child(_play)
+	var style := UiKit.icon_button("shirt", "blue", 150)
+	style.pressed.connect(func(): _open(StylePanel.new()))
+	row.add_child(style)
+	Game.coins_changed.connect(func(_c): refresh())
 	refresh()
 
 
-func _upgrade_card(id: String) -> Control:
-	var up: Dictionary = Game.economy["upgrades"][id]
-	var card := UiKit.panel(Color(0.08, 0.09, 0.13, 0.85))
-	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var sb: StyleBoxFlat = card.get_theme_stylebox("panel")
-	sb.content_margin_left = 10
-	sb.content_margin_right = 10
-	sb.content_margin_top = 12
-	sb.content_margin_bottom = 12
-	var info := VBoxContainer.new()
-	info.add_theme_constant_override("separation", 4)
-	card.add_child(info)
-	var name := UiKit.label(String(up["name"]).to_upper().replace(" ", "
-"), 30)
-	info.add_child(name)
-	var desc := UiKit.label("", 24, Color("b8c2d6"), 6)
-	info.add_child(desc)
-	var buy := UiKit.button("", UiKit.GOLD, 32, Vector2(0, 76))
-	info.add_child(buy)
-	buy.pressed.connect(func():
-		if Game.buy_upgrade(id):
-			Sfx.play("coin")
-			Sfx.play("recruit")
-			UiKit.pop(buy, 0.8)
-			refresh())
-	_upgrade_rows[id] = {"desc": desc, "buy": buy}
-	return card
+func _open(p: Control) -> void:
+	if is_instance_valid(_overlay):
+		_overlay.queue_free()
+	_overlay = p
+	p.tree_exited.connect(refresh)
+	add_child(p)
 
 
 func _pick_level(n: int) -> void:
@@ -114,25 +97,26 @@ func _pick_level(n: int) -> void:
 
 
 func refresh() -> void:
-	_coins.text = "%d COINS" % int(Game.save["coins"])
+	if not is_inside_tree():
+		return
+	UiKit.pill_set(_coins, str(int(Game.save["coins"])))
 	for i in _level_buttons.size():
 		var n := i + 1
 		var b := _level_buttons[i]
-		b.disabled = n > int(Game.save["unlocked"])
-		b.text = str(n) if not b.disabled else "-"
-		var col := UiKit.GREEN if n == _level else UiKit.BLUE
-		b.add_theme_stylebox_override("normal", UiKit.box(col, 26, 4))
-	_play.text = "PLAY  ·  LEVEL %d" % _level
-	for id in _upgrade_rows:
-		var up: Dictionary = Game.economy["upgrades"][id]
-		var lv := int(Game.upgrades().get(id, 0))
-		var r: Dictionary = _upgrade_rows[id]
-		(r["desc"] as Label).text = "LV %d/%d" % [lv, int(up["max"])]
-		var cost := Game.upgrade_cost(id)
-		var buy: Button = r["buy"]
-		if cost < 0:
-			buy.text = "MAX"
-			buy.disabled = true
-		else:
-			buy.text = "%d" % cost
-			buy.disabled = int(Game.save["coins"]) < cost
+		var locked := n > int(Game.save["unlocked"])
+		b.disabled = locked
+		b.text = "" if locked else str(n)
+		if locked and not b.has_meta("lock"):
+			var l := UiKit.icon("lock", 54)
+			l.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+			l.offset_left = -27
+			l.offset_right = 27
+			l.offset_top = -34
+			l.offset_bottom = 20
+			b.add_child(l)
+			b.set_meta("lock", l)
+		if b.has_meta("lock"):
+			(b.get_meta("lock") as Control).visible = locked
+		var colr := "yellow" if n == _level else "blue"
+		b.add_theme_stylebox_override("normal", UiKit._tex_box(colr, "round"))
+		b.add_theme_stylebox_override("hover", UiKit._tex_box(colr, "round"))

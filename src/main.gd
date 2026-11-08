@@ -1,8 +1,9 @@
 extends Node
-## App flow: lobby (squad jogging behind the menu) -> level -> strike -> result -> ...
+## App flow: lobby (squad jogging behind the menu) -> level -> Bottle Shot -> result -> ...
 ##
 ## Debug args (after `--`, key=value): level=N  frames=N  screenshot=path  autoplay=1
-##   lanes=2,1,1  (autoplay lane choice per gate row)  reset=1 (fresh save)
+##   lanes=2,1,1 (autoplay lane per gate row)  strike=1 (autoplay the bottle throws)
+##   reset=1 (fresh save)  coins=N  lobby=1  panel=station|style|settings  report=1
 
 var world: World
 var fx: Fx
@@ -24,8 +25,10 @@ func _ready() -> void:
 		var kv := a.trim_prefix("--").split("=", true, 1)
 		_args[kv[0]] = kv[1] if kv.size() > 1 else "1"
 	if _args.has("reset"):
-		Game.save["coins"] = 0
-		Game.save["unlocked"] = 3
+		Game.reset_progress()
+	if _args.has("coins"):
+		Game.save["coins"] = int(_args["coins"])
+		Game.save["unlocked"] = Config.LEVEL_COUNT
 	world = World.new()
 	add_child(world)
 	fx = Fx.new()
@@ -55,6 +58,14 @@ func _show_lobby() -> void:
 	lobby.play.connect(_start_level)
 	ui.add_child(lobby)
 	ui.move_child(lobby, 0)
+	Sfx.play_music(false)
+	match String(_args.get("panel", "")):
+		"station":
+			lobby._open(StationPanel.new())
+		"style":
+			lobby._open(StylePanel.new())
+		"settings":
+			lobby._open(SettingsPanel.new())
 
 
 func _start_level(n: int) -> void:
@@ -74,12 +85,12 @@ func _start_level(n: int) -> void:
 	view.squad_changed.connect(hud.set_troops)
 	hud.set_troops(view.sim.squad.total())
 	view.tutorial.connect(hud.set_tutorial)
-	view.strike_ready.connect(hud.start_strike)
+	view.strike_ready.connect(hud.enter_finale)
 	view.finished.connect(_on_finished)
 	hud.power_pressed.connect(func(id): view.use_power(id))
-	hud.strike_stopped.connect(view.do_strike)
 	hud.pause_pressed.connect(_toggle_pause)
 	hud.set_charges(view.sim.charges)
+	Sfx.play_music(true)
 	if _args.has("autoplay"):
 		var lanes: Array = []
 		for s in String(_args.get("lanes", "2,1,1,0,0")).split(","):
@@ -106,10 +117,9 @@ func _on_finished(r: Dictionary) -> void:
 	if _args.has("report"):
 		print("RESULT ", r, " troops_now=", view.sim.squad.total())
 	if r["won"]:
-		var coins := LevelSim.strike_coins(Game.economy, int(r["troops"]), int(r["mult"]))
-		Game.add_coins(coins)
+		Game.add_coins(int(r["coins"]))
 		Game.complete_level(current_level)
-		result.show_win(current_level, int(r["troops"]), int(r["mult"]), coins, current_level < Config.LEVEL_COUNT)
+		result.show_win(current_level, r, current_level < Config.LEVEL_COUNT)
 	else:
 		result.show_loss(current_level, String(r["cause"]))
 	if hud:
@@ -139,13 +149,20 @@ func _toggle_pause() -> void:
 	col.offset_bottom = 200
 	col.add_theme_constant_override("separation", 20)
 	pause_panel.add_child(col)
-	col.add_child(UiKit.label("PAUSED", 80))
-	var resume := UiKit.button("RESUME", UiKit.GREEN, 50, Vector2(0, 110))
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	var resume := UiKit.icon_button("play", "green", 200)
 	resume.pressed.connect(_toggle_pause)
 	col.add_child(resume)
-	var quit := UiKit.button("LOBBY", UiKit.BLUE, 40, Vector2(0, 96))
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 20)
+	col.add_child(row)
+	var restart := UiKit.icon_button("retry", "yellow", 130)
+	restart.pressed.connect(func(): _start_level(current_level))
+	row.add_child(restart)
+	var quit := UiKit.icon_button("home", "blue", 130)
 	quit.pressed.connect(_show_lobby)
-	col.add_child(quit)
+	row.add_child(quit)
 	ui.add_child(pause_panel)
 
 
@@ -165,8 +182,13 @@ func _process(_delta: float) -> void:
 	if _pilot and view and view.sim.state == "run":
 		_pilot.drive(view.sim)
 	_frame += 1
-	if _args.has("strike") and view and view._state == "strike" and _frame % 30 == 0:
-		hud._on_strike_input(_fake_tap())
+	if _args.has("strike") and view and view.finale and view.finale._state == "aim" and _frame % 40 == 0:
+		# Autoplay the finale: aim where the next unbroken bottle will be when the knife lands.
+		var lg: BottleLogic = view.finale.logic
+		for i in lg.count():
+			if not lg.broken[i]:
+				view.finale.throw_at(lg.position(i, view.finale._ft + 0.55))
+				break
 	if _args.has("shots") and String(_args["shots"]).split(",").has(str(_frame)):
 		get_viewport().get_texture().get_image().save_png("%s_%d.png" % [_args.get("out", "shot"), _frame])
 	if _args.has("frames") and _frame == int(_args["frames"]):
@@ -175,8 +197,3 @@ func _process(_delta: float) -> void:
 			img.save_png(String(_args["screenshot"]))
 		get_tree().quit()
 
-
-func _fake_tap() -> InputEventScreenTouch:
-	var t := InputEventScreenTouch.new()
-	t.pressed = true
-	return t

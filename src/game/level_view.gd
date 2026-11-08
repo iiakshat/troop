@@ -50,8 +50,8 @@ var _shield_mat: StandardMaterial3D
 var _finish: Node3D
 var _hq: Node3D
 var _hq_fill: MeshInstance3D
-var _strike_mult := 1
-var _strike_t := 0.0
+var finale: BottleShot = null
+var _hero_throw_t := -1.0
 var _touch_start := Vector2.ZERO
 var _touching := false
 var _swiped := false
@@ -89,6 +89,12 @@ func _ready() -> void:
 	_squad_label.modulate = Color("8fd0ff")
 	add_child(_squad_label)
 	_build_shield()
+	var outfit := Game.outfit()
+	var hc: Dictionary = Game.economy["hero_colors"]
+	(_crowds["hero"] as Crowd).recolor({Color(String(hc["shirt"])): Color(String(outfit["shirt"])),
+		Color(String(hc["pants"])): Color(String(outfit["pants"]))})
+	var ks := Game.knife_skin()
+	fx.set_knife_skin(Color(String(ks["blade"])), String(ks["trail"]))
 	_sync_allies(Vector3(0, 0, 2))
 	_squad_label.visible = false
 	charges_changed.emit(sim.charges)
@@ -181,11 +187,8 @@ func _process(delta: float) -> void:
 			_last_traveled = sim.traveled
 			fx.scroll_speed = sim.S * _time_scale
 			_update_visuals(d)
-		"strike", "done_win":
+		"finale", "done_win":
 			fx.scroll_speed = 0.0
-			_update_visuals(delta)
-		"striking":
-			_update_strike(delta)
 			_update_visuals(delta)
 		"done":
 			_end_t += delta
@@ -544,7 +547,7 @@ func _update_visuals(d: float) -> void:
 		a["pos"] = pos
 		a["flash"] = maxf(float(a["flash"]) - d * 3.0, 0.0)
 		var aim := 0.0
-		if not demo and (_state == "play" or _state == "strike" or _state == "striking"):
+		if not demo and _state == "play":
 			aim = 1.0
 			a["fire_t"] = float(a["fire_t"]) - d
 			if float(a["fire_t"]) <= 0.0:
@@ -557,7 +560,15 @@ func _update_visuals(d: float) -> void:
 			if dir.length() > 0.5:
 				basis = Basis.looking_at(dir.normalized(), Vector3.UP)
 		var ph := float(a["phase"]) * 3.0
-		if aim > 0.0:
+		if a["kind"] == "hero" and _state == "finale":
+			basis = Basis()
+			if _hero_throw_t >= 0.0:
+				_hero_throw_t += d
+				if _hero_throw_t > 0.75:
+					_hero_throw_t = -1.0
+			var clip := "punch" if _hero_throw_t >= 0.0 else "idle"
+			(_crowds["hero"] as Crowd).push(Transform3D(basis, pos), clip, maxf(_hero_throw_t, 0.0) if clip == "punch" else _anim_t)
+		elif aim > 0.0:
 			basis = basis * Basis(Vector3.UP, SHOOT_YAW)
 			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis, pos), "shoot", _anim_t + ph, float(a["flash"]))
 		elif moving:
@@ -688,8 +699,8 @@ func _horde_front(hv: Dictionary) -> Vector3:
 
 
 func _target_point():
-	if _state == "strike" or _state == "striking":
-		return _hq.global_position + Vector3(0, 2.5, 0) if _hq else null
+	if _state != "play":
+		return null
 	match sim.target_kind:
 		"horde":
 			var hv: Dictionary = _hordes.get(sim.target_ref["id"], {})
@@ -848,42 +859,24 @@ func _spawn_finish(at: float) -> void:
 
 
 func _begin_strike() -> void:
-	_state = "strike"
+	# The squad gathers behind the hero; Bottle Shot takes over the camera.
+	_state = "finale"
 	_time_scale = 1.0
-	Sfx.play("swoosh")
+	fx.scroll_speed = 0.0
 	strike_ready.emit()
+	var hero := _slot_pos(0, _allies.size())
+	finale = BottleShot.new().setup(world, fx, font, level_id, sim.squad.total(), hero, Game.coin_bonus())
+	finale.on_throw = func(): _hero_throw_t = 0.0
+	finale.done.connect(_on_finale_done)
+	add_child(finale)
 
 
-## Called by the HUD when the player stops the needle.
-func do_strike(mult: int) -> void:
-	if _state != "strike":
-		return
-	_strike_mult = mult
-	_strike_t = 0.0
-	_state = "striking"
-	Sfx.play("strike")
-
-
-func _update_strike(delta: float) -> void:
-	_strike_t += delta
-	var dur := 1.6
-	var k := clampf(_strike_t / dur, 0.0, 1.0)
-	# Extra volleys so the strike feels like the whole squad unloading.
-	if _strike_t < dur:
-		for a in _allies:
-			if randf() < delta * 6.0:
-				_fire(a, _hq.global_position + Vector3(randf_range(-3, 3), randf_range(1, 5), 2.0))
-		if randf() < delta * 10.0:
-			fx.burst(_hq.global_position + Vector3(randf_range(-4, 4), randf_range(1, 5), 2.2), Color(1, 0.8, 0.4), 6, 4.0, 0.2, 0.4)
-	_hq_fill.scale.x = maxf(1.0 - k, 0.001)
-	if _strike_t >= dur and _strike_t - delta < dur:
-		fx.explosion(_hq.global_position + Vector3(0, 3, 0), 2.5)
-		fx.confetti(_hq.global_position + Vector3(0, 5, 0), 60)
-		world.shake(1.2)
-		Sfx.play("boom")
-		Sfx.play("win")
-		Game.vibrate(200)
-		_hq.visible = false
-	if _strike_t >= dur + 0.9:
-		_state = "done_win"
-		finished.emit({"won": true, "troops": sim.squad.total(), "mult": _strike_mult, "kills": sim.kills, "level": level_id})
+func _on_finale_done(r: Dictionary) -> void:
+	_state = "done_win"
+	fx.explosion(_hq.global_position + Vector3(0, 3, 0), 2.5)
+	fx.confetti(_hq.global_position + Vector3(0, 5, 0), 60)
+	_hq.visible = false
+	world.shake(1.0)
+	Sfx.play("boom")
+	r.merge({"won": true, "troops": sim.squad.total(), "kills": sim.kills, "level": level_id})
+	finished.emit(r)

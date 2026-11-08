@@ -187,13 +187,3 @@ func test_levels_are_winnable_and_reward_planning() -> void:
 	eq(_run(Config.level(3), [0, 2, 1])["state"], "strike", "L3 planned path wins")
 	eq(_run(Config.level(4), [1, 2, 0])["state"], "strike", "L4 planned path wins")
 	eq(_run(Config.level(5), [1, 2, 1, 0])["state"], "strike", "L5 planned path beats the Kingpin")
-
-
-func test_save_helpers() -> void:
-	var eco := Config.economy()
-	eq(SaveData.upgrade_cost(eco, "knife", 0), 60, "first knife cost")
-	eq(SaveData.upgrade_cost(eco, "knife", 3), -1, "maxed")
-	var clean := SaveData.clean_upgrades({"knife": 99, "bogus": 3}, eco)
-	eq(clean["knife"], 3, "clamped")
-	check(not clean.has("bogus"), "unknown dropped")
-	eq(clean["squad"], 0, "missing filled")

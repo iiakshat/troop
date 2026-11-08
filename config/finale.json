@@ -1,0 +1,27 @@
+{
+  "_note": "Bottle Shot finale. Bottles sit on a shelf wall `wall_z` metres in front of the hero; x/y are wall-plane positions (y = height). motion: static | slide (whole set moves sideways) | swing (each bottle swings on a string) | drive (rides the boss van). Coins = (clear_bonus + troops x per_troop) x (1 + bonus per normal bottle) x (gold_mult if the gold bottle broke) x station bonus.",
+  "knives": 3,
+  "knife_speed": 14.0,
+  "wall_z": -5.8,
+  "hit_radius": 0.19,
+  "per_troop": 2,
+  "clear_bonus": 40,
+  "bonus_per_bottle": 0.5,
+  "gold_mult": 2.0,
+  "layouts": {
+    "1": { "motion": "static", "bottles": [
+      { "x": -0.9, "y": 1.45 }, { "x": 0.0, "y": 1.45 }, { "x": 0.9, "y": 1.45 },
+      { "x": 0.45, "y": 2.35, "gold": true } ] },
+    "2": { "motion": "static", "bottles": [
+      { "x": -1.2, "y": 1.45 }, { "x": -0.4, "y": 1.45 }, { "x": 0.4, "y": 1.45 }, { "x": 1.2, "y": 1.45 },
+      { "x": -0.8, "y": 2.35 }, { "x": 0.8, "y": 2.35, "gold": true } ] },
+    "3": { "motion": "slide", "amp": 0.9, "speed": 1.1, "bottles": [
+      { "x": -0.9, "y": 1.45 }, { "x": 0.0, "y": 1.45 }, { "x": 0.9, "y": 1.45 },
+      { "x": -0.45, "y": 2.35 }, { "x": 0.45, "y": 2.35, "gold": true } ] },
+    "4": { "motion": "swing", "amp": 0.55, "speed": 1.6, "bottles": [
+      { "x": -1.1, "y": 1.9 }, { "x": -0.35, "y": 2.1 }, { "x": 0.35, "y": 1.9 }, { "x": 1.1, "y": 2.1, "gold": true } ] },
+    "5": { "motion": "drive", "amp": 1.6, "speed": 0.9, "bottles": [
+      { "x": -0.8, "y": 1.6 }, { "x": 0.0, "y": 1.6 }, { "x": 0.8, "y": 1.6 },
+      { "x": -0.4, "y": 2.4 }, { "x": 0.4, "y": 2.4 }, { "x": 0.0, "y": 3.1, "gold": true } ] }
+  }
+}

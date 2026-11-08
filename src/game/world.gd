@@ -15,6 +15,7 @@ var _scroll := 0.0
 var _movers: Array[Node3D] = []   # buildings and props that recycle
 var _shake := 0.0
 var _cam_base := Transform3D()
+var _cam_override: Variant = null
 var _rng := RandomNumberGenerator.new()
 
 
@@ -40,13 +41,19 @@ func shake(amount: float) -> void:
 	_shake = maxf(_shake, amount)
 
 
+## The finale takes the camera: pass a transform each frame, or null to give it back.
+func set_camera_override(xf: Variant) -> void:
+	_cam_override = xf
+
+
 func _process(delta: float) -> void:
+	var base: Transform3D = _cam_override if _cam_override != null else _cam_base
 	if _shake > 0.001:
 		_shake = move_toward(_shake, 0.0, delta * 2.5)
 		var o := Vector3(_rng.randf_range(-1, 1), _rng.randf_range(-1, 1), 0) * _shake * 0.35
-		camera.transform = _cam_base.translated(o)
+		camera.transform = base.translated(o)
 	else:
-		camera.transform = _cam_base
+		camera.transform = base
 
 
 # ---------------------------------------------------------------- build

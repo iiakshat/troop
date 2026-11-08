@@ -75,6 +75,9 @@ func _init(level: Dictionary, units_cfg: Dictionary, upgrades: Dictionary = {}) 
 	var ch: Dictionary = level.get("charges", {})
 	for k in ch:
 		charges[k] = int(ch[k])
+	# Police-station garage: extra powers at the start of every level.
+	charges["shield"] = int(charges["shield"]) + int(upgrades.get("shield", 0))
+	charges["bomb"] = int(charges["bomb"]) + int(upgrades.get("bomb", 0))
 	_build_spawns(level.get("events", []))
 
 

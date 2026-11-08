@@ -1,6 +1,8 @@
 extends Node
-## Sound effects synthesised at startup (no audio files to license or ship).
-## Call Sfx.play("id"). Each id is rate-limited so 60 guns don't turn into noise.
+## Sound effects and music. Recorded CC0 files in assets/audio win (variants like
+## glass2/glass3 are picked at random); anything without a file falls back to a sound
+## synthesised at startup. Call Sfx.play("id"). Each id is rate-limited so 60 guns
+## don't turn into noise.
 
 const RATE := 22050
 const VOICES := 14
@@ -9,7 +11,9 @@ var _streams: Dictionary = {}
 var _players: Array[AudioStreamPlayer] = []
 var _next := 0
 var _last_play: Dictionary = {}
-var _min_gap := {"knife": 0.06, "shot": 0.045, "hit": 0.05, "die": 0.035, "tick": 0.05, "clink": 0.12, "coin": 0.05}
+var _min_gap := {"knife": 0.06, "shot": 0.045, "hit": 0.05, "die": 0.035, "tick": 0.05, "clink": 0.12, "coin": 0.05, "punch": 0.07}
+var _variants: Dictionary = {}   # id -> Array of streams
+var _music: AudioStreamPlayer
 
 
 func _ready() -> void:
@@ -19,10 +23,47 @@ func _ready() -> void:
 		add_child(p)
 		_players.append(p)
 	_build()
+	_load_files()
+	_music = AudioStreamPlayer.new()
+	add_child(_music)
+	var m: AudioStream = load("res://assets/audio/music_fight.ogg")
+	if m is AudioStreamOggVorbis:
+		(m as AudioStreamOggVorbis).loop = true
+	_music.stream = m
+
+
+func play_music(in_level: bool) -> void:
+	_music.volume_db = -9.0 if in_level else -15.0
+	if bool(Game.save.get("music", true)):
+		if not _music.playing:
+			_music.play()
+	else:
+		_music.stop()
+
+
+func music_changed() -> void:
+	play_music(_music.volume_db > -12.0)
+
+
+func _load_files() -> void:
+	var dir := "res://assets/audio/"
+	for f in DirAccess.get_files_at(dir):
+		var file := f.trim_suffix(".import")
+		if not file.ends_with(".ogg") or file.begins_with("music_"):
+			continue
+		var stream: AudioStream = load(dir + file)
+		if stream == null:
+			continue
+		var id := file.get_basename()
+		var base := id.rstrip("0123456789")
+		if not _variants.has(base):
+			_variants[base] = []
+		if not (_variants[base] as Array).has(stream):
+			(_variants[base] as Array).append(stream)
 
 
 func play(id: String, volume_db := 0.0, pitch := 1.0) -> void:
-	if not bool(Game.save.get("sound", true)) or not _streams.has(id):
+	if not bool(Game.save.get("sound", true)) or not (_streams.has(id) or _variants.has(id)):
 		return
 	var now := Time.get_ticks_msec() / 1000.0
 	if now - float(_last_play.get(id, -1.0)) < float(_min_gap.get(id, 0.0)):
@@ -30,7 +71,7 @@ func play(id: String, volume_db := 0.0, pitch := 1.0) -> void:
 	_last_play[id] = now
 	var p := _players[_next]
 	_next = (_next + 1) % VOICES
-	p.stream = _streams[id]
+	p.stream = (_variants[id] as Array).pick_random() if _variants.has(id) else _streams[id]
 	p.volume_db = volume_db
 	p.pitch_scale = pitch * randf_range(0.94, 1.06)
 	p.play()

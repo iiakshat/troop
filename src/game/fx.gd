@@ -16,6 +16,7 @@ var _part_mm: MultiMesh
 var _labels: Array[Label3D] = []
 var _label_state: Array = []
 var scroll_speed := 0.0    # particles on the ground drift with the road
+var _trail := Color.TRANSPARENT
 
 
 func _ready() -> void:
@@ -24,6 +25,12 @@ func _ready() -> void:
 	var cube := BoxMesh.new()
 	cube.size = Vector3.ONE
 	_part_mm = _mm(cube, MAX_PARTS, true, _unshaded_instance_mat())
+
+
+## Knife skin cosmetic: blade colour and an optional particle trail ("" = none).
+func set_knife_skin(blade: Color, trail: String) -> void:
+	_knife_mm.mesh = _knife_mesh(blade)
+	_trail = Color(trail) if trail != "" else Color.TRANSPARENT
 
 
 func clear() -> void:
@@ -131,6 +138,8 @@ func _tick_proj(delta: float) -> void:
 		var basis := Basis.looking_at(vel.normalized(), Vector3.UP) if vel.length() > 0.01 else Basis()
 		if p["kind"] == "knife":
 			p["spin"] = float(p["spin"]) + delta * 28.0
+			if _trail.a > 0.0 and randf() < 0.6:
+				burst(p["pos"], _trail, 1, 0.4, 0.1, 0.25, 0.0, 0.0)
 			basis = basis * Basis(Vector3.RIGHT, float(p["spin"]))
 			_knife_mm.set_instance_transform(kn, Transform3D(basis, p["pos"]))
 			kn += 1
@@ -213,10 +222,10 @@ func _mm(mesh: Mesh, cap: int, colors: bool, mat: Material) -> MultiMesh:
 	return mm
 
 
-func _knife_mesh() -> Mesh:
+func _knife_mesh(blade := Color(0.92, 0.95, 1.0)) -> Mesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	_cube(st, Vector3(0, 0, -0.28), Vector3(0.1, 0.18, 0.66), Color(0.92, 0.95, 1.0))
+	_cube(st, Vector3(0, 0, -0.28), Vector3(0.1, 0.18, 0.66), blade)
 	_cube(st, Vector3(0, 0, 0.2), Vector3(0.13, 0.2, 0.32), Color(0.35, 0.22, 0.12))
 	st.generate_normals()
 	return st.commit()
