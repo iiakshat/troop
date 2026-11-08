@@ -15,6 +15,7 @@ var _movers: Array[Node3D] = []   # buildings and props that recycle
 var _shake := 0.0
 var _cam_base := Transform3D()
 var _cam_override: Variant = null
+var _base_fov := 56.0
 var _rng := RandomNumberGenerator.new()
 
 
@@ -40,6 +41,21 @@ func scroll(dist: float) -> void:
 
 func shake(amount: float) -> void:
 	_shake = maxf(_shake, amount)
+
+
+## Lens for close-ups: field of view (degrees, < 0 = default) and a focus distance beyond
+## which things blur (< 0 = no blur).
+func set_lens(fov: float, focus := -1.0) -> void:
+	camera.fov = fov if fov > 0.0 else _base_fov
+	if focus > 0.0:
+		var ca := CameraAttributesPractical.new()
+		ca.dof_blur_far_enabled = true
+		ca.dof_blur_far_distance = focus
+		ca.dof_blur_far_transition = 1.5
+		ca.dof_blur_amount = 0.12
+		camera.attributes = ca
+	else:
+		camera.attributes = null
 
 
 ## The finale takes the camera: pass a transform each frame, or null to give it back.

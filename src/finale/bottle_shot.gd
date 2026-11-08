@@ -7,7 +7,10 @@ extends Node3D
 signal done(result: Dictionary)
 
 const SLOW := 0.22
-const NORMAL_VIEW := Vector3(1.0, 3.0, 1.9)   # over the shoulder, above the squad
+const NORMAL_VIEW := Vector3(0.35, 1.85, 1.5)  # just over the hero's shoulder
+const AIM_FOV := 34.0                          # telephoto: the bottle wall fills the screen
+const CHASE_FOV := 44.0
+const BOTTLE_SCALE := 1.3
 
 var logic: BottleLogic
 var world: World
@@ -60,6 +63,7 @@ func _ready() -> void:
 	_build_ui()
 	_cam = _aim_view()
 	world.set_camera_override(_cam)
+	_aim_lens()
 	Sfx.play("swoosh")
 
 
@@ -118,6 +122,7 @@ func throw_at(aim: Vector2) -> void:
 	_knife.position = _knife_from
 	_state = "flying"
 	_scale = SLOW
+	world.set_lens(CHASE_FOV, _knife_from.distance_to(_knife_to) + 1.2)
 	_update_icons()
 	Sfx.play("knife", 2.0)
 	if on_throw.is_valid():
@@ -161,6 +166,7 @@ func _process(delta: float) -> void:
 			if _wait <= 0.0:
 				if logic.knives_left > 0 and logic.broken_count() + logic.broken_count(true) < logic.count():
 					_state = "aim"
+					_aim_lens()
 				else:
 					_state = "tally"
 					_wait = 1.0
@@ -171,6 +177,7 @@ func _process(delta: float) -> void:
 			if _wait <= 0.0:
 				_state = "finished"
 				world.set_camera_override(null)
+				world.set_lens(-1.0)
 				_ui.queue_free()
 				done.emit({"broken": logic.broken_count(), "gold": logic.broken_count(true),
 					"mult": logic.multiplier(), "coins": logic.coins(troops, station_bonus)})
@@ -184,8 +191,8 @@ func _impact() -> void:
 	_wait = 0.9
 	if _knife_hit >= 0:
 		var b: Node3D = _bottles[_knife_hit]
-		var at := b.global_position + Vector3(0, 0.3, 0)
-		_shatter(at, logic.is_gold(_knife_hit))
+		var at := b.global_position + Vector3(0, 0.4, 0)
+		_shatter(at, logic.is_gold(_knife_hit), fmod(0.31 + _knife_hit * 0.17, 1.0))
 		b.visible = false
 		_knife.queue_free()
 		world.shake(0.5)
@@ -196,26 +203,56 @@ func _impact() -> void:
 		UiKit.pop(_mult_label, 1.8)
 	else:
 		_stuck.append(_knife)
+		# Stuck knife: blade buried in the wall, handle towards the thrower, a little tilt.
+		# (the blade runs along the pivot's +Y, so tip it forward a quarter turn)
+		_knife.basis = Basis.looking_at((_knife_to - _knife_from).normalized(), Vector3.UP) * Basis(Vector3.FORWARD, randf_range(-0.4, 0.4)) * Basis(Vector3.RIGHT, -PI * 0.5)
 		Sfx.play("thunk", 2.0)
 		fx.burst(_knife.global_position, Color(0.6, 0.45, 0.3), 8, 3.0, 0.08, 0.4)
 	_knife = null
 
 
-func _shatter(at: Vector3, gold: bool) -> void:
-	var tint := Color(0.95, 0.8, 0.3, 0.6) if gold else Color(0.6, 0.85, 0.7, 0.55)
-	var mat := BottleMesh.glass_material(tint)
-	for i in 26:
+func _shatter(at: Vector3, gold: bool, hue: float) -> void:
+	var tint := Color(1.0, 0.85, 0.35) if gold else Color.from_hsv(hue, 0.45, 0.95)
+	var shard_mat := StandardMaterial3D.new()
+	shard_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	shard_mat.albedo_color = Color(tint, 0.55)
+	shard_mat.roughness = 0.05
+	shard_mat.metallic_specular = 1.0
+	shard_mat.rim_enabled = true
+	shard_mat.rim = 1.0
+	shard_mat.emission_enabled = true
+	shard_mat.emission = tint * 0.35
+	shard_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var drop_mat := StandardMaterial3D.new()
+	drop_mat.albedo_color = Color("e3a51f") if gold else Color.from_hsv(hue, 0.75, 0.6)
+	drop_mat.roughness = 0.15
+	drop_mat.metallic_specular = 0.9
+	for i in 54:
 		var shard := MeshInstance3D.new()
 		var pm := PrismMesh.new()
-		pm.size = Vector3(randf_range(0.03, 0.08), randf_range(0.04, 0.11), 0.01)
+		pm.size = Vector3(randf_range(0.03, 0.1), randf_range(0.05, 0.14), 0.008)
 		shard.mesh = pm
-		shard.material_override = mat
+		shard.material_override = shard_mat
 		add_child(shard)
-		shard.global_position = at + Vector3(randf_range(-0.06, 0.06), randf_range(-0.2, 0.2), randf_range(-0.05, 0.05))
-		var vel := Vector3(randf_range(-2.5, 2.5), randf_range(0.5, 3.5), randf_range(0.5, 3.0))
-		_shards.append({"node": shard, "vel": vel, "spin": Vector3(randf(), randf(), randf()) * 18.0, "life": 1.6})
-	fx.burst(at, Color("e3a51f") if gold else Color.from_hsv(randf(), 0.7, 0.6), 22, 4.0, 0.07, 0.7, 2.0, 9.0)
-	fx.burst(at, Color(1, 1, 1), 10, 5.0, 0.05, 0.35)
+		shard.global_position = at + Vector3(randf_range(-0.08, 0.08), randf_range(-0.3, 0.3), randf_range(-0.06, 0.06))
+		var vel := Vector3(randf_range(-3.0, 3.0), randf_range(0.5, 4.0), randf_range(0.5, 3.5))
+		_shards.append({"node": shard, "vel": vel, "spin": Vector3(randf(), randf(), randf()) * 20.0, "life": 2.2})
+	# The liquid splashes out as droplets.
+	for i in 30:
+		var drop := MeshInstance3D.new()
+		var sm := SphereMesh.new()
+		var r := randf_range(0.012, 0.035)
+		sm.radius = r
+		sm.height = r * 2.0
+		sm.radial_segments = 8
+		sm.rings = 4
+		drop.mesh = sm
+		drop.material_override = drop_mat
+		add_child(drop)
+		drop.global_position = at + Vector3(randf_range(-0.05, 0.05), randf_range(-0.25, 0.05), 0.05)
+		var vel := Vector3(randf_range(-2.0, 2.0), randf_range(1.0, 3.5), randf_range(0.8, 2.5))
+		_shards.append({"node": drop, "vel": vel, "spin": Vector3.ZERO, "life": 1.4})
+	fx.burst(at, Color(1, 1, 1), 12, 5.0, 0.03, 0.25)   # white glints
 	if gold:
 		fx.confetti(at, 40)
 
@@ -242,6 +279,17 @@ func _tick_shards(d: float) -> void:
 
 # ---------------------------------------------------------------- build
 
+## Telephoto lens framing this level's bottles (plus their motion) edge to edge.
+func _aim_lens() -> void:
+	var extent := 0.0
+	for b in logic.layout["bottles"]:
+		extent = maxf(extent, absf(float(b["x"])))
+	extent += float(logic.layout.get("amp", 0.0)) + 0.55
+	var d := _aim_view().origin.distance_to(Vector3(hero_pos.x, 1.8, _wall_z))
+	var fov := clampf(rad_to_deg(2.0 * atan(extent / d)), 22.0, AIM_FOV)
+	world.set_lens(fov, d + 0.4)
+
+
 func _aim_view() -> Transform3D:
 	var eye := hero_pos + NORMAL_VIEW
 	var look := Vector3(hero_pos.x, 1.75, _wall_z)
@@ -250,7 +298,7 @@ func _aim_view() -> Transform3D:
 
 func _bottle_world(i: int, t: float) -> Vector3:
 	var p := logic.position(i, t)
-	return Vector3(hero_pos.x + p.x, p.y - 0.3, _wall_z + 0.25)
+	return Vector3(hero_pos.x + p.x, p.y - 0.4, _wall_z + 0.25)
 
 
 func _move_bottles() -> void:
@@ -268,19 +316,55 @@ func _move_bottles() -> void:
 
 func _build_wall() -> void:
 	var motion := String(logic.layout.get("motion", "static"))
-	var back := World._box(Vector3(5.6, 3.8, 0.25), Color("5b3d27"))
-	back.position = Vector3(hero_pos.x, 1.9, _wall_z - 0.1)
-	add_child(back)
-	for x in [-2.0, -0.7, 0.6, 1.9]:
-		var plank := World._box(Vector3(0.06, 3.8, 0.27), Color("4a3020"))
-		plank.position = Vector3(hero_pos.x + x, 1.9, _wall_z - 0.09)
-		add_child(plank)
+	# Gallery: a warm plank wall with a frame, lit by two spotlights so every bottle throws
+	# a shadow on it, and a string of glowing bulbs across the top.
+	var wall := MeshInstance3D.new()
+	var wm := BoxMesh.new()
+	wm.size = Vector3(6.4, 4.4, 0.25)
+	wall.mesh = wm
+	var pm := ShaderMaterial.new()
+	pm.shader = load("res://src/finale/planks.gdshader")
+	wall.material_override = pm
+	wall.position = Vector3(hero_pos.x, 2.0, _wall_z - 0.1)
+	add_child(wall)
+	for side in [-1, 1]:
+		var post := World._box(Vector3(0.3, 4.6, 0.4), Color("3b2414"))
+		post.position = Vector3(hero_pos.x + side * 3.25, 2.1, _wall_z)
+		add_child(post)
+	var beam := World._box(Vector3(6.9, 0.32, 0.45), Color("3b2414"))
+	beam.position = Vector3(hero_pos.x, 4.3, _wall_z)
+	add_child(beam)
+	var bulb_mat := StandardMaterial3D.new()
+	bulb_mat.albedo_color = Color("ffd98a")
+	bulb_mat.emission_enabled = true
+	bulb_mat.emission = Color("ffc65a")
+	bulb_mat.emission_energy_multiplier = 4.0
+	for i in 13:
+		var bulb := MeshInstance3D.new()
+		var sm := SphereMesh.new()
+		sm.radius = 0.06
+		sm.height = 0.12
+		bulb.mesh = sm
+		bulb.material_override = bulb_mat
+		var x := -3.0 + i * 0.5
+		bulb.position = Vector3(hero_pos.x + x, 4.05 - 0.12 * sin(fposmod(x, 1.0) * PI), _wall_z + 0.3)
+		add_child(bulb)
+	for side in [-1, 1]:
+		var spot := SpotLight3D.new()
+		spot.light_color = Color("ffe2b0")
+		spot.light_energy = 3.2
+		spot.spot_range = 14.0
+		spot.spot_angle = 32.0
+		spot.shadow_enabled = true
+		spot.position = Vector3(hero_pos.x + side * 2.4, 4.6, _wall_z + 4.0)
+		add_child(spot)
+		spot.look_at(Vector3(hero_pos.x + side * 0.4, 1.8, _wall_z), Vector3.UP)
 	_rack = Node3D.new()
 	add_child(_rack)
 	_rack.position = Vector3(hero_pos.x, 0, 0)
 	var heights := {}
 	for b in logic.layout["bottles"]:
-		heights[snappedf(float(b["y"]) - 0.3, 0.01)] = true
+		heights[snappedf(float(b["y"]) - 0.3, 0.01)] = true  # shelf top sits under the bottle base
 	if motion == "swing":
 		var bar := World._box(Vector3(4.2, 0.12, 0.12), Color("2b2b2b"))
 		bar.position = Vector3(hero_pos.x, 3.2, _wall_z + 0.25)
@@ -292,6 +376,7 @@ func _build_wall() -> void:
 			_rack.add_child(shelf)
 	for i in logic.count():
 		var bottle := BottleMesh.make(logic.is_gold(i), fmod(0.31 + i * 0.17, 1.0))
+		bottle.scale = Vector3.ONE * BOTTLE_SCALE
 		add_child(bottle)
 		_bottles.append(bottle)
 		if motion == "swing":
