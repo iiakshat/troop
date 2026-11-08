@@ -5,7 +5,7 @@ extends SceneTree
 ##
 ##   godot --headless --path . --script res://tests/tune.gd -- [levels=A-B | level=N]
 ##       [list=1,5,9] [routes=100] [beam=6] [upgrades=k,s,q] [out=path.json] [calibrate=1] [verbose=1]
-##       [k=0.5 (evaluate with every gang scaled)]
+##       [k=0.5 kf=2 (evaluate with every gang scaled, the last wave kf times more)]
 ##
 ## calibrate=1 searches, per level, the scale for every gang's size (bosses: hp) that makes
 ## the sampled win rate match the level's `target_win`, while the best route still wins
@@ -15,6 +15,7 @@ extends SceneTree
 
 const DT := 1.0 / 30.0
 const BRUTE_MAX := 6     # rows up to which every route is played
+const MAX_TIME := 92.0   # seconds the best route may take (levels last 60-90 s)
 
 var units: Dictionary
 var upgrades := {}
@@ -30,6 +31,7 @@ func _initialize() -> void:
 	var calibrate := false
 	var only: Array = []
 	var k_eval := 1.0
+	var kf_eval := 1.0
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("level="):
 			lo = int(a.substr(6))
@@ -56,6 +58,8 @@ func _initialize() -> void:
 			verbose = true
 		elif a.begins_with("k="):
 			k_eval = float(a.substr(2))
+		elif a.begins_with("kf="):
+			kf_eval = float(a.substr(3))
 	units = Config.units()
 	var t0 := Time.get_ticks_msec()
 	var report: Array = []
@@ -64,7 +68,7 @@ func _initialize() -> void:
 		only = range(lo, hi + 1)
 	for n in only:
 		var level := Config.level(n)
-		var r: Dictionary = calibrate_level(n, level) if calibrate else evaluate(n, level, k_eval)
+		var r: Dictionary = calibrate_level(n, level) if calibrate else evaluate(n, level, k_eval, kf_eval)
 		r["target_ratio"] = float(level.get("target_ratio", -1.0))
 		report.append(r)
 		print("%5d | %4d | %4d/%-5d | %5.0f%% | %-11s | %4d/%-4d %3.0f%% | %5d | %6.1f | %.3f / %.3f" % [
@@ -133,13 +137,18 @@ func calibrate_level(n: int, base: Dictionary) -> Dictionary:
 			k = _fit_win(base, routes, target, kf)
 	for i in 14:
 		var lv := scaled_level(base, k, kf)
-		var ok: bool = best_route(lv, true)["result"]["state"] == "strike"
+		var b: Dictionary = best_route(lv, true)["result"]
+		var won: bool = b["state"] == "strike"
+		var ok: bool = won and float(b["time"]) <= MAX_TIME
 		if ok and n <= 10:
 			ok = best_route(lv, false)["result"]["state"] == "strike"
 		if ok:
 			break
-		k *= 0.9
-		kf = maxf(kf * 0.92, 0.5)
+		if won and float(b["time"]) > MAX_TIME:
+			kf = maxf(kf * 0.8, 0.4)  # the last gang takes too long to clear
+		else:
+			k *= 0.9
+			kf = maxf(kf * 0.92, 0.4)
 	return evaluate(n, base, k, kf)
 
 
@@ -163,7 +172,7 @@ func _fit_win(base: Dictionary, routes: Array, target: float, kf: float) -> floa
 ## kf (final wave only, on top of k) that leaves the best route about `want` of its peak.
 func _fit_ratio(base: Dictionary, k: float, want: float) -> float:
 	var lo := log(0.4)
-	var hi := log(20.0)
+	var hi := log(4.0)
 	for i in 8:
 		var mid := (lo + hi) * 0.5
 		var r := _ratio(best_route(scaled_level(base, k, exp(mid)), true)["result"])
@@ -174,12 +183,16 @@ func _fit_ratio(base: Dictionary, k: float, want: float) -> float:
 	return exp((lo + hi) * 0.5)
 
 
-## Every gang's size (bosses: hp) times k, the last wave times kf more; rounded the same
-## way as tools/gen_levels.py.
+## Every gang's size (bosses: hp) and barrel blast times k, the last wave times kf more;
+## rounded the same way as tools/gen_levels.py.
 static func scaled_level(base: Dictionary, k: float, kf := 1.0) -> Dictionary:
 	if absf(k - 1.0) < 1e-9 and absf(kf - 1.0) < 1e-9:
 		return base
 	var lv: Dictionary = base.duplicate(true)
+	if absf(k - 1.0) > 1e-9:
+		for e in lv["events"]:
+			if e["type"] == "obstacle" and String(e.get("kind", "")) == "barrel" and e.has("kill"):
+				e["kill"] = maxi(5, int(floor(float(e["kill"]) * k + 0.5)))
 	var last := -1
 	for i in lv["events"].size():
 		if lv["events"][i]["type"] == "wave":

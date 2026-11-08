@@ -255,6 +255,7 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05) -> bool:
                    "shield": float(d.get("shield", 0.0)) * n, "acc": 0.0, "st": 0.0, "mt": 0.0,
                    "stopped": False, "melee": False, "attack": attack,
                    "every": float(d.get("throw_every", d.get("shoot_every", 0.0))),
+                   "first": float(d.get("first_shot", d.get("throw_every", d.get("shoot_every", 0.0)))),
                    "hit": int(d.get("burn", d.get("shot_dmg", 1))),
                    "range": float(d.get("shoot_range", 0.0))})
 
@@ -289,6 +290,7 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05) -> bool:
             if h["stop"] > 0 and front(h) >= -h["stop"]:
                 h["z"] = -h["stop"] + ((h["start"] - h["n"]) // max(h["cols"], 1)) * h["gap"]
                 h["stopped"] = True
+                h["st"] = max(h["every"] - h["first"], 0.0)
         in_range = [h for h in hs if front(h) >= -FIRE and h["n"] > 0]
         which = "all"
         if in_range and sq.has_snipers():
@@ -350,8 +352,10 @@ MIXES = {
 
 MIN_COUNT = {"thug": 6, "knifer": 6, "gunman": 3, "brute": 2, "biker": 3, "riot": 5,
              "molotov": 2, "sniper_foe": 2, "grenadier": 2, "boss": 1}
-MAX_COUNT = {"thug": 360, "knifer": 300, "gunman": 60, "brute": 40, "biker": 90, "riot": 160,
-             "molotov": 30, "sniper_foe": 24, "grenadier": 40, "boss": 1}
+# Gangs can be big (the view draws at most ~180 bodies per gang and the number tells the
+# rest); late squads of 150 with strong ranks need big ranged/armoured cores to feel it.
+MAX_COUNT = {"thug": 600, "knifer": 500, "gunman": 400, "brute": 240, "biker": 400, "riot": 600,
+             "molotov": 120, "sniper_foe": 90, "grenadier": 200, "boss": 1}
 
 
 def mix_ok(name: str, level: int) -> bool:
@@ -421,7 +425,7 @@ def red_gate(rng: random.Random, sq: Sq, lane: int, level: int, early: bool = Fa
     """A red -N (or -%) gate that can be shot up past zero."""
     t = min(sq.total(), 6) if early else sq.total()
     dps = max(sq.dps(0, 1000.0, 1), 3.0)
-    if level >= 6 and not early and rng.random() < 0.35:
+    if level >= 6 and not early and rng.random() < 0.6:
         v = -rng.choice([30, 40, 50])
         top = rng.choice([20, 30, 40])
         inc = 10
@@ -453,18 +457,27 @@ def lane_obstacle(rng: random.Random, sq: Sq, lane: int, at: float, level: int, 
         return None
     ev = {"at": at, "type": "obstacle", "kind": kind, "lane": lane}
     if kind == "pothole":
-        ev["fall"] = nice(max(2, t * rng.uniform(0.15, 0.3)))
+        if level >= 6 and not early and rng.random() < 0.65:
+            ev["fall_pct"] = rng.choice([20, 25, 30, 35])
+        else:
+            ev["fall"] = nice(max(2, t * rng.uniform(0.15, 0.3)))
     elif kind == "barricade":
         ev["hp"] = nice(max(6, dps * rng.uniform(1.6, 2.6)))
-        ev["dmg"] = nice(max(3, t * rng.uniform(0.15, 0.25)))
+        if level >= 6 and not early:
+            ev["dmg_pct"] = rng.choice([15, 20, 25])
+        else:
+            ev["dmg"] = nice(max(3, t * rng.uniform(0.15, 0.25)))
     elif kind == "car":
         ev["hp"] = nice(max(15, dps * rng.uniform(2.5, 3.5)))
-        ev["dmg"] = nice(max(4, t * rng.uniform(0.2, 0.3)))
+        if level >= 6 and not early:
+            ev["dmg_pct"] = rng.choice([20, 25, 30])
+        else:
+            ev["dmg"] = nice(max(4, t * rng.uniform(0.2, 0.3)))
     elif kind == "barrel":
         ev["hp"] = nice(max(4, dps * 0.8))
         ev["dmg"] = nice(max(2, t * 0.1))
         ev["radius"] = 8
-        ev["kill"] = nice(max(20, t * 1.5))
+        ev["kill"] = nice(max(12, t * 0.6))
     return ev
 
 
@@ -585,7 +598,12 @@ def scaled(n: int, k: float, minimum: int) -> int:
 
 
 def apply_scale(events: list[dict], k: float, kf: float = 1.0) -> None:
-    """Every gang's size (bosses: hp) x k; the last wave x kf more (same rounding as tune.gd)."""
+    """Every gang's size (bosses: hp) and barrel blast x k; the last wave x kf more (same
+    rounding as tests/tune.gd)."""
+    if abs(k - 1.0) > 1e-9:
+        for e in events:
+            if e["type"] == "obstacle" and e.get("kind") == "barrel" and "kill" in e:
+                e["kill"] = scaled(int(e["kill"]), k, 5)
     waves = [e for e in events if e["type"] == "wave"]
     for e in waves:
         m = k * (kf if e is waves[-1] else 1.0)
@@ -851,9 +869,13 @@ def generate(level: int) -> dict:
             if level >= 4 and beat > 0 and rng.random() < 0.18:
                 g = rng.choice([g for g in gates if g["op"] not in ("num", "pct") or g.get("v", 0) > 0])
                 dps = max(sq.dps(0, 1000.0, 1), 3.0)
-                obstacles.append({"at": at - 8, "type": "obstacle", "kind": "barricade", "lane": g["lane"],
-                                  "hp": nice(max(6, dps * 1.4)), "dmg": nice(max(3, sq.total() * 0.12)),
-                                  "block_reach": 12})
+                guard = {"at": at - 8, "type": "obstacle", "kind": "barricade", "lane": g["lane"],
+                         "hp": nice(max(6, dps * 1.4)), "block_reach": 12}
+                if level >= 6:
+                    guard["dmg_pct"] = rng.choice([10, 15])
+                else:
+                    guard["dmg"] = nice(max(3, sq.total() * 0.12))
+                obstacles.append(guard)
             gates.sort(key=lambda g: g["lane"])
             events.append({"at": at, "type": "gates", "gates": gates})
             events.extend(obstacles)

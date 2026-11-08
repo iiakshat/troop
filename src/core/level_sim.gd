@@ -392,6 +392,7 @@ func _spawn_horde(sp: Dictionary, early := false) -> void:
 		"shoot_range": float(def.get("shoot_range", 0.0)),
 		"shot_dmg": int(def.get("shot_dmg", 1)), "burn": int(def.get("burn", 1)),
 		"flight": float(def.get("flight", 1.0)), "aim": float(def.get("aim", 0.0)), "aimed": false,
+		"first_shot": float(def.get("first_shot", def.get("throw_every", def.get("shoot_every", 0.0)))),
 		"boss": bool(def.get("boss", false)),
 		"cols": int(def.get("cols", 9)), "row_gap": float(def.get("row_gap", 0.95)),
 		"shield": 0.0, "z": z,
@@ -436,6 +437,8 @@ func _move(dt: float) -> void:
 		if float(h["stop"]) > 0.0 and front_z(h) >= -float(h["stop"]):
 			h["z"] = -float(h["stop"]) + killed_rows(h) * float(h["row_gap"])
 			h["stopped"] = true
+			# They come in ready: the first volley follows `first_shot` s after they stop.
+			h["shoot_t"] = maxf(float(h["shoot_every"]) - float(h["first_shot"]), 0.0)
 
 
 func _shoot(dt: float) -> void:
@@ -551,19 +554,22 @@ func _check_barrels() -> void:
 				break
 
 
-## An armed barrel blows up every gang whose front is within its blast radius.
+## An armed barrel blows up the gangs whose front is within its blast radius, nearest to
+## the squad first, killing up to `kill` gang members in total.
 func _explode(b: Dictionary) -> void:
 	var radius := float(b.get("radius", 7.0))
-	var max_kill := int(b.get("kill", 30))
+	var left := int(b.get("kill", 30))
 	var total := 0
-	for h in hordes.duplicate():
-		if absf(front_z(h) - float(b["z"])) <= radius:
-			var k := mini(max_kill, int(h["count"]))
-			if h["boss"]:
-				k = 0  # a barrel only singes the boss
-			total += k
-			h["shield"] = 0.0
-			_kill(h, k)
+	var near: Array = hordes.filter(func(x): return absf(front_z(x) - float(b["z"])) <= radius)
+	near.sort_custom(func(x, y): return front_z(x) > front_z(y))
+	for h in near:
+		h["shield"] = 0.0
+		if h["boss"]:
+			continue  # a barrel only singes the boss
+		var k := mini(left, int(h["count"]))
+		left -= k
+		total += k
+		_kill(h, k)
 	out.append({"type": "barrel_boom", "ob": b, "killed": total})
 
 
@@ -867,7 +873,10 @@ func _pass_obstacles() -> void:
 			else:
 				out.append({"type": "obstacle_pass", "ob": ob})
 		elif in_lane and float(ob["hp"]) > 0.0 and not ob.get("armed", false):
-			var lost := _hurt(int(ob.get("dmg", 5)), kind, ob["id"], false)
+			var n := int(ob.get("dmg", 5))
+			if ob.has("dmg_pct"):
+				n = int(floor(squad.total() * int(ob["dmg_pct"]) / 100.0))
+			var lost := _hurt(n, kind, ob["id"], false)
 			if kind == "barricade":
 				var g = _block_next_gate(int(ob["lane"]), float(ob.get("block_reach", 12.0)))
 				out.append({"type": "barricade_hit", "id": ob["id"], "lane": ob["lane"], "lost": lost,
