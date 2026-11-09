@@ -176,3 +176,42 @@ func test_star_ricochet_off_a_plate_breaks_along_the_row() -> void:
 	eq(r["plate"], k, "struck the plate")
 	check((r["hits"] as Array).size() >= 2, "the ricochet breaks more than one bottle (%d)" % (r["hits"] as Array).size())
 	eq(b.streak, (r["hits"] as Array).size(), "each counts toward the combo")
+
+## Autoplay (strike=1) aims like this for every weapon: a perfect solve for the next target,
+## reloading when the magazine is empty. Every level's set must be clearable that way.
+func test_autoplay_clears_every_level() -> void:
+	var origin := {"pistol": Vector3(0, 1.62, -0.35), "bow": Vector3(0, 1.58, -0.35),
+		"stars": Vector3(0.25, 1.45, -0.4), "sniper": Vector3(0, 1.6, -0.35)}
+	for lv in range(1, 51):
+		var b := BottleLogic.new(cfg, lv)
+		var t := 0.0
+		var guard := 0
+		while not b.finished() and guard < 40:
+			guard += 1
+			if b.needs_reload():
+				check(b.reload(), "level %d reloads" % lv)
+			var i := b.next_target()
+			if b.weapon == "knife":
+				var flight := b.flight_time(b.distance - 0.15)
+				b.throw(b.position(i, t + flight), t + flight)
+			else:
+				var spd := float(b.wcfg.get("speed", b.wcfg.get("speed_max", 20.0)))
+				var o: Vector3 = origin[b.weapon]
+				var w := b.wind(b.shots_fired)
+				b.fire(o, b.solve(o, i, spd, t, w), t, w)
+			t += 1.3
+		eq(b.remaining(), 0, "level %d (%s): autoplay clears the set" % [lv, b.weapon])
+
+
+func test_weapon_configs_have_their_keys() -> void:
+	var need := {"knife": ["distance", "speed", "hit_radius"],
+		"pistol": ["distance", "speed", "mag", "reload_s", "kick_deg", "recover_s", "fov", "sens", "slow"],
+		"bow": ["distance", "speed_min", "speed_max", "draw_s", "steady_s", "shake_deg", "wind", "fov"],
+		"stars": ["distance", "speed_min", "speed_max", "swipe_fast", "ricochet_len", "plate_w", "plate_h"],
+		"sniper": ["distance", "speed", "zero", "elevation", "scope_fov", "sway_deg", "tremor_deg", "steady_s", "cycle_s", "bullet_cam"]}
+	for wname in need:
+		var w: Dictionary = cfg["weapons"][wname]
+		for k in need[wname]:
+			check(w.has(k), "%s has %s" % [wname, k])
+	for d in range(1, 6):
+		check(cfg["district_stash"].has(str(d)), "district %d has a stash set" % d)

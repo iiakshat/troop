@@ -288,6 +288,8 @@ func _process(delta: float) -> void:
 		_dust_mat.set_shader_parameter("t", _ft)
 	match _state:
 		"intro":
+			if _mode:
+				_mode.tick(delta, d)   # the weapon is already in hand at the end of the rush
 			_intro_t += delta
 			var k := smoothstep(0.0, INTRO, _intro_t)
 			_cam = _intro_from.interpolate_with(_rest_view(), k)
