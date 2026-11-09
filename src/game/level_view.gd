@@ -1301,9 +1301,9 @@ func _fire(a: Dictionary, target: Vector3) -> void:
 	var spread := Vector3(randf_range(-0.3, 0.3), randf_range(-0.3, 0.3), 0)
 	var proj := String(unit["proj"])
 	# Visual only (the sim's damage is exact): past ~36 shooters, draw one tracer in k so a
-	# big army does not wall off the street; knives and rockets always show.
+	# big army does not wall off the street; the hero's knives and sniper rounds always show.
 	var keep := clampf(36.0 / maxf(float(_allies.size()), 1.0), 0.3, 1.0)
-	if kind != "hero" and proj != "rocket" and proj != "sniper_round" and randf() > keep:
+	if kind != "hero" and proj != "sniper_round" and randf() > keep:
 		var s0: Array = ALLY_SFX.get(kind, ["shot", "shot", -11.0])
 		_sfx(String(s0[0]), String(s0[1]), float(s0[2]), 1.1 if kind == "constable" else 1.0)
 		return

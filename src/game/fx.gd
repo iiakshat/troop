@@ -209,8 +209,9 @@ func _tick_proj(delta: float) -> void:
 			_knife_mm.set_instance_transform(kn, Transform3D(basis, p["pos"]))
 			kn += 1
 		else:
-			if kind == "rocket" and randf() < 0.8:
-				burst(p["pos"], Color(0.75, 0.75, 0.78), 1, 0.5, 0.26, 0.45, 0.6, -1.0)
+			if kind == "rocket" and randf() < 0.3:
+				# Light smoke: many launchers at once must not wall off the street.
+				burst(p["pos"], Color(0.75, 0.75, 0.78), 1, 0.5, 0.18, 0.35, 0.6, -1.0)
 			var sc: Vector3 = BULLET_SCALE.get(kind, Vector3(0.8, 0.8, 0.8))
 			_bullet_mm.set_instance_transform(bn, Transform3D(basis.scaled_local(sc), p["pos"]))
 			bn += 1
