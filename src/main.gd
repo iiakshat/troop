@@ -299,9 +299,13 @@ func _start_level(n: int, boosters: Dictionary = {}) -> void:
 	Sfx.play_music("level")  # LevelView switches to "boss" when the Kingpin walks in, and back when he dies
 	Game.level_started(n, boosters)
 	if _autoplay():
+		# lanes=… wins; otherwise the level's stored winning route (tune.gd), then a fixed default.
 		var lanes: Array = []
-		for s in String(_args.get("lanes", "2,1,1,0,0")).split(","):
-			lanes.append(int(s))
+		if _args.has("lanes") or (level.get("route", []) as Array).is_empty():
+			for s in String(_args.get("lanes", "2,1,1,0,0")).split(","):
+				lanes.append(int(s))
+		else:
+			lanes = (level["route"] as Array).duplicate()
 		_pilot = Autopilot.new(lanes, true)
 		view.input_enabled = false
 		hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
