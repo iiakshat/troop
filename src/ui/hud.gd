@@ -122,6 +122,11 @@ func _add_power(id: String, color: String, left: bool) -> void:
 	_power_buttons[id] = b
 
 
+## A rank joined the squad for the first time ever: its stat card in the corner (2.5 s).
+func show_rank(unit: String) -> void:
+	RankToast.show(self, unit)
+
+
 func set_level(_n: int, _name: String) -> void:
 	pass
 

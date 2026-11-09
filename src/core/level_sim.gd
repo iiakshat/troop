@@ -62,6 +62,7 @@ var firebombs: Array = []   # in the air: {horde, lane, land, burn}
 var charges: Dictionary = {"shield": 0, "bomb": 0}
 var shield_t := 0.0
 var kills := 0
+var kills_by := {}      # enemy kind -> people killed (mission stats)
 var rows_passed := 0
 var out: Array = []         # events for the view, drained each frame
 var target_kind := ""       # what the squad shot this tick: "horde" | "gate" | "obstacle" | ""
@@ -578,6 +579,7 @@ func _kill(h: Dictionary, k: int) -> void:
 		return
 	h["count"] = int(h["count"]) - k
 	kills += k
+	kills_by[String(h["enemy"])] = int(kills_by.get(String(h["enemy"]), 0)) + k
 	out.append({"type": "kill", "horde": h["id"], "n": k, "left": h["count"]})
 	if int(h["count"]) <= 0:
 		if h["boss"]:
