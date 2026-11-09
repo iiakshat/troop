@@ -48,6 +48,9 @@ var map_h := 0.0                ## map height at BASE_W
 var _k := 1.0                   # screen px per base px
 var _content: Control
 var _layers := {}
+var _hand: TextureRect = null   # first-build pointer
+var _hand_at := ""
+var _hand_tw: Tween = null
 var _bands: Array = []          # [{d, rect, pads: [], lock}]
 var _banners := {}              # district -> {box, num, icon, label, stars}
 var _nodes := {}                # level -> {btn, c, r, stars, lock, crown}
@@ -377,6 +380,38 @@ func _build_buildings() -> void:
 			"bubble": bubble, "status": "", "tex": "",
 		}
 		_bld_order.append(id)
+	# First-build pointer (one time, no words): a hand tapping the cheapest ruin the new
+	# player can afford, until the first building is started.
+	_hand = UiKit.icon("hand", 120)
+	_hand.size = Vector2(120, 120)
+	_hand.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hand.z_index = 0
+	_hand.visible = false
+	_layers["overlay"].add_child(_hand)
+
+
+func _point_hand(cheapest: String) -> void:
+	if _hand == null:
+		return
+	var show := cheapest != ""
+	if show and _hand_at != cheapest:
+		_hand_at = cheapest
+		var tag: Control = _bld[cheapest]["tag"]
+		# Fingertip (the icon's lower right) on the price tag.
+		var tip: Vector2 = _bld[cheapest]["pos"] + tag.position + tag.size * 0.5
+		_hand.position = tip - Vector2(108, 108)
+		if _hand_tw:
+			_hand_tw.kill()
+		_hand_tw = _hand.create_tween().set_loops()
+		var p := _hand.position
+		_hand_tw.tween_property(_hand, "position", p - Vector2(22, 22), 0.35).set_trans(Tween.TRANS_SINE)
+		_hand_tw.tween_property(_hand, "position", p, 0.35).set_trans(Tween.TRANS_SINE)
+	_hand.visible = show
+	if not show:
+		_hand_at = ""
+		if _hand_tw:
+			_hand_tw.kill()
+			_hand_tw = null
 
 
 func _build_nodes() -> void:
@@ -608,6 +643,9 @@ func _place_marker(animate: bool) -> void:
 func refresh_buildings() -> void:
 	if _bld.is_empty():
 		return
+	var cheapest := ""
+	var cheapest_cost := 1 << 30
+	var pointing := Game.first_build_pending()
 	var save: Dictionary = Game.save
 	var eco: Dictionary = Game.economy
 	var t: int = Game.now()
@@ -637,6 +675,9 @@ func refresh_buildings() -> void:
 			var cost := City.next_cost(save, id, eco)
 			can = cost >= 0 and coins >= cost and City.can_start(save, id, t, eco) == ""
 			(tag.get_meta("label") as Label).text = UiKit.fmt_coins(cost)
+			if pointing and can and cost < cheapest_cost:
+				cheapest = id
+				cheapest_cost = cost
 			tag.modulate = Color.WHITE if can else Color(1, 1, 1, 0.8)
 			var sb: StyleBoxFlat = tag.get_theme_stylebox("panel")
 			sb.bg_color = Color(0.12, 0.55, 0.2, 0.92) if can else Color(0.05, 0.1, 0.25, 0.78)
@@ -647,6 +688,7 @@ func refresh_buildings() -> void:
 		if bubble.visible:
 			(bubble.get_meta("label") as Label).text = UiKit.fmt_coins(amount)
 		e["status"] = st
+	_point_hand(cheapest)
 
 
 # ---------------------------------------------------------------- scrolling and input

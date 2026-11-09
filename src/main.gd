@@ -200,7 +200,7 @@ func _welcome_back_step(next: Callable) -> void:
 
 
 func _daily_step(next: Callable) -> void:
-	if bool(Game.daily_state().get("can_claim", false)) and _daily_shown != Game.today():
+	if bool(Game.daily_state().get("can_claim", false)) and _daily_shown != Game.today() and not Game.first_build_pending():
 		_daily_shown = Game.today()
 		_panel_step(DailyPanel.new(), next)
 	else:

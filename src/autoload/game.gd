@@ -516,6 +516,8 @@ func start_build(id: String, t := -1) -> bool:
 		return false
 	save["coins"] = int(save["coins"]) - cost
 	City.start_build(save, id, tt, economy)
+	if not hint_seen("first_build"):
+		(save["seen_hints"] as Array).append("first_build")
 	_record({"build": 1})
 	write_save()
 	_log("purchase", {"kind": "building", "id": id, "lv": City.target_level(save, id), "cost": cost})
@@ -683,10 +685,13 @@ func alerts(t := -1) -> Dictionary:
 			if c >= 0 and int(save["coins"]) >= c and City.can_start(save, id, tt, economy) == "":
 				city = true
 				break
+	# Until the first building is started, the map has one focus (the pointing hand on a
+	# ruin): the gift and wheel badges wait.
+	var first := first_build_pending()
 	return {
-		"daily": Daily.can_claim(save, date, economy),
+		"daily": Daily.can_claim(save, date, economy) and not first,
 		"missions": not Missions.claimable(save).is_empty() or Missions.bonus_ready(save),
-		"spin": Spin.can_spin_free(save, date, economy),
+		"spin": Spin.can_spin_free(save, date, economy) and not first,
 		"star_chest": bool(star_chest_progress()["ready"]),
 		"station": station,
 		"city": city,
@@ -721,6 +726,11 @@ func knife_skin() -> Dictionary:
 
 
 # ---------------------------------------------------------------- hints and settings
+
+## New player after level 1, before any building was started: the map points at a ruin.
+func first_build_pending() -> bool:
+	return level_beaten(1) and not hint_seen("first_build")
+
 
 func hint_seen(id: String) -> bool:
 	return (save["seen_hints"] as Array).has(id)

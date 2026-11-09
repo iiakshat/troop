@@ -10,7 +10,7 @@ const MAX_PARTS := 600
 const MAX_FIRES := 6
 ## Bullet-mesh scale per projectile kind (x/y thickness, z length).
 const BULLET_SCALE := {
-	"bullet": Vector3(1, 1, 1), "bullet_big": Vector3(1.6, 1.6, 1.6), "tracer": Vector3(0.8, 0.8, 0.8),
+	"bullet": Vector3(0.75, 0.75, 1), "bullet_big": Vector3(1.3, 1.3, 1.6), "tracer": Vector3(0.6, 0.6, 0.8),
 	"pellet": Vector3(0.6, 0.6, 0.45), "sniper_round": Vector3(0.7, 0.7, 4.0), "rocket": Vector3(2.4, 2.4, 1.1),
 }
 
@@ -31,7 +31,11 @@ var _trail := Color.TRANSPARENT
 
 func _ready() -> void:
 	_knife_mm = _mm(_knife_mesh(), MAX_PROJ, false, _lit_vertex_mat())
-	_bullet_mm = _mm(_bullet_mesh(), MAX_PROJ, false, _unshaded_vertex_mat())
+	# Semi-transparent tracers: a big army's fire reads as streaks, not a white wall.
+	var bm := _unshaded_vertex_mat() as StandardMaterial3D
+	bm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	bm.albedo_color = Color(1, 1, 1, 0.6)
+	_bullet_mm = _mm(_bullet_mesh(), MAX_PROJ, false, bm)
 	_lob_mm = _mm(_bottle_mesh(), MAX_LOB, false, _lit_vertex_mat())
 	var cube := BoxMesh.new()
 	cube.size = Vector3.ONE

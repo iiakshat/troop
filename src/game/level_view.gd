@@ -33,6 +33,9 @@ const ALLY_SFX := {
 }
 const CHAR_H := 1.85            # baked character height (config/characters.json)
 const BOSS_SCALE := 2.6         # bosses are drawn this much bigger than a thug
+const ENEMY_SCALE := 1.3        # gang members are drawn bigger than troops so far fights read
+const BOSS_BEAT_Z := -35.0      # a boss closer than this pulls the camera in (World.beat)
+const CAM_FOLLOW := 0.5         # the camera follows the squad sideways by this share
 const LASER_POOL := 6           # sniper telegraph beams on screen at once
 const STEER_PER_SCREEN := 14.0   # metres of squad travel for a full-width finger drag
 const LANE_SLACK := 0.35         # metres past the midpoint before the lane flips (no flicker)
@@ -88,6 +91,8 @@ var _laser_mat: StandardMaterial3D
 var _marks: Array = []         # per lane {node, mat, t, dur}: firebomb landing rings
 var _shown_count: Dictionary = {}  # ally kind -> figures drawn (updated on squad changes)
 var _boss_music := false
+var _slowmo := 0.0             # seconds of boss-death slow motion left (real time)
+var _key_light: OmniLight3D = null
 var _anim_t := 0.0             # animation clock (seconds)
 var _meshes: Dictionary = {}            # size -> BoxMesh / name -> Mesh, shared by this level's obstacles
 var _mats: Dictionary = {}              # colour -> StandardMaterial3D
@@ -130,7 +135,18 @@ func _ready() -> void:
 		var c := Crowd.new().setup(k, cap, "constable" if k in ALLY_KINDS else "thug")
 		add_child(c)
 		_crowds[k] = c
+		# Stronger rim light keeps figures off the road, more so at dusk and night.
+		(c.material_override as ShaderMaterial).set_shader_parameter("rim_strength",
+			(0.4 if k in ALLY_KINDS else 0.3) + (0.2 if district >= 4 else 0.0))
 	_build_lasers()
+	if district >= 4:
+		# Dusk and night: a soft key light rides with the squad so it never sinks into the road.
+		_key_light = OmniLight3D.new()
+		_key_light.omni_range = 10.0
+		_key_light.light_energy = 1.6 if district >= 5 else 1.0
+		_key_light.light_color = Color(1.0, 0.95, 0.85)
+		_key_light.shadow_enabled = false
+		add_child(_key_light)
 	_squad_label = GateRowView._label(font, 120, 0.011)
 	_squad_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_squad_label.no_depth_test = true
@@ -231,7 +247,7 @@ func _process(delta: float) -> void:
 		return
 	match _state:
 		"play":
-			_update_time_scale()
+			_update_time_scale(delta)
 			var d := delta * _time_scale
 			_acc += d
 			var steps := 0
@@ -263,8 +279,13 @@ func _process(delta: float) -> void:
 				finished.emit({"won": false, "cause": sim.lose_cause, "kills": sim.kills, "level": level_id})
 
 
-func _update_time_scale() -> void:
+func _update_time_scale(delta: float) -> void:
 	var target := 1.0
+	if _slowmo > 0.0:
+		# Boss death: half a second of slow motion (the sim stays exact, just slower).
+		_slowmo -= delta
+		_time_scale = 0.3
+		return
 	for id in _rows:
 		var row: Dictionary = (_rows[id] as GateRowView).row
 		var z := float(row["z"])
@@ -718,8 +739,16 @@ func _on_boss_hit(e: Dictionary) -> void:
 		fx.burst(p, Color(1.0, 0.93, 0.55), 5, 6.0, 0.12, 0.25, 2.0)
 		if hp <= 0:
 			var c := _horde_front(hv) + Vector3(0, CHAR_H * BOSS_SCALE * 0.5, 0)
-			fx.explosion(c, 1.5)
-			fx.confetti(c + Vector3(0, 2, 0), 50)
+			fx.explosion(c, 2.2)
+			fx.confetti(c + Vector3(0, 2, 0), 70)
+			fx.burst(c, Color(1.0, 0.8, 0.3), 30, 9.0, 0.3, 0.7, 5.0)
+			if hv.has("bar"):
+				# The HP bar shatters into red shards.
+				var bp: Vector3 = (hv["bar"] as Node3D).global_position
+				fx.burst(bp, Color("e0484f"), 26, 7.0, 0.24, 0.6, 4.0)
+				fx.burst(bp, Color(0.06, 0.06, 0.08), 12, 6.0, 0.2, 0.5, 3.0)
+				(hv["bar"] as Node3D).visible = false
+			_slowmo = 0.5
 	if hp <= 0:
 		world.shake(1.2)
 		Sfx.play("boom")
@@ -993,7 +1022,10 @@ func _slot_pos(slot: int, n: int) -> Vector3:
 	var r := 0.4 * k * sqrt(i + 0.7)
 	var a := i * 2.39996
 	var radius := 0.4 * k * sqrt(maxf(n, 1))
-	return Vector3(_squad_x + cos(a) * r * 1.35, 0, 0.3 + radius * 0.45 + sin(a) * r * 0.5 + lift)
+	# A big squad packs narrower and deeper, so it stays on screen in an outer lane.
+	var wide := lerpf(1.35, 0.95, clampf((n - 30) / 40.0, 0.0, 1.0))
+	var deep := lerpf(0.5, 0.62, clampf((n - 30) / 40.0, 0.0, 1.0))
+	return Vector3(_squad_x + cos(a) * r * wide, 0, 0.3 + radius * 0.45 + sin(a) * r * deep + lift)
 
 
 # ---------------------------------------------------------------- visuals
@@ -1050,15 +1082,27 @@ func _update_visuals(d: float) -> void:
 			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis.scaled(Vector3.ONE * ally_k), pos), "idle", _anim_t + ph, float(a["flash"]))
 
 	# Enemies
+	var cam := get_viewport().get_camera_3d()
+	var boss_near := false
+	for id in _hordes:
+		var bh: Dictionary = _hordes[id]["h"]
+		if _hordes[id].has("bar") and int(bh["count"]) > 0 and float(bh["z"]) > BOSS_BEAT_Z:
+			boss_near = true
+	if not demo:
+		# Camera beat while a boss walks in; the camera also follows the squad sideways.
+		world.beat = move_toward(world.beat, 1.0 if boss_near and _state == "play" else 0.0, d * 1.2)
+		world.follow_x = _squad_x * CAM_FOLLOW if _state == "play" or _state == "done" else lerpf(world.follow_x, 0.0, minf(d * 4.0, 1.0))
 	for id in _hordes:
 		var hv: Dictionary = _hordes[id]
 		var h: Dictionary = hv["h"]
 		var want := int(ceil(int(h["count"]) / float(hv["per"])))
 		var offs: Array = hv["offs"]
+		var esc := ENEMY_SCALE if hv["kind"] != "boss" else BOSS_SCALE
 		while offs.size() > want:
 			var o: Vector3 = offs.pop_front()
 			var p := _fig_pos(hv, o)
-			_dying.append({"kind": hv["kind"], "pos": p, "t": 0.0, "basis": Basis(Vector3.UP, PI)})
+			_dying.append({"kind": hv["kind"], "pos": p, "t": 0.0,
+				"basis": Basis(Vector3.UP, PI).scaled(Vector3.ONE * esc * crowd_scale(offs.size() + 1))})
 			fx.puff(p)
 		var crowd: Crowd = _crowds[hv["kind"]]
 		var clip := "shoot" if h["stopped"] else "run"
@@ -1066,9 +1110,7 @@ func _update_visuals(d: float) -> void:
 		var flash := float(hv["shoot_flash"])
 		hv["shoot_flash"] = maxf(flash - d, 0.0)
 		flash = maxf(flash * 2.0, float(hv["hit_flash"]))
-		var face := Basis(Vector3.UP, PI).scaled(Vector3.ONE * crowd_scale(offs.size()))
-		if hv["kind"] == "boss":
-			face = face.scaled(Vector3.ONE * BOSS_SCALE)
+		var face := Basis(Vector3.UP, PI).scaled(Vector3.ONE * crowd_scale(offs.size()) * esc)
 		for o in offs:
 			crowd.push(Transform3D(face, _fig_pos(hv, o)), clip, (_anim_t + o.y * 3.0) * speed, flash)
 		if hv.has("bar"):
@@ -1076,7 +1118,20 @@ func _update_visuals(d: float) -> void:
 			continue
 		var lab: Label3D = hv["label"]
 		var depth := (offs.back().z if not offs.is_empty() else 0.0) as float
-		lab.position = Vector3(0, 4.6 if hv["kind"] == "brute" else 3.6, float(h["z"]) - depth * 0.5)
+		var lz := float(h["z"]) - depth * 0.5
+		# Grows with distance (like the boss bar) so a far gang's count still reads.
+		var ls := 1.0
+		if cam:
+			ls = clampf(cam.global_position.distance_to(Vector3(0, 0, lz)) / 18.0, 1.0, 2.2)
+		lab.scale = Vector3.ONE * ls
+		var ly := (4.6 if hv["kind"] == "brute" else 3.6) * ENEMY_SCALE * 0.85 + 0.3 * (ls - 1.0)
+		# Escorts walking with a boss: their count sits above the boss's bar, never on his chest.
+		for bid in _hordes:
+			var bv: Dictionary = _hordes[bid]
+			if bv.has("bar") and absf(float(bv["h"]["z"]) - lz) < 7.0 and (bv["bar"] as Node3D).visible:
+				var bar_top: float = (bv["bar"] as Node3D).position.y + 0.4 * (bv["bar"] as Node3D).scale.y
+				ly = maxf(ly, bar_top + 0.7 * ls)
+		lab.position = Vector3(0, ly, lz)
 		if int(h["count"]) != int(hv["shown"]):
 			hv["shown"] = int(h["count"])
 			lab.text = str(int(h["count"]))
@@ -1109,10 +1164,10 @@ func _update_visuals(d: float) -> void:
 		c["t"] = float(c.get("t", 0.0)) + d
 		if p.distance_to(goal) < (2.6 if c["shielded"] else 0.8) or float(c["t"]) > 0.9:
 			fx.puff(p)
-			_dying.append({"kind": c["kind"], "pos": p, "t": 0.0, "basis": Basis(Vector3.UP, PI)})
+			_dying.append({"kind": c["kind"], "pos": p, "t": 0.0, "basis": Basis(Vector3.UP, PI).scaled(Vector3.ONE * ENEMY_SCALE)})
 			_charging.remove_at(i)
 			continue
-		(_crowds[c["kind"]] as Crowd).push(Transform3D(Basis(Vector3.UP, PI), p), "punch", float(c["t"]) * 1.4)
+		(_crowds[c["kind"]] as Crowd).push(Transform3D(Basis(Vector3.UP, PI).scaled(Vector3.ONE * ENEMY_SCALE), p), "punch", float(c["t"]) * 1.4)
 		i += 1
 	# Dead bodies: topple backwards flat onto the road, then ride the street past the squad
 	# and off the bottom of the screen.
@@ -1187,6 +1242,8 @@ func _update_visuals(d: float) -> void:
 	_label_pop = maxf(_label_pop - d * 4.0, 0.0)
 	_squad_label.text = str(sim.squad.total())
 	_squad_label.position = Vector3(_squad_x, 3.9, -0.8)
+	if _key_light:
+		_key_light.position = Vector3(_squad_x, 4.5, 2.5)
 	_squad_label.scale = Vector3.ONE * (1.0 + 0.5 * _label_pop)
 	_shield.visible = sim.shield_t > 0.0
 	if _shield.visible:
@@ -1243,6 +1300,13 @@ func _fire(a: Dictionary, target: Vector3) -> void:
 	var from: Vector3 = (a["pos"] as Vector3) + Vector3(0, 1.15, -0.4)
 	var spread := Vector3(randf_range(-0.3, 0.3), randf_range(-0.3, 0.3), 0)
 	var proj := String(unit["proj"])
+	# Visual only (the sim's damage is exact): past ~36 shooters, draw one tracer in k so a
+	# big army does not wall off the street; knives and rockets always show.
+	var keep := clampf(36.0 / maxf(float(_allies.size()), 1.0), 0.3, 1.0)
+	if kind != "hero" and proj != "rocket" and proj != "sniper_round" and randf() > keep:
+		var s0: Array = ALLY_SFX.get(kind, ["shot", "shot", -11.0])
+		_sfx(String(s0[0]), String(s0[1]), float(s0[2]), 1.1 if kind == "constable" else 1.0)
+		return
 	match proj:
 		"knife":
 			fx.shoot(proj, from, target + spread, 34.0)
