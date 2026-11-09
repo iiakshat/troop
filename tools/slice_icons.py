@@ -33,6 +33,13 @@ SHEETS = {
                              ["missions", "star_chest", "clock", "hammer", "map_pin"],
                              ["ad_play", "headstart", "boss_crown", "fire", "city_hall"],
                              ["crown", "trophy_gold", "stars3", "district_lock", "heart"]]},
+    # v1.1: rank headgear (one set for every rank), music / sound toggles, Squad Power.
+    # Gemini painted a 4x4 sheet for a 3x3 ask; "_" cells are spares and are skipped.
+    "icons_d.png": {"loose": True,
+                    "grid": [["rank_constable", "rank_hero", "rank_sniper", "power"],
+                             ["rank_commando", "music", "music_off", "_"],
+                             ["sound", "_", "_", "_"],
+                             ["_", "sound_off", "_", "_"]]},
 }
 
 
@@ -129,6 +136,8 @@ def cut(sheet, spec):
     rows, cols = len(grid), len(grid[0])
     for r, row in enumerate(grid):
         for col, name in enumerate(row):
+            if name.startswith("_"):
+                continue
             y0, y1 = r * H // rows, (r + 1) * H // rows
             x0, x1 = col * W // cols, (col + 1) * W // cols
             if spec.get("loose"):
@@ -147,12 +156,38 @@ def cut(sheet, spec):
             print("icon", name)
 
 
+def add_cross(sheet, cell, target):
+    """Pastes the red cross painted in `cell` (row, col of a 4x4 sheet) onto the lower right of
+    an already cut icon (the off speaker was painted without one)."""
+    from PIL import ImageFilter
+    a = np.asarray(Image.open(GEN / sheet).convert("RGB")).astype(float)
+    H, W = a.shape[:2]
+    r, col = cell
+    c = a[r * H // 4:(r + 1) * H // 4, col * W // 4:(col + 1) * W // 4]
+    red = (c[..., 0] > 120) & (c[..., 0] > c[..., 1] + 50) & (c[..., 0] > c[..., 2] + 50)
+    rgba = np.dstack([c, red * 255.0]).astype(np.uint8)
+    x = Image.fromarray(rgba, "RGBA")
+    x = x.crop(x.getbbox())
+    s = Image.open(OUT / f"{target}.png").convert("RGBA")
+    side = int(s.width * 0.36)
+    x = x.resize((side, int(side * x.height / x.width)), Image.LANCZOS)
+    outline = Image.new("RGBA", x.size, (20, 22, 48, 255))
+    outline.putalpha(x.split()[3].filter(ImageFilter.MaxFilter(9)))
+    pos = (s.width - side - 14, s.height - x.height - 14)
+    s.alpha_composite(outline, pos)
+    s.alpha_composite(x, pos)
+    s.save(OUT / f"{target}.png")
+    print("icon", target, "+ cross")
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     only = set(sys.argv[1:])
     for sheet, spec in SHEETS.items():
         if not only or sheet in only:
             cut(sheet, spec)
+            if sheet == "icons_d.png":
+                add_cross(sheet, (2, 1), "sound_off")
 
 
 if __name__ == "__main__":
