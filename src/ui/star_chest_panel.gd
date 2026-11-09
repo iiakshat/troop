@@ -62,7 +62,7 @@ func _ready() -> void:
 
 
 ## Stars progress towards the next chest (goal gradient), no fake promises.
-func _show_progress(where: Control) -> void:
+func _show_progress(_where: Control) -> void:
 	var prog := Game.star_chest_progress()
 	_chest.modulate = Color(1, 1, 1, 0.55)
 	var row := HBoxContainer.new()
@@ -76,10 +76,8 @@ func _show_progress(where: Control) -> void:
 	var need := int(prog.get("need", 15))
 	bar_set(bar, int(prog.get("have", 0)) - from, need - from, "%d/%d" % [int(prog.get("have", 0)), need])
 	row.add_child(bar)
-	var ok := UiKit.icon_button("play", "green", 124)
-	ok.custom_minimum_size.x = 260
-	ok.pressed.connect(close)
-	where.add_child(ok)
+	# No button here: the chest is not ready and the red X closes (a green play would read
+	# as "open" or "start a level").
 
 
 func _open_sequence() -> void:
