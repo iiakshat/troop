@@ -15,6 +15,8 @@ config/quit_on_go_back=false
 [autoload]
 
 Game="*res://src/autoload/game.gd"
+Ads="*res://src/autoload/ads.gd"
+Analytics="*res://src/autoload/analytics.gd"
 Sfx="*res://src/autoload/sfx.gd"
 
 [debug]

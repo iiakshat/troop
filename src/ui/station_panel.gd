@@ -2,7 +2,11 @@ class_name StationPanel
 extends Control
 ## Police station upgrades. One row per room: its glossy icon, what you have now ▸ what the
 ## next level gives (real numbers from the game: knife damage, throws per second, starting
-## squad, squad cap, coin bonus, powers at the start), level pips, and a coin price.
+## squad, squad cap, coin bonus, powers at the start), level pips (up to 10), and a coin price.
+## A level that needs a district liberated first shows district_lock + that district's number
+## on the button instead of the price. Frees itself on close and emits `closed`.
+
+signal closed
 
 var _rows: Dictionary = {}
 var _coins: HBoxContainer
@@ -31,7 +35,7 @@ func _ready() -> void:
 	rib.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(rib)
 	var close := UiKit.icon_button("close", "red", 96)
-	close.pressed.connect(queue_free)
+	close.pressed.connect(_close)
 	head.add_child(close)
 	_coins = UiKit.pill("coin", str(int(Game.save["coins"])))
 	_coins.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -79,19 +83,25 @@ func _row(room: String) -> Control:
 	pips.alignment = BoxContainer.ALIGNMENT_CENTER
 	pips.add_theme_constant_override("separation", 8)
 	mid.add_child(pips)
-	for i in int(r["max"]):
+	var n := maxi(int(r["max"]), 1)
+	var gap := 6 if n > 6 else 8
+	pips.add_theme_constant_override("separation", gap)
+	var pip_w := clampf(floorf((250.0 - (n - 1) * gap) / n), 14.0, 34.0)
+	for i in n:
 		var pip := Panel.new()
-		pip.custom_minimum_size = Vector2(28, 16)
+		pip.custom_minimum_size = Vector2(pip_w, 16)
 		pips.add_child(pip)
 
 	var buy := UiKit.button("", "green", 40, Vector2(190, 100))
 	buy.pressed.connect(func(): _buy(room))
 	row.add_child(buy)
-	var coin := UiKit.icon("coin", 46)
-	coin.position = Vector2(14, 20)
-	buy.add_child(coin)
-	_rows[room] = {"now": now, "next": next, "arrow": arrow, "pips": pips, "buy": buy, "coin": coin, "card": card}
+	_rows[room] = {"now": now, "next": next, "arrow": arrow, "pips": pips, "buy": buy, "card": card}
 	return card
+
+
+func _close() -> void:
+	closed.emit()
+	queue_free()
 
 
 ## The number a room shows at a given level, using the game's real base stats.
@@ -111,7 +121,7 @@ static func value_text(room: String, lv: int) -> String:
 		"coins":
 			return "+%d%%" % int(round(lv * per * 100))
 		"charges":
-			return ["0", "+1", "+2"][clampi(lv, 0, 2)]
+			return "+%d" % lv if lv > 0 else "0"
 	return str(lv)
 
 
@@ -128,9 +138,11 @@ func refresh() -> void:
 	UiKit.pill_set(_coins, str(int(Game.save["coins"])))
 	for room in _rows:
 		var c: Dictionary = _rows[room]
-		var lv := Game.room_level(room)
-		var cost := Game.room_cost(room)
-		var maxed := cost < 0
+		var state: Dictionary = Game.room_state(room)
+		var lv := int(state["lv"])
+		var cost := int(state["cost"])
+		var maxed := bool(state["maxed"])
+		var locked := int(state["locked"])
 		(c["now"] as Label).text = value_text(room, lv)
 		(c["next"] as Label).text = "" if maxed else value_text(room, lv + 1)
 		(c["arrow"] as Control).visible = not maxed
@@ -143,24 +155,20 @@ func refresh() -> void:
 			sb.border_color = UiKit.INK
 			(pips.get_child(i) as Panel).add_theme_stylebox_override("panel", sb)
 		var buy: Button = c["buy"]
-		var coin: Control = c["coin"]
 		if maxed:
-			buy.text = ""
 			buy.disabled = true
-			coin.visible = true
-			(coin as TextureRect).texture = UiKit.icon_texture("star_icon")
-			coin.position = Vector2(70, 20)
+			UiKit.button_row(buy, ["star_icon"], "", 40)
+		elif locked > 0:
+			buy.disabled = true
+			UiKit.button_row(buy, ["district_lock"], str(locked), 40)
 		else:
-			buy.text = "    %d" % cost
 			buy.disabled = int(Game.save["coins"]) < cost
-			(coin as TextureRect).texture = UiKit.icon_texture("coin")
-			coin.position = Vector2(14, 20)
+			UiKit.button_row(buy, ["coin"], UiKit.fmt_coins(cost), 40)
 
 
 ## True when the player can afford at least one upgrade (drives the "!" badges).
 static func anything_affordable() -> bool:
 	for room in Game.economy["station_order"]:
-		var cost := Game.room_cost(String(room))
-		if cost > 0 and int(Game.save["coins"]) >= cost:
+		if bool(Game.room_state(String(room))["can_buy"]):
 			return true
 	return false
