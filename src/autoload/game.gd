@@ -24,6 +24,11 @@ extends Node
 ## Police station: room_level(room)  room_cost(room) (-1 maxed or locked)  room_state(room)
 ##   -> {lv, max, cost, locked (district to liberate, 0 = open), maxed, can_buy}
 ##   buy_room(room) -> bool  upgrades()  coin_bonus()
+## Squad Power (v1.1): squad_power()  recommended_power(level)  room_power_gain(room)
+##   best_purchase(t) -> {kind, id, cost, gain} or {} (the map's pointing hand)
+##   best_upgrade_after_loss() -> {room, cost, gain, affordable} or {} (the loss screen)
+##   take_improvements() -> [{room, before, after}] bought since the last level start
+## New Rank card: rank_card_due(level) -> ally id or ""  mark_rank_card(unit)
 ## Boosters: boosters() -> {headstart, shield, bomb}  use_booster(id) -> bool
 ##   use_boosters({id: n}) -> what was really spent
 ##   booster_ad_available(id) -> bool  grant_booster_ad(id) -> bool (after a rewarded ad)
@@ -380,7 +385,9 @@ func buy_room(room: String) -> bool:
 	var cost := room_cost(room)
 	if cost < 0 or not spend(cost):
 		return false
-	save["station"][room] = room_level(room) + 1
+	var before := room_level(room)
+	save["station"][room] = before + 1
+	_note_improvement(room, before, before + 1)
 	_record({"upgrade": 1})
 	write_save()
 	_log("purchase", {"kind": "room", "id": room, "lv": room_level(room), "cost": cost})
@@ -394,6 +401,66 @@ func upgrades() -> Dictionary:
 
 func coin_bonus() -> float:
 	return float(upgrades()["coins"])
+
+
+# ---------------------------------------------------------------- squad power (v1.1)
+
+var _improved: Array = []                # [{room, before, after}] since the last level start
+
+
+func squad_power() -> int:
+	return Economy.station_power(save["station"], units, economy)
+
+
+func recommended_power(level: int) -> int:
+	return Economy.recommended_power(level, economy)
+
+
+func room_power_gain(room: String) -> int:
+	return Economy.room_power_gain(save["station"], room, units, economy)
+
+
+func best_purchase(t := -1) -> Dictionary:
+	return Economy.best_purchase(save, _t(t), economy, units)
+
+
+func best_upgrade_after_loss() -> Dictionary:
+	return Economy.best_upgrade_after_loss(save, economy, units)
+
+
+func _note_improvement(room: String, before: int, after: int) -> void:
+	for e in _improved:
+		if String(e["room"]) == room:
+			e["after"] = after
+			return
+	_improved.append({"room": room, "before": before, "after": after})
+
+
+## Upgrades bought since the last call (the next level start shows them briefly), then clears.
+func take_improvements() -> Array:
+	var out := _improved
+	_improved = []
+	return out
+
+
+## The rank whose New Rank card is due before `level`: an ally (not the hero or the starting
+## constable) that unlocks at exactly this level, or any earlier one never introduced, whose
+## card was not shown yet. "" when none.
+func rank_card_due(level: int) -> String:
+	var best := ""
+	var best_lv := 0
+	for id in units.get("allies", {}):
+		var lv := maxi(int(units["allies"][id].get("unlock", 1)), 1)
+		if lv <= 1 or lv > level or hint_seen("rank_card_" + String(id)) or rank_seen(String(id)):
+			continue
+		if lv > best_lv:
+			best = String(id)
+			best_lv = lv
+	return best
+
+
+func mark_rank_card(unit: String) -> void:
+	mark_hint("rank_card_" + unit)
 
 
 # ---------------------------------------------------------------- boosters

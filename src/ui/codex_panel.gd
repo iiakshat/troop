@@ -7,8 +7,15 @@ extends RetentionPanel
 ## same nominal formula here). Ranks not unlocked yet are dark with a lock, the district and the
 ## level that unlocks them. Enemy card: icon, name, hp, armour, speed, its threat icon and
 ## melee power. Enemies you have not reached yet are hidden behind a lock too.
+## v1.1: rank cards are sorted by their "= N" value (hero first), and every screen that shows a
+## rank (Codex, RankToast, New Rank card, gates) uses rank_icon() so the icons match.
 
-const RANK_ICONS := {"hero": ["knife"], "constable": ["badge", "pistol"]}
+## Preferred icons per rank, first that exists wins (the v1.1 headgear set first).
+const RANK_ICONS := {
+	"hero": ["rank_hero", "knife"], "constable": ["rank_constable", "badge", "pistol"],
+	"sergeant": ["sergeant"], "inspector": ["inspector"], "swat": ["swat"],
+	"sniper": ["rank_sniper", "sniper"], "commando": ["rank_commando", "commando"],
+}
 const ENEMY_ICONS := {"knifer": ["knife"], "gunman": ["pistol"], "biker": ["speed"]}
 
 var start_tab := "ranks"
@@ -53,7 +60,7 @@ func _show_tab(t: String) -> void:
 		c.queue_free()
 	if t == "ranks":
 		var allies: Dictionary = Game.units.get("allies", {})
-		for id in allies:
+		for id in ranks_by_value(allies):
 			_list.add_child(_rank_card(String(id), allies[id]))
 	else:
 		var enemies: Dictionary = Game.units.get("enemies", {})
@@ -62,6 +69,29 @@ func _show_tab(t: String) -> void:
 
 
 # ---------------------------------------------------------------- pure helpers (tested)
+
+## The icon for a rank, the same everywhere.
+static func rank_icon(id: String) -> String:
+	var names: Array = RANK_ICONS.get(id, []).duplicate()
+	var u: Dictionary = Game.units.get("allies", {}).get(id, {})
+	if u.has("icon"):
+		names.append(String(u["icon"]))
+	names.append_array([id, "badge"])
+	return first_icon(names)
+
+
+## Ally ids sorted by value vs a constable, weakest first; the hero (no value line) leads.
+static func ranks_by_value(allies: Dictionary) -> Array:
+	var ids: Array = allies.keys()
+	ids.sort_custom(func(a, b):
+		if String(a) == "hero" or String(b) == "hero":
+			return String(a) == "hero" and String(b) != "hero"
+		var va := value_of(allies, String(a))
+		var vb := value_of(allies, String(b))
+		if absf(va - vb) > 1e-6:
+			return va < vb
+		return unlock_level(allies[a]) < unlock_level(allies[b]))
+	return ids
 
 ## Nominal value of an ally vs a constable (both from the same stats table): dmg x rate x
 ## (burst x splash hits) relative to the constable. Prefers the sim's own function.
@@ -152,9 +182,7 @@ func _rank_card(id: String, u: Dictionary) -> Control:
 	var locked := _locked(u, id, true)
 	var parts := _base_card(locked)
 	var row: HBoxContainer = parts[1]
-	var names: Array = RANK_ICONS.get(id, []).duplicate()
-	names.push_front(String(u.get("icon", id)))
-	var ic := icon_safe(first_icon(names), 104)
+	var ic := icon_safe(rank_icon(id), 104)
 	if locked:
 		ic.modulate = Color(0, 0, 0, 0.85)
 	row.add_child(ic)
@@ -182,7 +210,12 @@ func _rank_card(id: String, u: Dictionary) -> Control:
 	if v != "":
 		var vb := card_box(UiKit.YELLOW, 6, 18, 4)
 		vb.custom_minimum_size = Vector2(118, 0)
-		vb.add_child(UiKit.label(v, 40, Color.WHITE, 9))
+		var vr := HBoxContainer.new()
+		vr.add_theme_constant_override("separation", 2)
+		vr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vb.add_child(vr)
+		vr.add_child(UiKit.label(v, 40, Color.WHITE, 9))
+		vr.add_child(icon_safe(rank_icon("constable"), 40))
 		row.add_child(vb)
 	return parts[0]
 

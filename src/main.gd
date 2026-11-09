@@ -259,6 +259,17 @@ func _open_boosters(n: int, over_result := false) -> void:
 	if _autoplay():
 		_start_level(n)
 		return
+	# v1.1: a rank unlocking at this level gets its New Rank card first (once ever).
+	var due := Game.rank_card_due(n)
+	if due != "":
+		Game.mark_rank_card(due)
+		var card := RankUnlockPanel.new(due)
+		card.closed.connect(func(): _open_boosters.call_deferred(n, over_result), CONNECT_ONE_SHOT)
+		if is_instance_valid(lobby) and not over_result:
+			lobby.open_panel(card)
+		else:
+			ui.add_child(card)
+		return
 	var p := BoosterPanel.new(n)
 	p.start.connect(func(used: Dictionary): _start_level.call_deferred(n, used), CONNECT_ONE_SHOT)
 	if is_instance_valid(lobby) and not over_result:
@@ -314,6 +325,9 @@ func _start_level(n: int, boosters: Dictionary = {}) -> void:
 	hud.set_charges(view.sim.charges)
 	Sfx.play_music("level")  # LevelView switches to "boss" when the Kingpin walks in, and back when he dies
 	Game.level_started(n, boosters)
+	var improved := Game.take_improvements()
+	if not _autoplay():
+		RankToast.show_upgrades(hud, improved)  # v1.1: what the last Station visit improved
 	if _autoplay():
 		# lanes=… wins; otherwise the level's stored winning route (tune.gd), then a fixed default.
 		var lanes: Array = []
