@@ -296,7 +296,7 @@ func _start_level(n: int, boosters: Dictionary = {}) -> void:
 	hud.pause_pressed.connect(_toggle_pause)
 	_charges = view.sim.charges.duplicate()
 	hud.set_charges(view.sim.charges)
-	Sfx.play_music("boss" if Economy.is_boss(n, Game.economy) else "level")
+	Sfx.play_music("level")  # LevelView switches to "boss" when the Kingpin walks in, and back when he dies
 	Game.level_started(n, boosters)
 	if _autoplay():
 		var lanes: Array = []
@@ -416,7 +416,7 @@ func _do_revive() -> void:
 		view.squad_changed.emit(view.sim.squad.total())
 	if hud:
 		hud.visible = true
-	Sfx.play_music("boss" if Economy.is_boss(current_level, Game.economy) else "level")
+	Sfx.play_music("boss" if bool(view.get("_boss_music")) else "level")
 
 
 func _show_loss(r: Dictionary) -> void:

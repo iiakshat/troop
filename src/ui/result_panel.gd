@@ -140,7 +140,7 @@ func _pop_star(star: Control, i: int) -> void:
 		return
 	star.visible = true
 	UiKit.pop(star, 2.2)
-	RetentionPanel.sfx(["star%d" % (i + 1), "gate_good", "coin"], 0.0, 1.0 + 0.08 * i)
+	RetentionPanel.sfx(["star%d" % (i + 1), "gate_good", "coin"], 0.0, 1.0)
 	_burst(star.get_global_rect().get_center(), 10)
 
 
