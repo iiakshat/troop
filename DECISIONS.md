@@ -96,3 +96,19 @@ Unity wasn't installed, would need about 15 GB plus a licence sign-in, and is he
 **Mission stats are counted at the end of a run** from the sim (kills per enemy kind via `LevelSim.kills_by`, bottles, powers used by watching charges drop), so a quit mid-level doesn't count partial progress twice and revives add up correctly.
 
 **World themes are visual-only tables in world.gd**, not config: sky, sun, fog and tint per district have no gameplay meaning. Night extras are fake glows (additive quads, emissive neon), not real lights, for phone performance; window masks use the MULTIPLY emission operator; glass shards are unshaded because lit transparent emission rendered black on the Mobile renderer.
+
+## v1.0 merge-verify (2026-11-09)
+
+**Calibration is the source of level balance.** `tools/gen_levels.py` writes the 50 levels, `tests/tune.gd calibrate=1` fits a per-level gang scale to each level's `target_win`, and `config/levels/calibration.json` keeps the scale plus the winning routes (`route`, and `route_np` for L1-10 without powers). The generator's own sizer makes gangs 2-10x too big, so fitted scales sit well below 1; fixing the sizer is a later SIM task.
+
+**Planned routes still end near full strength** (85-100% of peak; spec §2 wanted 30-60%). The last-wave fit could not reach that even at 4x, so it falls back to x1.5 and stars are 3 at 85%, 2 at 45% of peak. Open for the owner: lower the 150 cap, add percent damage late, or allow a bigger last wave.
+
+**Revive shield 4 s, not 2 s.** A revive is paid for with a rewarded ad; with 2 s, a molotov volley already in flight (throw every 2.5 s, 1.1 s flight) could wipe the revived squad, which would make the ad a bad deal. 4 s covers one full throw cycle.
+
+**Autoplay follows the stored winning route** when no `lanes=` is given, so `chain=N` and screenshot runs reach later levels; under autoplay the star chest closes itself after 2.5 s.
+
+**`save=path` never touches the real save**, even when the file is missing (it then starts a blank player). An agent run without a real file behind `save=` had written test coins into the owner's save; it was restored from the 09:53 backup.
+
+**Gang HQ sign is the gang's hood icon**, not the words "GANG HQ" (no words on game objects).
+
+**Music:** a level always starts on the level loop; LevelView switches to the boss loop when the Kingpin walks in and back when he dies; a revive resumes whichever is right.

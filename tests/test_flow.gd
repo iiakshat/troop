@@ -48,3 +48,28 @@ func test_kills_are_counted_per_enemy_kind() -> void:
 		sum += int(sim.kills_by[kind])
 	check(sim.kills > 0, "level 1 autoplay kills someone")
 	eq(sum, sim.kills, "per-kind kills add up to the total")
+
+
+## AUDIO: numbered files are takes of an existing id; star1-3 stay separate notes of one chord.
+func test_sfx_groups_takes() -> void:
+	var g: Dictionary = preload("res://src/autoload/sfx.gd").group_files(
+		PackedStringArray(["glass_break", "glass_break2", "glass_break3", "star1", "star2", "star3"]))
+	check(g.get("glass_break", []) == ["glass_break", "glass_break2", "glass_break3"], "glass_break2/3 are takes of glass_break")
+	check(g.has("star1") and g.has("star2") and g.has("star3"), "star1-3 stay their own ids")
+
+
+## AUDIO: every spec sound id has a file, and duck runs without errors from a script.
+func test_sfx_ids_and_calls() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	var sfx: Node = tree.root.get_node_or_null("Sfx")
+	if sfx == null:
+		check(false, "Sfx autoload present")
+		return
+	for id in ["knife", "shot", "shot_sniper", "shot_shotgun", "launcher", "glass_break", "glass_tinkle",
+			"punch", "hit", "die", "hurt", "coin", "rank_up", "boss_roar", "fire", "pothole", "star1", "star3"]:
+		check(ResourceLoader.exists("res://assets/audio/%s.ogg" % id), "sound file for %s" % id)
+	# play()/play_music() are exercised by the autoplay runs; here they would leave playbacks
+	# the headless dummy audio driver never frees (exit-time "resources still in use").
+	sfx.duck_music(true)
+	sfx.duck_music(false)
+	check(true, "Sfx duck calls ran")

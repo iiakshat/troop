@@ -25,7 +25,8 @@ A 2.5D arithmetic army game for Android (portrait, offline). The squad stays put
   - Loss → RevivePanel once per level (rewarded ad, +50% of the peak squad) → "so close" result.
   - Mission stats: kills per enemy kind, bottles, gold bottles, wins, 3 stars, bombs and shields used; city coins, builds and upgrades are recorded by Game itself.
   - Placeholder ad popup at every placement in normal play; autoplay and headless skip it.
-- **Known open items:** the level winnability test fails until SIM-FINISH re-tunes the 50 levels; LevelView has no crowds yet for the new ranks/enemies (script errors at sergeant/molotov recruit gates); revive can be undone by the next molotov firebomb (2 s shield, 2.5 s throws); no real SFX recordings yet for many spec ids (synth fallbacks).
+- **2026-11-09, merge-verify:** SIM-FINISH (all 50 levels calibrated, stored winning routes), VIEW (crowds and effects for every new rank/enemy, boss bar, district themes, `rank_joined`, `revive()`), WIRE (flow) and AUDIO (real recordings for every spec id, Lyria loops) are merged. 121 tests pass. Autoplay without `lanes=` drives the level's stored `route`; `chain=N` plays L1 onward unattended. Revive shield is 4 s (outlasts one molotov throw). The Gang HQ sign is an icon.
+- **Known open items:** planned routes still finish at ~85-100% of their peak squad (spec wanted 30-60%; needs an owner design call, see DECISIONS.md); L23 is harder and L12/20/26/31 easier than their win targets; the owner has not listened to the new sounds yet.
 - **Not done:** real ads and analytics SDKs, store listing, real-device performance check on low-end phones, package ID, name check.
 - **2026-11-08, v0.3:** Vulkan Mobile look, Gemini-painted facades, toon crowds, Bottle Shot with refractive glass, station redesign, recorded gunshots.
 - **APKs are built locally** (owner's choice, 2026-11-08): GitHub Actions is refused for the whole account ("locked due to a billing issue"), so `build_apk.bat` builds on the laptop. The CI workflow stays in the repo for when billing is fixed.
@@ -41,9 +42,10 @@ A 2.5D arithmetic army game for Android (portrait, offline). The squad stays put
 - Godot: `../_tools/godot/Godot_v4.7.2-stable_win64_console.exe` (call it `$G`).
 - Import: `$G --headless --path . --import` (also after adding a new `class_name` file).
 - Tests: `$G --headless --path . --script res://tests/run_tests.gd`
-- Tuning report: `$G --headless --path . --script res://tests/tune.gd -- [level=N] [upgrades=k,s,q]`
+- Tuning report: `$G --headless --path . --script res://tests/tune.gd -- [level=N | levels=A-B] [upgrades=k,s,q] [out=x.json]` (run 6 processes over level ranges; ~2 min).
+- Level calibration (after any change to `units.json`, `level_sim.gd` or the generator): `tune.gd calibrate=1 out=...` per range, then `python -I tools/gen_levels.py --merge <outs>`, then a plain `tune.gd out=...` run (this records the winning `route`/`route_np`), then `--merge` again. Levels stuck at the gang-scale floor: `calibrate=1 ratio=0` on top. `config/levels/calibration.json` holds each level's scale and stored routes; uncalibrated levels regenerate byte-identically.
 - Debug args after `--` (see the top of `src/main.gd`): `level=N autoplay=1 lanes=2,1,1 strike=1 boosters=headstart,bomb report=1 revive=1|auto stop_at=win|loss|revive frames=N screenshot=path shots=100,200 out=prefix lobby=1 reset=1 coins=N save=path.json ads=1 panel=station|style|settings|daily|missions|spin|codex|booster|chest|welcome|revive|liberation|map|ad|interstitial`. `save=` plays on a copy of a JSON save and never writes; autoplay/save runs log analytics to `user://events_debug.log`. For screenshots add `--always-on-top --position 0,0 --fixed-fps 60 --resolution 540x960`. Autoplay ignores mouse and touch and skips boosters, revive and ads.
-- Delete `%APPDATA%\Godot\app_userdata\Troop\save.json` to test as a new player (a new player skips the menu).
+- Delete `%APPDATA%\Godot\app_userdata\Troop\save.json` to test as a new player (a new player skips the menu). Agents: always pass `save=_local/x.json` (a missing file = blank player, never written); `level=... strike=1` without it writes coins and progress into the owner's real save.
 
 ## Code layout
 

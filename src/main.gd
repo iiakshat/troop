@@ -454,6 +454,8 @@ func _leave_result(go_next: bool) -> void:
 		var p := StarChestPanel.new()
 		p.closed.connect(after_chest, CONNECT_ONE_SHOT)
 		ui.add_child(p)
+		if _autoplay():  # nobody taps under autoplay (chain=N would stall here)
+			_after(2.5, func(): if is_instance_valid(p) and p.is_inside_tree(): p.close())
 	else:
 		after_chest.call()
 
