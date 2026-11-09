@@ -694,7 +694,7 @@ def level_1() -> dict:
             {"lane": 0, "op": "num", "v": 6}, {"lane": 1, "op": "mul", "k": 2},
             # a small red gate where the first gate choice (+10, lane 2) leaves the squad: the
             # red-gate lesson comes early for every new player (v1.1 tutorial fix)
-            {"lane": 2, "op": "num", "v": -3, "step": 0.5, "max": 9}]},
+            {"lane": 2, "op": "num", "v": -3, "step": 4, "max": 9}]},
         {"at": 158, "type": "wave", "groups": [{"enemy": "thug", "n": 70}]},
         {"at": 192, "type": "gates", "gates": [
             {"lane": 0, "op": "num", "v": 12}, {"lane": 1, "op": "num", "v": -4, "step": 1.5, "max": 8},

@@ -82,7 +82,8 @@ static func toggle_button(key: String, on_icon: String, off_icon: String, px := 
 static func _paint(b: Button, on: bool, on_icon: String, off_icon: String) -> void:
 	var ic: TextureRect = b.get_meta("icon")
 	ic.texture = UiKit.icon_texture(on_icon if on else off_icon)
-	ic.modulate = Color.WHITE if on else Color(0.25, 0.25, 0.3, 1.0)
+	# Off: the glossy icons carry their own slash; a plain glyph turns dark so it reads as off.
+	ic.modulate = Color.WHITE if on or UiKit.is_gloss(off_icon) else Color(0.25, 0.25, 0.3, 1.0)
 	var colr := "green" if on else "grey"
 	for st in ["normal", "hover", "focus"]:
 		b.add_theme_stylebox_override(st, UiKit._tex_box(colr, "square"))

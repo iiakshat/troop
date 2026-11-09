@@ -605,6 +605,7 @@ func refresh_levels() -> void:
 
 
 const WARN_TINT := Color(1.0, 0.62, 0.55)
+const TOP_BAR_Y := 120.0          ## screen y (px) of the lobby top bar's lower edge
 const POWER_AHEAD := 4            ## the power pill shows on the current level and this many after it
 
 
@@ -852,6 +853,12 @@ func _process(delta: float) -> void:
 	if _tick >= 0.5:
 		_tick = 0.0
 		refresh_buildings()
+	# Recommended-power pills fade out under the lobby's top bar, so they never sit next to
+	# (and read as part of) the player's own power number.
+	for n in _nodes:
+		var pw: Control = _nodes[n]["power"]
+		if pw.visible:
+			pw.modulate.a = clampf((pw.global_position.y - TOP_BAR_Y) / 40.0, 0.0, 1.0)
 
 
 ## Content point (base px) under a point of this control.

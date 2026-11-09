@@ -23,7 +23,7 @@
     {"at": 267, "type": "hint", "id": "commando", "icon": "commando"},
     {"at": 269, "type": "wave", "groups": [{"enemy": "biker", "n": 109}]},
     {"at": 297, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "commando", "n": 7}, {"lane": 1, "op": "recruit", "unit": "commando", "n": 5}, {"lane": 2, "op": "recruit", "unit": "inspector", "n": 12}]},
-    {"at": 331, "type": "wave", "groups": [{"enemy": "thug", "n": 95}, {"enemy": "gunman", "n": 109, "gap": 10}]},
+    {"at": 331, "type": "wave", "groups": [{"enemy": "thug", "n": 94}, {"enemy": "gunman", "n": 109, "gap": 10}]},
     {"at": 360, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -45, "step": 20.9, "max": 40, "inc": 4}, {"lane": 1, "op": "pct", "v": 50}, {"lane": 2, "op": "num", "v": -32, "step": 18.2, "max": 40, "inc": 3}]},
     {"at": 394, "type": "wave", "groups": [{"enemy": "thug", "n": 125}, {"enemy": "brute", "n": 65, "gap": 6}]},
     {"at": 417, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 335, "block_reach": 12, "dmg_pct": 10},
@@ -32,7 +32,7 @@
     {"at": 451, "type": "obstacle", "kind": "car", "lane": 2, "hp": 905, "dmg_pct": 20},
     {"at": 485, "type": "wave", "groups": [{"enemy": "riot", "n": 27}, {"enemy": "brute", "n": 32, "gap": 8}, {"enemy": "gunman", "n": 39, "gap": 16}]},
     {"at": 514, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "pct", "v": -30, "inc": 10, "step": 122.5, "max": 20}, {"lane": 2, "op": "recruit", "unit": "sniper", "n": 12}]},
-    {"at": 548, "type": "wave", "groups": [{"enemy": "thug", "n": 367}, {"enemy": "grenadier", "n": 122, "gap": 10}], "label": "STREET WAR"},
+    {"at": 548, "type": "wave", "groups": [{"enemy": "thug", "n": 549}, {"enemy": "grenadier", "n": 183, "gap": 10}], "label": "STREET WAR"},
     {"at": 580, "type": "finish"}
   ]
 }
