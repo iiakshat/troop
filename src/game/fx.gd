@@ -1,10 +1,18 @@
 class_name Fx
 extends Node3D
-## Pooled visual effects: projectiles (knives, bullets, tracers), cube particles and
-## floating numbers. All MultiMesh based, so a big fight costs a handful of draw calls.
+## Pooled visual effects: projectiles (knives, bullets, tracers, pellets, sniper rounds,
+## rockets, lobbed firebombs), cube particles, lingering fires and floating numbers.
+## All MultiMesh based, so a big fight costs a handful of draw calls.
 
 const MAX_PROJ := 320
+const MAX_LOB := 48
 const MAX_PARTS := 600
+const MAX_FIRES := 6
+## Bullet-mesh scale per projectile kind (x/y thickness, z length).
+const BULLET_SCALE := {
+	"bullet": Vector3(1, 1, 1), "bullet_big": Vector3(1.6, 1.6, 1.6), "tracer": Vector3(0.8, 0.8, 0.8),
+	"pellet": Vector3(0.6, 0.6, 0.45), "sniper_round": Vector3(0.7, 0.7, 4.0), "rocket": Vector3(2.4, 2.4, 1.1),
+}
 
 var font: Font
 
@@ -12,6 +20,8 @@ var _proj: Array = []      # {pos, vel, t, kind, spin}
 var _parts: Array = []     # {pos, vel, t, life, col, size, grav}
 var _knife_mm: MultiMesh
 var _bullet_mm: MultiMesh
+var _lob_mm: MultiMesh     # firebomb bottles and grenades (lit, tumbling)
+var _fires: Array = []     # {pos, t, life}: burning patches on the road
 var _part_mm: MultiMesh
 var _labels: Array[Label3D] = []
 var _label_state: Array = []
@@ -22,6 +32,7 @@ var _trail := Color.TRANSPARENT
 func _ready() -> void:
 	_knife_mm = _mm(_knife_mesh(), MAX_PROJ, false, _lit_vertex_mat())
 	_bullet_mm = _mm(_bullet_mesh(), MAX_PROJ, false, _unshaded_vertex_mat())
+	_lob_mm = _mm(_bottle_mesh(), MAX_LOB, false, _lit_vertex_mat())
 	var cube := BoxMesh.new()
 	cube.size = Vector3.ONE
 	_part_mm = _mm(cube, MAX_PARTS, true, _unshaded_instance_mat())
@@ -36,6 +47,7 @@ func set_knife_skin(blade: Color, trail: String) -> void:
 func clear() -> void:
 	_proj.clear()
 	_parts.clear()
+	_fires.clear()
 	for i in _labels.size():
 		_labels[i].visible = false
 		_label_state[i]["t"] = 0.0
@@ -49,8 +61,23 @@ func shoot(kind: String, from: Vector3, to: Vector3, speed := 48.0) -> float:
 		return 0.0
 	var d := to - from
 	var t := maxf(d.length() / speed, 0.05)
-	_proj.append({"pos": from, "vel": d / t, "t": t, "kind": kind, "spin": randf() * TAU})
+	_proj.append({"pos": from, "vel": d / t, "t": t, "kind": kind, "spin": randf() * TAU, "grav": 0.0})
 	return t
+
+
+## Lobs a tumbling bottle/grenade from `from` so it lands on `to` after `t` seconds, peaking
+## `height` metres above the higher end. It just vanishes on landing: the caller shows the
+## outcome when the sim reports it.
+func lob(from: Vector3, to: Vector3, t: float, height := 5.0) -> void:
+	if _proj.size() >= MAX_PROJ:
+		return
+	t = maxf(t, 0.2)
+	var peak := maxf(from.y, to.y) + height
+	# Solve the vertical launch speed and gravity for that apex and flight time.
+	var g := 2.0 * ((peak - from.y) + (peak - to.y) + 2.0 * sqrt((peak - from.y) * (peak - to.y))) / (t * t)
+	var vy := (to.y - from.y) / t + 0.5 * g * t
+	var vel := Vector3((to.x - from.x) / t, vy, (to.z - from.z) / t)
+	_proj.append({"pos": from, "vel": vel, "t": t, "kind": "lob", "spin": randf() * TAU, "grav": g})
 
 
 # ---------------------------------------------------------------- particles
@@ -73,6 +100,25 @@ func explosion(at: Vector3, scale := 1.0) -> void:
 	burst(at, Color(1.0, 0.75, 0.2), int(30 * scale), 9.0 * scale, 0.4, 0.7, 6.0, 9.0)
 	burst(at, Color(1.0, 0.35, 0.15), int(20 * scale), 7.0 * scale, 0.5, 0.6, 4.0, 6.0)
 	burst(at, Color(0.35, 0.35, 0.38), int(18 * scale), 4.0 * scale, 0.7, 1.0, 5.0, 2.0)
+
+
+## Flat ring of sparks spreading along the road (revive, new rank).
+func ring(at: Vector3, color: Color, n := 36, speed := 9.0, size := 0.2) -> void:
+	for i in n:
+		if _parts.size() >= MAX_PARTS:
+			_parts.pop_front()
+		var a := TAU * i / n
+		_parts.append({"pos": at, "vel": Vector3(cos(a), 0.15, sin(a)) * speed * randf_range(0.85, 1.1),
+			"t": 0.0, "life": 0.55, "col": color, "size": size, "grav": 0.0})
+
+
+## Splash of burning fuel that keeps flickering on the road for `life` seconds.
+func fire(at: Vector3, life := 1.4) -> void:
+	burst(at + Vector3(0, 0.3, 0), Color(1.0, 0.55, 0.1), 30, 8.0, 0.45, 0.6, 4.0, 8.0)
+	burst(at + Vector3(0, 0.3, 0), Color(1.0, 0.3, 0.08), 16, 6.0, 0.32, 0.5, 5.0, 8.0)
+	if _fires.size() >= MAX_FIRES:
+		_fires.pop_front()
+	_fires.append({"pos": at, "t": 0.0, "life": life})
 
 
 func confetti(at: Vector3, n := 40) -> void:
@@ -119,6 +165,7 @@ func float_text(text: String, at: Vector3, color: Color, size := 1.0, rise := 2.
 
 func _process(delta: float) -> void:
 	_tick_proj(delta)
+	_tick_fires(delta)
 	_tick_parts(delta)
 	_tick_labels(delta)
 
@@ -126,17 +173,31 @@ func _process(delta: float) -> void:
 func _tick_proj(delta: float) -> void:
 	var kn := 0
 	var bn := 0
+	var ln := 0
 	var i := 0
 	while i < _proj.size():
 		var p: Dictionary = _proj[i]
+		var kind: String = p["kind"]
 		p["t"] = float(p["t"]) - delta
 		if float(p["t"]) <= 0.0:
+			if kind == "rocket":
+				explosion(p["pos"], 0.35)
 			_proj.remove_at(i)
 			continue
-		p["pos"] = (p["pos"] as Vector3) + (p["vel"] as Vector3) * delta
 		var vel: Vector3 = p["vel"]
+		if float(p["grav"]) != 0.0:
+			vel.y -= float(p["grav"]) * delta
+			p["vel"] = vel
+		p["pos"] = (p["pos"] as Vector3) + vel * delta
 		var basis := Basis.looking_at(vel.normalized(), Vector3.UP) if vel.length() > 0.01 else Basis()
-		if p["kind"] == "knife":
+		if kind == "lob":
+			p["spin"] = float(p["spin"]) + delta * 12.0
+			if randf() < 0.7:
+				burst(p["pos"], Color(1.0, 0.5 + randf() * 0.3, 0.1), 2, 0.8, 0.55, 0.45, 1.0, -2.0)
+			if ln < MAX_LOB:
+				_lob_mm.set_instance_transform(ln, Transform3D(Basis(Vector3.RIGHT, float(p["spin"])).scaled(Vector3.ONE * 1.8), p["pos"]))
+				ln += 1
+		elif kind == "knife":
 			p["spin"] = float(p["spin"]) + delta * 28.0
 			if _trail.a > 0.0 and randf() < 0.6:
 				burst(p["pos"], _trail, 1, 0.4, 0.1, 0.25, 0.0, 0.0)
@@ -144,12 +205,35 @@ func _tick_proj(delta: float) -> void:
 			_knife_mm.set_instance_transform(kn, Transform3D(basis, p["pos"]))
 			kn += 1
 		else:
-			var sc := 1.6 if p["kind"] == "bullet_big" else (1.0 if p["kind"] == "bullet" else 0.8)
-			_bullet_mm.set_instance_transform(bn, Transform3D(basis.scaled(Vector3(sc, sc, sc)), p["pos"]))
+			if kind == "rocket" and randf() < 0.8:
+				burst(p["pos"], Color(0.75, 0.75, 0.78), 1, 0.5, 0.26, 0.45, 0.6, -1.0)
+			var sc: Vector3 = BULLET_SCALE.get(kind, Vector3(0.8, 0.8, 0.8))
+			_bullet_mm.set_instance_transform(bn, Transform3D(basis.scaled_local(sc), p["pos"]))
 			bn += 1
 		i += 1
 	_knife_mm.visible_instance_count = kn
 	_bullet_mm.visible_instance_count = bn
+	_lob_mm.visible_instance_count = ln
+
+
+func _tick_fires(delta: float) -> void:
+	var i := 0
+	while i < _fires.size():
+		var f: Dictionary = _fires[i]
+		f["t"] = float(f["t"]) + delta
+		if float(f["t"]) >= float(f["life"]):
+			_fires.remove_at(i)
+			continue
+		var p: Vector3 = f["pos"]
+		p.z += scroll_speed * delta
+		f["pos"] = p
+		var k := 1.0 - float(f["t"]) / float(f["life"])
+		# Flames lick upwards (negative gravity) from a spread-out puddle.
+		var at := p + Vector3(randf_range(-1.1, 1.1), 0.15, randf_range(-0.8, 0.8))
+		burst(at, Color(1.0, 0.45 + randf() * 0.4, 0.1), 1, 0.6, 0.5 * k + 0.15, 0.45, 2.5, -4.0)
+		if randf() < 0.3:
+			burst(at + Vector3(0, 0.8, 0), Color(0.25, 0.22, 0.22), 1, 0.4, 0.4, 0.8, 1.5, -2.0)
+		i += 1
 
 
 func _tick_parts(delta: float) -> void:
@@ -227,6 +311,17 @@ func _knife_mesh(blade := Color(0.92, 0.95, 1.0)) -> Mesh:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	_cube(st, Vector3(0, 0, -0.28), Vector3(0.1, 0.18, 0.66), blade)
 	_cube(st, Vector3(0, 0, 0.2), Vector3(0.13, 0.2, 0.32), Color(0.35, 0.22, 0.12))
+	st.generate_normals()
+	return st.commit()
+
+
+## Firebomb: green glass bottle with a burning rag.
+func _bottle_mesh() -> Mesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_cube(st, Vector3(0, -0.1, 0), Vector3(0.5, 0.75, 0.5), Color(0.2, 0.55, 0.28))
+	_cube(st, Vector3(0, 0.42, 0), Vector3(0.2, 0.3, 0.2), Color(0.2, 0.55, 0.28))
+	_cube(st, Vector3(0, 0.68, 0), Vector3(0.28, 0.26, 0.28), Color(1.0, 0.75, 0.3))
 	st.generate_normals()
 	return st.commit()
 

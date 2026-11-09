@@ -11,13 +11,29 @@ signal charges_changed(charges: Dictionary)
 signal strike_ready
 signal tutorial(active: bool)
 signal finished(result: Dictionary)
+signal rank_joined(unit: String, first_time: bool)
 
 const LANE_X := [-2.8, 0.0, 2.8]
 const ALLY_CAP := 72
 const HORDE_CAP := 180
 const DT := 1.0 / 60.0
-const ENEMY_KINDS := ["thug", "knifer", "gunman", "brute", "riot", "biker", "boss"]
-const ALLY_KINDS := ["hero", "constable", "inspector", "swat"]
+const ENEMY_KINDS := ["thug", "knifer", "gunman", "brute", "riot", "biker", "boss",
+	"molotov", "sniper_foe", "grenadier"]
+const ALLY_KINDS := ["hero", "constable", "sergeant", "inspector", "swat", "sniper", "commando"]
+## Blob order, front to back: the hero leads, the heavy hitters next, constables behind.
+const ALLY_ORDER := {"hero": 0, "sniper": 1, "commando": 2, "swat": 3, "inspector": 4, "sergeant": 5, "constable": 6}
+## Figures each enemy crowd can draw at once (all gangs of that kind together, plus bodies).
+## Small specialist gangs need far fewer than the mobs.
+const ENEMY_CAP := {"boss": 4, "sniper_foe": 120, "molotov": 240, "grenadier": 240}
+## Gun sound per rank (spec ids first; the second one plays until AUDIO ships the first).
+const ALLY_SFX := {
+	"constable": ["shot", "shot", -11.0], "sergeant": ["shot_shotgun", "shot_big", -9.0],
+	"inspector": ["shot_big", "shot_big", -9.0], "swat": ["shot_rifle", "shot_rifle", -10.0],
+	"sniper": ["shot_sniper", "shot_rifle", -6.0], "commando": ["launcher", "boom", -12.0],
+}
+const CHAR_H := 1.85            # baked character height (config/characters.json)
+const BOSS_SCALE := 2.6         # bosses are drawn this much bigger than a thug
+const LASER_POOL := 6           # sniper telegraph beams on screen at once
 const STEER_PER_SCREEN := 14.0   # metres of squad travel for a full-width finger drag
 const LANE_SLACK := 0.35         # metres past the midpoint before the lane flips (no flicker)
 const STEER_EASE := 16.0         # how quickly the squad catches the finger
@@ -27,6 +43,7 @@ var world: World
 var fx: Fx
 var font: Font
 var level_id := 1
+var district := 1
 var demo := false
 var paused := false
 var input_enabled := true      # false under --autoplay so stray clicks can't interfere
@@ -60,8 +77,22 @@ var _steer_from := 0.0           # squad target x at that moment
 var _steer_x := 0.0              # where the finger wants the squad
 var _last_total := 1
 var _shown_banner: Dictionary = {}
-var _obstacles: Dictionary = {}  # id -> {ob, node}
+var _obstacles: Dictionary = {}  # id -> {ob, node, label, cracks, hp_shown, chip_t}
+var _riding: Array = []        # passed obstacle nodes riding the road off screen
+var _falling: Array = []       # {kind, pos, t, spin}: troops dropping into a pothole
+var _death_style := ""         # "fall" while a pothole takes troops
+var _death_at := Vector3.ZERO
+var _aims: Array = []          # {horde, t, dur}: sniper lasers being drawn
+var _lasers: Array[MeshInstance3D] = []
+var _laser_mat: StandardMaterial3D
+var _marks: Array = []         # per lane {node, mat, t, dur}: firebomb landing rings
+var _shown_count: Dictionary = {}  # ally kind -> figures drawn (updated on squad changes)
+var _boss_music := false
 var _anim_t := 0.0             # animation clock (seconds)
+var _meshes: Dictionary = {}            # size -> BoxMesh / name -> Mesh, shared by this level's obstacles
+var _mats: Dictionary = {}              # colour -> StandardMaterial3D
+## Debug arg `events=1`: print each sim event with its frame (to aim screenshots).
+static var _log_events := OS.get_cmdline_user_args().has("events=1")
 
 const RUN_SPEED := 1.7         # the baked walk cycle played faster reads as a run
 const CORPSE_CAP := 260        # bodies lying on the road (oldest go first)
@@ -75,17 +106,31 @@ func setup(level: Dictionary, upgrades: Dictionary, w: World, f: Fx, fnt: Font, 
 	font = fnt
 	demo = is_demo
 	level_id = int(level.get("id", 1))
+	district = district_of(level)
 	sim = LevelSim.new(level, Game.units, upgrades)
 	fx.scroll_speed = 0.0
 	return self
 
 
+## The level's city district (street theme): its "district" key, else 10 levels each.
+static func district_of(level: Dictionary) -> int:
+	if level.has("district"):
+		return clampi(int(level["district"]), 1, 5)
+	return clampi(ceili(int(level.get("id", 1)) / 10.0), 1, 5)
+
+
 func _ready() -> void:
+	world.set_theme(district)
 	for k in ALLY_KINDS + ENEMY_KINDS:
-		var cap := (ALLY_CAP if k in ALLY_KINDS else HORDE_CAP * 3) + CORPSE_CAP
-		var c := Crowd.new().setup(k, cap)
+		var cap := 0
+		if k in ALLY_KINDS:
+			cap = ALLY_CAP + CORPSE_CAP
+		else:
+			cap = int(ENEMY_CAP.get(k, HORDE_CAP * 3)) + (8 if k == "boss" else CORPSE_CAP)
+		var c := Crowd.new().setup(k, cap, "constable" if k in ALLY_KINDS else "thug")
 		add_child(c)
 		_crowds[k] = c
+	_build_lasers()
 	_squad_label = GateRowView._label(font, 120, 0.011)
 	_squad_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_squad_label.no_depth_test = true
@@ -157,6 +202,14 @@ func _move(dir: int) -> void:
 			tutorial.emit(false)
 
 
+## Near-miss revive (after the loss screen's rewarded ad): the squad bursts back.
+func revive(troops: int) -> bool:
+	if not sim.revive(troops):
+		return false
+	_handle_events(sim.drain())
+	return true
+
+
 func use_power(id: String) -> bool:
 	if paused or _state != "play":
 		return false
@@ -197,6 +250,10 @@ func _process(delta: float) -> void:
 			fx.scroll_speed = 0.0
 			_update_visuals(delta)
 		"done":
+			if sim.state == "run":
+				# Revived from outside (main.gd called sim.revive): pick the revive event up.
+				_handle_events(sim.drain())
+				return
 			_end_t += delta
 			var d := delta * 0.3
 			world.scroll(sim.S * d)
@@ -234,6 +291,8 @@ func _update_time_scale() -> void:
 
 func _handle_events(events: Array) -> void:
 	for e in events:
+		if _log_events and not String(e["type"]) in ["kill", "gate_tick", "boss_hit"]:
+			print("EV %d %s %s" % [Engine.get_process_frames(), e["type"], e["horde"].get("enemy", "") if e.get("horde") is Dictionary else ""])
 		match String(e["type"]):
 			"row_spawn":
 				var v := GateRowView.new().setup(e["row"], font, LANE_X)
@@ -302,17 +361,34 @@ func _handle_events(events: Array) -> void:
 			"obstacle_spawn":
 				_spawn_obstacle(e["ob"])
 			"obstacle_broken":
-				var ob: Dictionary = e["ob"]
-				fx.burst(_obstacle_pos(ob) + Vector3(0, 1.0, 0), Color(0.55, 0.45, 0.35), 24, 6.0, 0.3, 0.7)
-				Sfx.play("boom", -8.0, 1.4)
-				_free_obstacle(int(ob["id"]))
+				_on_obstacle_broken(e["ob"])
 			"obstacle_hit":
 				world.shake(0.5)
 				Sfx.play("hurt")
-				_free_obstacle(int(e["ob"]["id"]))
+				var hit_ob: Dictionary = e["ob"]
+				# A pothole stays in the road and rides away; anything solid was smashed.
+				_free_obstacle(int(hit_ob["id"]), String(hit_ob.get("kind", "")) == "pothole")
 				_sync_allies(Vector3(_squad_x, 0, 0))
 			"obstacle_pass":
-				_free_obstacle(int(e["ob"]["id"]))
+				_free_obstacle(int(e["ob"]["id"]), true)
+			"pothole_pass":
+				_on_pothole(e)
+			"barricade_hit":
+				_on_barricade_hit(e)
+			"firebomb_throw":
+				_on_firebomb_throw(e)
+			"firebomb_hit":
+				_on_firebomb_hit(e)
+			"snipe_aim":
+				_on_snipe_aim(e)
+			"snipe":
+				_on_snipe(e)
+			"boss_hit":
+				_on_boss_hit(e)
+			"rank_join":
+				_on_rank_join(e)
+			"revive":
+				_on_revive(e)
 	if sim.squad.total() != _last_total:
 		_last_total = sim.squad.total()
 		squad_changed.emit(_last_total)
@@ -396,7 +472,15 @@ func _on_horde_spawn(h: Dictionary) -> void:
 	add_child(label)
 	var sub := Node3D.new()
 	add_child(sub)
-	_hordes[h["id"]] = {"h": h, "kind": kind, "offs": offs, "per": per, "label": label, "sub": sub, "shoot_flash": 0.0}
+	var hv := {"h": h, "kind": kind, "offs": offs, "per": per, "label": label, "sub": sub, "shoot_flash": 0.0,
+		"hit_flash": 0.0, "shown": -1}
+	_hordes[h["id"]] = hv
+	if h.get("boss", false):
+		_build_boss_bar(hv)
+		_boss_music = true
+		Sfx.play_music("boss")
+		_sfx("boss_roar", "blast", 0.0, 0.6)
+		world.shake(0.8)
 	var label_text := String(h.get("label", ""))
 	if label_text != "" and not _shown_banner.has(label_text):
 		_shown_banner[label_text] = true
@@ -447,7 +531,7 @@ func _on_barrel_boom(e: Dictionary) -> void:
 
 func _on_hurt(e: Dictionary) -> void:
 	Sfx.play("hurt", -3.0)
-	if e["cause"] == "gunman" or e["cause"] == "boss":
+	if e["cause"] in ["gunman", "boss", "grenadier"]:
 		_gun_tracers(int(e["source"]), false)
 	world.shake(0.25)
 	_sync_allies(Vector3(_squad_x, 0, 0))
@@ -458,14 +542,26 @@ func _gun_tracers(horde_id: int, blocked: bool) -> void:
 	if hv.is_empty():
 		return
 	hv["shoot_flash"] = 0.15
-	Sfx.play("blast" if hv["kind"] == "boss" else "shot", -3.0, 0.85)
-	var n := mini((hv["offs"] as Array).size(), 8)
+	var grenades: bool = hv["kind"] == "grenadier"
+	if grenades:
+		_sfx("launcher", "boom", -6.0, 1.3)
+	else:
+		Sfx.play("blast" if hv["kind"] == "boss" else "shot", -3.0, 0.85)
+	var n := mini((hv["offs"] as Array).size(), 4 if grenades else 8)
 	for i in n:
 		var from := _fig_pos(hv, hv["offs"][i]) + Vector3(0, 1.2, 0.5)
+		if hv["kind"] == "boss":
+			from = _fig_pos(hv, hv["offs"][i]) + Vector3(0.5, CHAR_H * BOSS_SCALE * 0.62, 0.8)
 		var to := Vector3(_squad_x + randf_range(-1.5, 1.5), 1.0, randf_range(0.0, 2.0))
 		if blocked:
 			to = Vector3(_squad_x, 1.4, -2.2) + Vector3(randf_range(-1.5, 1.5), randf_range(0, 1), 0)
-		fx.shoot("tracer", from, to, 60.0)
+		if grenades:
+			# Grenade rounds burst on the squad (or on the shield).
+			fx.shoot("rocket", from, to - Vector3(0, 0.6, 0) if not blocked else to, 45.0)
+		else:
+			fx.shoot("tracer", from, to, 60.0)
+	if grenades and not blocked:
+		world.shake(0.5)
 
 
 func _on_bomb(e: Dictionary) -> void:
@@ -480,6 +576,357 @@ func _on_bomb(e: Dictionary) -> void:
 	Game.vibrate(150)
 
 
+# ---------------------------------------------------------------- v1 threats and moments
+
+## Plays a spec sound id, or `fallback` until AUDIO ships a file for it.
+func _sfx(id: String, fallback: String, vol := 0.0, pitch := 1.0) -> void:
+	Sfx.play(id if Sfx.has_sound(id) else fallback, vol, pitch)
+
+
+func _on_pothole(e: Dictionary) -> void:
+	var hole := _obstacle_pos(e["ob"])
+	_sfx("pothole", "thunk", 0.0, 0.8)
+	fx.burst(hole + Vector3(0, 0.3, 0), Color(0.42, 0.36, 0.3), 16, 4.0, 0.22, 0.5)
+	var lost := int(e["lost"])
+	if lost > 0:
+		fx.float_text("-%d" % lost, hole + Vector3(0, 2.6, 0), Color("ff5a5f"), 0.9)
+		Game.vibrate(70)
+	# The troops the hole took drop into it instead of toppling over.
+	_death_style = "fall"
+	_death_at = hole
+	_sync_allies(Vector3(_squad_x, 0, 0))
+	_death_style = ""
+
+
+func _on_barricade_hit(e: Dictionary) -> void:
+	var p := _obstacle_pos(e["ob"])
+	_splinters(p, 1.4)
+	_sfx("crash", "boom", -2.0, 0.9)
+	world.shake(0.8)
+	Game.vibrate(90)
+	var lost := int(e["lost"])
+	if lost > 0:
+		fx.float_text("-%d" % lost, p + Vector3(0, 2.8, 0), Color("ff5a5f"), 0.9)
+	var g = e.get("blocked_gate")
+	if g == null:
+		return
+	for id in _rows:
+		var v: GateRowView = _rows[id]
+		for gg in v.row["gates"]:
+			if is_same(gg, g):
+				v.refresh(gg, true)
+				Sfx.play("thunk", -2.0, 0.8)
+
+
+func _on_obstacle_broken(ob: Dictionary) -> void:
+	var p := _obstacle_pos(ob)
+	match String(ob.get("kind", "")):
+		"barricade":
+			_splinters(p, 1.0)
+			_sfx("crash", "boom", -4.0, 1.1)
+		"car":
+			fx.explosion(p + Vector3(0, 0.8, 0), 1.2)
+			fx.burst(p + Vector3(0, 1.0, 0), Color(0.6, 0.62, 0.66), 20, 7.0, 0.3, 0.8)
+			Sfx.play("boom", -4.0, 1.1)
+			world.shake(0.5)
+		_:
+			fx.burst(p + Vector3(0, 1.0, 0), Color(0.55, 0.45, 0.35), 24, 6.0, 0.3, 0.7)
+			Sfx.play("boom", -8.0, 1.4)
+	_free_obstacle(int(ob["id"]))
+
+
+## Wood flying apart: planks, splinters and dust.
+func _splinters(p: Vector3, k: float) -> void:
+	fx.burst(p + Vector3(0, 0.9, 0), Color("9a6b3c"), int(26 * k), 8.0, 0.32, 0.8, 5.0)
+	fx.burst(p + Vector3(0, 0.9, 0), Color("d63a3a"), int(8 * k), 7.0, 0.26, 0.7, 5.0)
+	fx.burst(p + Vector3(0, 0.5, 0), Color(0.75, 0.7, 0.62), int(10 * k), 3.0, 0.45, 0.7, 1.0, 2.0)
+
+
+func _on_firebomb_throw(e: Dictionary) -> void:
+	var lane := int(e["lane"])
+	var land := Vector3(LANE_X[lane], 0.2, 0.4)
+	var from := Vector3(land.x, 1.9, -22.0)
+	var hv: Dictionary = _hordes.get(e["horde"], {})
+	if not hv.is_empty():
+		hv["shoot_flash"] = 0.15
+		var offs: Array = hv["offs"]
+		if not offs.is_empty():
+			from = _fig_pos(hv, offs[randi() % mini(offs.size(), 6)]) + Vector3(0, 1.9, 0.3)
+	fx.lob(from, land, float(e["t"]), 2.5)
+	if _log_events:
+		print("  lob ", from, " -> ", land, " t=", e["t"])
+	_mark_lane(lane, float(e["t"]))
+	Sfx.play("swoosh", -5.0, 0.7)
+
+
+func _on_firebomb_hit(e: Dictionary) -> void:
+	var lane := int(e["lane"])
+	var at := Vector3(LANE_X[lane], 0.1, 0.4)
+	_unmark_lane(lane)
+	fx.fire(at)
+	_sfx("fire", "boom", -5.0, 1.6)
+	if e["blocked"]:
+		Sfx.play("blocked")
+		fx.burst(Vector3(_squad_x, 1.6, -2.2), Color("9fc6ff"), 16, 6.0, 0.2, 0.4)
+		return
+	var lost := int(e["lost"])
+	if lost > 0:
+		Sfx.play("hurt", -3.0)
+		world.shake(0.45)
+		Game.vibrate(60)
+		fx.float_text("-%d" % lost, at + Vector3(0, 2.8, 0), Color("ff8a3d"), 0.9)
+		_sync_allies(Vector3(_squad_x, 0, 0))
+
+
+func _on_snipe_aim(e: Dictionary) -> void:
+	var hv: Dictionary = _hordes.get(e["horde"], {})
+	if hv.is_empty():
+		return
+	_aims.append({"horde": e["horde"], "t": 0.0, "dur": maxf(float(hv["h"].get("aim", 0.7)), 0.2)})
+	Sfx.play("tick", -8.0, 2.2)
+
+
+func _on_snipe(e: Dictionary) -> void:
+	for i in range(_aims.size() - 1, -1, -1):
+		if int(_aims[i]["horde"]) == int(e["horde"]):
+			_aims.remove_at(i)
+	var hv: Dictionary = _hordes.get(e["horde"], {})
+	if hv.is_empty():
+		return
+	hv["shoot_flash"] = 0.15
+	_sfx("shot_sniper", "shot_rifle", -3.0, 0.7)
+	var offs: Array = hv["offs"]
+	for i in mini(offs.size(), 3):
+		var from := _fig_pos(hv, offs[i]) + Vector3(0, 1.5, 0.3)
+		var to := Vector3(_squad_x, 1.6, -2.3) if e["blocked"] else Vector3(_squad_x, 1.1, 0.2)
+		fx.shoot("sniper_round", from, to, 160.0)
+	if e["blocked"]:
+		Sfx.play("blocked")
+		fx.burst(Vector3(_squad_x, 1.6, -2.2), Color("9fc6ff"), 10, 5.0, 0.18, 0.35)
+	elif int(e["lost"]) > 0:
+		Sfx.play("hurt", -3.0)
+		world.shake(0.3)
+		_sync_allies(Vector3(_squad_x, 0, 0))
+
+
+func _on_boss_hit(e: Dictionary) -> void:
+	var hv: Dictionary = _hordes.get(e["horde"], {})
+	var hp := int(e["hp"])
+	if not hv.is_empty():
+		hv["hit_flash"] = 0.75
+		var p := _horde_front(hv) + Vector3(randf_range(-0.7, 0.7), CHAR_H * BOSS_SCALE * randf_range(0.4, 0.75), 0.9)
+		fx.burst(p, Color(1.0, 0.93, 0.55), 5, 6.0, 0.12, 0.25, 2.0)
+		if hp <= 0:
+			var c := _horde_front(hv) + Vector3(0, CHAR_H * BOSS_SCALE * 0.5, 0)
+			fx.explosion(c, 1.5)
+			fx.confetti(c + Vector3(0, 2, 0), 50)
+	if hp <= 0:
+		world.shake(1.2)
+		Sfx.play("boom")
+		Game.vibrate(200)
+		if _boss_music:
+			_boss_music = false
+			Sfx.play_music("level")
+
+
+func _on_rank_join(e: Dictionary) -> void:
+	var first := bool(e.get("first_time", false))
+	rank_joined.emit(String(e["unit"]), first)
+	if first:
+		fx.ring(Vector3(_squad_x, 0.4, 0.4), GateRowView.GOLD, 32, 8.0)
+		_sfx("rank_up", "recruit", -2.0)
+
+
+func _on_revive(_e: Dictionary) -> void:
+	_state = "play"
+	_end_t = 0.0
+	_acc = 0.0
+	_charging.clear()
+	_aims.clear()
+	var p := Vector3(_squad_x, 0.4, 0.4)
+	fx.ring(p, Color("9fe0ff"), 48, 12.0, 0.26)
+	fx.burst(p + Vector3(0, 1.2, 0), Color.WHITE, 30, 8.0, 0.25, 0.5, 5.0)
+	fx.confetti(p + Vector3(0, 2.0, 0), 30)
+	_sfx("rank_up", "recruit", 0.0)
+	Sfx.play("shield", -2.0)
+	world.shake(0.6)
+	Game.vibrate(120)
+	_sync_allies(Vector3(_squad_x, 0, 0.5))
+	for a in _allies:
+		a["flash"] = 1.0
+
+
+# ---------------------------------------------------------------- telegraphs
+
+func _build_lasers() -> void:
+	_laser_mat = StandardMaterial3D.new()
+	_laser_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_laser_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_laser_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	_laser_mat.albedo_color = Color(1.0, 0.12, 0.1, 0.8)
+	var beam := _box_mesh(Vector3(0.07, 0.07, 1.0))
+	for i in LASER_POOL:
+		var mi := MeshInstance3D.new()
+		mi.mesh = beam
+		mi.material_override = _laser_mat
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.visible = false
+		add_child(mi)
+		_lasers.append(mi)
+	# Firebomb landing marks: a glowing ring per lane while a bottle is in the air.
+	var ring := TorusMesh.new()
+	ring.inner_radius = 0.95
+	ring.outer_radius = 1.2
+	ring.rings = 24
+	ring.ring_segments = 6
+	for lane in 3:
+		var mi := MeshInstance3D.new()
+		mi.mesh = ring
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.albedo_color = Color(1.0, 0.45, 0.1, 0.0)
+		mi.material_override = m
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.position = Vector3(LANE_X[lane], 0.06, 0.4)
+		mi.scale = Vector3(1, 0.15, 1)
+		mi.visible = false
+		add_child(mi)
+		_marks.append({"node": mi, "mat": m, "t": 0.0, "dur": 0.0})
+
+
+func _mark_lane(lane: int, dur: float) -> void:
+	var mk: Dictionary = _marks[lane]
+	mk["t"] = 0.0
+	mk["dur"] = dur
+	(mk["node"] as Node3D).visible = true
+
+
+func _unmark_lane(lane: int) -> void:
+	(_marks[lane]["node"] as Node3D).visible = false
+
+
+func _update_telegraphs(d: float) -> void:
+	# Sniper lasers: red beams from the aiming snipers to the squad until the shot.
+	var used := 0
+	var to := Vector3(_squad_x, 1.2, 0.2)
+	var i := 0
+	while i < _aims.size():
+		var a: Dictionary = _aims[i]
+		a["t"] = float(a["t"]) + d
+		var hv: Dictionary = _hordes.get(a["horde"], {})
+		if hv.is_empty() or float(a["t"]) > float(a["dur"]) + 0.4:
+			_aims.remove_at(i)
+			continue
+		var offs: Array = hv["offs"]
+		for j in mini(offs.size(), 3):
+			if used >= _lasers.size():
+				break
+			var from := _fig_pos(hv, offs[j]) + Vector3(0, 1.5, 0.3)
+			var dir := to - from
+			var length := dir.length()
+			if length < 0.1:
+				continue
+			var mi := _lasers[used]
+			mi.transform = Transform3D(Basis.looking_at(dir / length, Vector3.UP).scaled_local(Vector3(1, 1, length)), (from + to) * 0.5)
+			mi.visible = true
+			used += 1
+		i += 1
+	for k in range(used, _lasers.size()):
+		_lasers[k].visible = false
+	if used > 0:
+		_laser_mat.albedo_color = Color(1.0, 0.12, 0.1, 0.5 + 0.4 * absf(sin(_anim_t * 30.0)))
+	for mk in _marks:
+		var node: MeshInstance3D = mk["node"]
+		if not node.visible:
+			continue
+		mk["t"] = float(mk["t"]) + d
+		var k := clampf(float(mk["t"]) / maxf(float(mk["dur"]), 0.01), 0.0, 1.0)
+		if float(mk["t"]) > float(mk["dur"]) + 0.5:
+			node.visible = false
+			continue
+		(mk["mat"] as StandardMaterial3D).albedo_color = Color(1.0, 0.45, 0.1, 0.35 + 0.5 * k * absf(sin(_anim_t * 14.0)))
+		var s := 1.3 - 0.3 * k
+		node.scale = Vector3(s, 0.15, s)
+
+
+# ---------------------------------------------------------------- boss bar
+
+func _build_boss_bar(hv: Dictionary) -> void:
+	var bar := Node3D.new()
+	add_child(bar)
+	var bg := _quad(Vector2(3.5, 0.56), Color(0.06, 0.06, 0.08, 0.9), 11)
+	bar.add_child(bg)
+	var fill := _quad(Vector2(3.3, 0.38), Color("e0484f"), 12)
+	fill.position.z = 0.01
+	bar.add_child(fill)
+	var num := GateRowView._label(font, 84, 0.011)
+	num.no_depth_test = true
+	num.render_priority = 14
+	num.outline_render_priority = 13
+	num.position = Vector3(0, 0, 0.02)
+	bar.add_child(num)
+	var crown := Sprite3D.new()
+	crown.texture = UiKit.icon_texture("boss_crown")
+	crown.pixel_size = 0.95 / 320.0
+	crown.shaded = false
+	crown.no_depth_test = true
+	crown.render_priority = 14
+	crown.position = Vector3(-2.1, 0.05, 0.02)
+	bar.add_child(crown)
+	hv["bar"] = bar
+	hv["bar_fill"] = fill
+	hv["bar_num"] = num
+	hv["bar_hp"] = -1
+	(hv["label"] as Label3D).visible = false
+
+
+func _update_boss_bar(hv: Dictionary, d: float) -> void:
+	var h: Dictionary = hv["h"]
+	var bar: Node3D = hv["bar"]
+	var front := _horde_front(hv)
+	var k := BOSS_SCALE * crowd_scale((hv["offs"] as Array).size())
+	# Always above the scaled model's head, never inside it.
+	# Faces the camera and grows with distance, so it reads the same far up the street;
+	# its bottom edge stays above the scaled model's head.
+	var size := 1.0
+	var cam := get_viewport().get_camera_3d()
+	if cam:
+		bar.basis = cam.global_transform.basis
+		size = clampf(cam.global_position.distance_to(front) / 16.0, 1.0, 3.2)
+	# Pulled towards the middle of the road so a boss in an outer lane never clips it.
+	bar.position = Vector3(clampf(front.x, -1.3, 1.3), CHAR_H * k + 0.5 + 0.4 * size, front.z)
+	var hp := LevelSim.boss_hp(h)
+	var mx := maxf(float(h.get("max_hp", h["hp"])), 1.0)
+	var fill: MeshInstance3D = hv["bar_fill"]
+	if hp != int(hv["bar_hp"]):
+		hv["bar_hp"] = hp
+		(hv["bar_num"] as Label3D).text = str(hp)
+		var frac := clampf(hp / mx, 0.0, 1.0)
+		fill.scale.x = maxf(frac, 0.001)
+		fill.position.x = -1.65 * (1.0 - frac)
+	var fl := float(hv.get("hit_flash", 0.0))
+	hv["hit_flash"] = maxf(fl - d * 14.0, 0.0)
+	(fill.material_override as StandardMaterial3D).albedo_color = Color("e0484f").lerp(Color.WHITE, fl * 0.8)
+	bar.scale = Vector3.ONE * size * (1.0 + 0.08 * fl)
+
+
+func _quad(size: Vector2, color: Color, priority: int) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var q := QuadMesh.new()
+	q.size = size
+	mi.mesh = q
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.no_depth_test = true
+	m.render_priority = priority
+	m.albedo_color = color
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return mi
+
+
 # ---------------------------------------------------------------- allies
 
 func _desired_allies() -> Dictionary:
@@ -489,10 +936,17 @@ func _desired_allies() -> Dictionary:
 	for k in ALLY_KINDS:
 		out[k] = int(counts.get(k, 0))
 	if total > ALLY_CAP:
+		# Too many to draw: every rank shrinks in proportion (at least one stays visible),
+		# constables fill what is left.
 		var per := float(total) / ALLY_CAP
-		for k in ["inspector", "swat"]:
-			out[k] = maxi(int(round(int(counts[k]) / per)), 1 if int(counts[k]) > 0 else 0)
-		out["constable"] = maxi(ALLY_CAP - out["hero"] - out["inspector"] - out["swat"], 0)
+		var used := int(out["hero"])
+		for k in ALLY_KINDS:
+			if k == "hero" or k == "constable":
+				continue
+			var c := int(counts.get(k, 0))
+			out[k] = maxi(int(round(c / per)), 1 if c > 0 else 0)
+			used += int(out[k])
+		out["constable"] = mini(int(counts.get("constable", 0)), maxi(ALLY_CAP - used, 0))
 	return out
 
 
@@ -512,11 +966,14 @@ func _sync_allies(source: Vector3) -> void:
 			for i in -diff:
 				var a: Dictionary = have[i]
 				_allies.erase(a)
-				_dying.append({"kind": kind, "pos": a["pos"], "t": 0.0, "basis": Basis()})
-				fx.puff(a["pos"])
-	# Slots: hero in front, inspectors next, constables behind.
-	var order := {"hero": 0, "swat": 1, "inspector": 2, "constable": 3}
-	_allies.sort_custom(func(a, b): return order[a["kind"]] < order[b["kind"]])
+				if _death_style == "fall":
+					_falling.append({"kind": kind, "pos": a["pos"], "t": randf() * -0.15, "spin": randf_range(-3.0, 3.0)})
+				else:
+					_dying.append({"kind": kind, "pos": a["pos"], "t": 0.0, "basis": Basis()})
+					fx.puff(a["pos"])
+		_shown_count[kind] = int(want[kind])
+	# Slots: hero in front, the heavy hitters next, constables behind.
+	_allies.sort_custom(func(a, b): return int(ALLY_ORDER.get(a["kind"], 9)) < int(ALLY_ORDER.get(b["kind"], 9)))
 	for i in _allies.size():
 		_allies[i]["slot"] = i
 
@@ -608,15 +1065,21 @@ func _update_visuals(d: float) -> void:
 		var speed := 1.0 if h["stopped"] else RUN_SPEED * clampf(float(h["vrel"]) / 10.0, 0.8, 1.6)
 		var flash := float(hv["shoot_flash"])
 		hv["shoot_flash"] = maxf(flash - d, 0.0)
+		flash = maxf(flash * 2.0, float(hv["hit_flash"]))
 		var face := Basis(Vector3.UP, PI).scaled(Vector3.ONE * crowd_scale(offs.size()))
 		if hv["kind"] == "boss":
-			face = face.scaled(Vector3.ONE * 2.2)
+			face = face.scaled(Vector3.ONE * BOSS_SCALE)
 		for o in offs:
-			crowd.push(Transform3D(face, _fig_pos(hv, o)), clip, (_anim_t + o.y * 3.0) * speed, flash * 2.0)
+			crowd.push(Transform3D(face, _fig_pos(hv, o)), clip, (_anim_t + o.y * 3.0) * speed, flash)
+		if hv.has("bar"):
+			_update_boss_bar(hv, d)
+			continue
 		var lab: Label3D = hv["label"]
 		var depth := (offs.back().z if not offs.is_empty() else 0.0) as float
-		lab.position = Vector3(0, 3.6 if hv["kind"] != "brute" else 4.6, float(h["z"]) - depth * 0.5)
-		lab.text = str(int(h["count"])) if hv["kind"] != "boss" else str(int(ceil(float(h["hp"]) - float(h["acc"]))))
+		lab.position = Vector3(0, 4.6 if hv["kind"] == "brute" else 3.6, float(h["z"]) - depth * 0.5)
+		if int(h["count"]) != int(hv["shown"]):
+			hv["shown"] = int(h["count"])
+			lab.text = str(int(h["count"]))
 		if int(h["armour"]) == 0:
 			lab.modulate = Color("ff6b6b")
 
@@ -625,7 +1088,7 @@ func _update_visuals(d: float) -> void:
 		var rv: GateRowView = _rows[id]
 		var rz := float(rv.row["z"])
 		for g in rv.row["gates"]:
-			if not GateRowView.is_troops(g):
+			if not GateRowView.is_troops(g) or GateRowView.is_blocked(g):
 				continue
 			var cnt := mini(GateRowView.troop_count(g), 12)
 			var cx: float = LANE_X[int(g["lane"])]
@@ -677,9 +1140,30 @@ func _update_visuals(d: float) -> void:
 			flash = -clampf((t - BODY_TIME) / 0.5, 0.0, 1.0)  # dissolve away
 		(_crowds[dd["kind"]] as Crowd).push(Transform3D(basis, p + Vector3(0, 0.05, 0)), "hit", minf(t, 0.15), flash)
 		i += 1
+	# Troops a pothole took: hop to the hole, then drop in, shrinking and tumbling.
+	i = 0
+	var road := sim.S * d * (1.0 if _state == "play" or _state == "done" else 0.0)
+	while i < _falling.size():
+		var fd: Dictionary = _falling[i]
+		fd["t"] = float(fd["t"]) + d
+		var t := float(fd["t"])
+		var p: Vector3 = fd["pos"]
+		p.z += road
+		if t > 0.0:
+			p.x = move_toward(p.x, _death_at.x, d * 6.0)
+			p.y = -t * t * 9.0
+		fd["pos"] = p
+		if t > 0.65:
+			_falling.remove_at(i)
+			continue
+		var s := clampf(1.0 - maxf(t, 0.0) * 1.2, 0.15, 1.0)
+		var basis := Basis(Vector3.RIGHT, maxf(t, 0.0) * float(fd["spin"])).scaled(Vector3.ONE * s)
+		(_crowds[fd["kind"]] as Crowd).push(Transform3D(basis, p), "hit", 0.1, 0.0)
+		i += 1
 
 	for k in _crowds:
 		(_crowds[k] as Crowd).finish()
+	_update_telegraphs(d)
 
 	# Gates ride the road.
 	for id in _rows:
@@ -688,11 +1172,16 @@ func _update_visuals(d: float) -> void:
 	if _finish:
 		_finish.position.z = -(sim.finish_at - sim.traveled)
 	for oid in _obstacles:
-		var od: Dictionary = _obstacles[oid]
-		var on: Node3D = od["node"]
-		on.position = _obstacle_pos(od["ob"])
-		if od["ob"].get("armed", false):
-			on.scale = Vector3.ONE * (1.0 + 0.12 * absf(sin(Time.get_ticks_msec() / 60.0)))
+		_update_obstacle(_obstacles[oid], d)
+	i = 0
+	while i < _riding.size():
+		var rn: Node3D = _riding[i]
+		rn.position.z += road
+		if rn.position.z > 12.0 or road == 0.0 and _state != "play":
+			rn.queue_free()
+			_riding.remove_at(i)
+			continue
+		i += 1
 
 	# Squad label and shield.
 	_label_pop = maxf(_label_pop - d * 4.0, 0.0)
@@ -746,34 +1235,35 @@ func _fire(a: Dictionary, target: Vector3) -> void:
 	var kind := String(a["kind"])
 	var unit: Dictionary = sim.stats[kind]
 	var rate := float(unit["rate"])
-	if kind == "constable":
-		var per := maxf(float(sim.squad.count("constable")) / maxf(float(_count_kind("constable")), 1.0), 1.0)
+	if kind != "hero":
+		# A thinned-out rank fires faster so the screen still shows its real firepower.
+		var per := maxf(float(sim.squad.count(kind)) / maxf(float(_shown_count.get(kind, 1)), 1.0), 1.0)
 		rate *= minf(per, 2.5)
 	a["fire_t"] = 1.0 / rate * randf_range(0.85, 1.15)
 	var from: Vector3 = (a["pos"] as Vector3) + Vector3(0, 1.15, -0.4)
 	var spread := Vector3(randf_range(-0.3, 0.3), randf_range(-0.3, 0.3), 0)
-	fx.shoot(String(unit["proj"]), from, target + spread, 34.0 if unit["proj"] == "knife" else 55.0)
+	var proj := String(unit["proj"])
+	match proj:
+		"knife":
+			fx.shoot(proj, from, target + spread, 34.0)
+		"pellet":
+			# Shotgun: a short fan of pellets.
+			for i in 3:
+				fx.shoot(proj, from, target + spread + Vector3(randf_range(-0.9, 0.9), randf_range(-0.4, 0.4), 0), 60.0)
+		"sniper_round":
+			fx.shoot(proj, from + Vector3(0, 0.2, 0), target, 150.0)
+		"rocket":
+			fx.shoot(proj, from + Vector3(0, 0.3, 0), target + spread, 30.0)
+		_:
+			fx.shoot(proj, from, target + spread, 55.0)
 	if kind == "hero":
 		Sfx.play("knife", -6.0)
 		if sim.squad.hero_weapon != "":
 			fx.shoot("bullet", from + Vector3(0.2, 0, 0), target + spread * 0.5, 55.0)
 			Sfx.play("shot", -8.0)
 	else:
-		match kind:
-			"inspector":
-				Sfx.play("shot_big", -9.0)
-			"swat":
-				Sfx.play("shot_rifle", -10.0)
-			_:
-				Sfx.play("shot", -11.0, 1.1)
-
-
-func _count_kind(kind: String) -> int:
-	var c := 0
-	for a in _allies:
-		if a["kind"] == kind:
-			c += 1
-	return c
+		var s: Array = ALLY_SFX.get(kind, ["shot", "shot", -11.0])
+		_sfx(String(s[0]), String(s[1]), float(s[2]), 1.1 if kind == "constable" else 1.0)
 
 
 func _free_horde(id: int) -> void:
@@ -782,6 +1272,8 @@ func _free_horde(id: int) -> void:
 		return
 	(hv["label"] as Node).queue_free()
 	(hv["sub"] as Node).queue_free()
+	if hv.has("bar"):
+		(hv["bar"] as Node).queue_free()
 	_hordes.erase(id)
 
 
@@ -801,33 +1293,168 @@ func _obstacle_pos(ob: Dictionary) -> Vector3:
 
 func _spawn_obstacle(ob: Dictionary) -> void:
 	var n := Node3D.new()
-	match String(ob.get("kind", "barricade")):
+	var kind := String(ob.get("kind", "barricade"))
+	var od := {"ob": ob, "node": n, "label": null, "cracks": [], "hp_shown": -1, "chip_t": 0.0}
+	match kind:
+		"pothole":
+			_build_pothole(n, od)
 		"barrel":
-			var body := World._box(Vector3(1.0, 1.3, 1.0), Color("c8352b"))
-			body.position.y = 0.65
-			n.add_child(body)
-			var band := World._box(Vector3(1.06, 0.18, 1.06), Color("f2c14e"))
-			band.position.y = 0.95
-			n.add_child(band)
+			n.add_child(_part(Vector3(1.0, 1.3, 1.0), Color("c8352b"), Vector3(0, 0.65, 0)))
+			n.add_child(_part(Vector3(1.06, 0.18, 1.06), Color("f2c14e"), Vector3(0, 0.95, 0)))
 		"car":
 			var car := World.model(["cars/sedan.glb", "cars/taxi.glb", "cars/van.glb", "cars/suv.glb"][int(ob["id"]) % 4], 1.45)
 			car.rotation.y = PI * (0.5 if int(ob["id"]) % 2 == 0 else -0.5)
 			n.add_child(car)
 		_:
-			var bar := World._box(Vector3(2.8, 0.9, 0.4), Color("8a6a3f"))
-			bar.position.y = 0.6
-			n.add_child(bar)
+			_build_barricade(n, od)
+	# Anything you can shoot shows the hits it still takes.
+	if kind != "pothole" and float(ob.get("hp_max", 0.0)) > 0.0:
+		var lab := GateRowView._label(font, 100, 0.011)
+		lab.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		lab.position.y = {"car": 2.6, "barrel": 2.1}.get(kind, 2.3)
+		lab.modulate = Color("ffe08a")
+		n.add_child(lab)
+		od["label"] = lab
 	add_child(n)
 	n.position = _obstacle_pos(ob)
-	_obstacles[int(ob["id"])] = {"ob": ob, "node": n}
+	_obstacles[int(ob["id"])] = od
+	_update_obstacle(od, 0.0)
 
 
-func _free_obstacle(id: int) -> void:
+## Pothole: a black hole with a broken orange rim and loose chunks, plus the troops it costs.
+func _build_pothole(n: Node3D, od: Dictionary) -> void:
+	var ob: Dictionary = od["ob"]
+	var rim := MeshInstance3D.new()
+	rim.mesh = _cyl_mesh("pothole_rim", 1.3)
+	rim.material_override = _mat(Color("e8742a"))
+	rim.position.y = 0.025
+	n.add_child(rim)
+	var hole := MeshInstance3D.new()
+	hole.mesh = _cyl_mesh("pothole_hole", 1.05)
+	hole.material_override = _mat(Color("120d0b"), true)
+	hole.position.y = 0.04
+	n.add_child(hole)
+	for i in 5:
+		var a := TAU * i / 5.0 + 0.4
+		var chunk := _part(Vector3(0.32, 0.16, 0.26), Color("5b544e"), Vector3(cos(a) * 1.35, 0.08, sin(a) * 1.1))
+		chunk.rotation.y = a
+		n.add_child(chunk)
+	var lab := GateRowView._label(font, 110, 0.011)
+	lab.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lab.modulate = Color("ff5a5f")
+	# On the hole's near lip, in front of any gate sign sharing the lane.
+	lab.position = Vector3(0, 0.55, 1.5)
+	lab.text = ("-%d%%" % int(ob["fall_pct"])) if ob.has("fall_pct") else ("-%d" % int(ob.get("fall", 0)))
+	n.add_child(lab)
+	od["tag"] = lab
+
+
+## Barricade: two posts, wooden planks and a red/white hazard board; cracks show damage.
+func _build_barricade(n: Node3D, od: Dictionary) -> void:
+	for x in [-1.2, 1.2]:
+		n.add_child(_part(Vector3(0.24, 1.5, 0.24), Color("3a2d22"), Vector3(x, 0.75, 0)))
+	var woods := [Color("9a6b3c"), Color("8a5a2e"), Color("a8783f")]
+	for j in 3:
+		n.add_child(_part(Vector3(2.6, 0.28, 0.14), woods[j], Vector3(0, 0.35 + j * 0.34, 0.12)))
+	for s in 5:
+		n.add_child(_part(Vector3(0.52, 0.3, 0.16), Color("d63a3a") if s % 2 == 0 else Color("f2f2f2"),
+			Vector3(-1.04 + s * 0.52, 1.36, 0.12)))
+	# Two crack stages (dark zig-zags on the front), shown as the hp drops.
+	for stage in 2:
+		var cracks := Node3D.new()
+		cracks.visible = false
+		for c in 3:
+			var x := randf_range(-1.0, 1.0)
+			var y := randf_range(0.4, 1.3)
+			for seg in 2:
+				var piece := _part(Vector3(0.05, 0.36, 0.02), Color("1d1410"), Vector3(x + seg * 0.1, y - seg * 0.3, 0.21))
+				piece.rotation.z = 0.6 if seg == 0 else -0.5
+				cracks.add_child(piece)
+		n.add_child(cracks)
+		od["cracks"].append(cracks)
+
+
+func _update_obstacle(od: Dictionary, d: float) -> void:
+	var ob: Dictionary = od["ob"]
+	var on: Node3D = od["node"]
+	on.position = _obstacle_pos(ob)
+	var armed := bool(ob.get("armed", false))
+	if armed:
+		on.scale = Vector3.ONE * (1.0 + 0.12 * absf(sin(_anim_t * 16.0)))
+	od["chip_t"] = float(od["chip_t"]) - d
+	var lab = od["label"]
+	if lab == null:
+		return
+	var hp := int(ceil(float(ob["hp"])))
+	if hp == int(od["hp_shown"]) and not armed:
+		return
+	if int(od["hp_shown"]) > hp and float(od["chip_t"]) <= 0.0:
+		# Chips fly off as it takes hits (throttled).
+		od["chip_t"] = 0.12
+		var wood := String(ob.get("kind", "")) == "barricade"
+		fx.burst(on.position + Vector3(randf_range(-0.8, 0.8), 1.0, 0.4), Color("b88a52") if wood else Color(0.85, 0.85, 0.8), 3, 4.0, 0.14, 0.3)
+	od["hp_shown"] = hp
+	(lab as Label3D).text = str(hp)
+	(lab as Label3D).visible = hp > 0 and not armed
+	var frac := float(ob["hp"]) / maxf(float(ob.get("hp_max", 1.0)), 1.0)
+	var cracks: Array = od["cracks"]
+	for ci in cracks.size():
+		(cracks[ci] as Node3D).visible = frac < (0.67 if ci == 0 else 0.34)
+
+
+## `ride`: leave the node on the road (it scrolls away under the squad) instead of vanishing.
+func _free_obstacle(id: int, ride := false) -> void:
 	var od: Dictionary = _obstacles.get(id, {})
 	if od.is_empty():
 		return
-	(od["node"] as Node).queue_free()
+	if ride:
+		_riding.append(od["node"])
+		if od.has("tag"):
+			(od["tag"] as Node3D).visible = false  # the real loss floats up instead
+	else:
+		(od["node"] as Node).queue_free()
 	_obstacles.erase(id)
+
+
+# Shared meshes and materials: every obstacle reuses them (no per-spawn allocations).
+func _part(size: Vector3, color: Color, pos: Vector3) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = _box_mesh(size)
+	mi.material_override = _mat(color)
+	mi.position = pos
+	return mi
+
+
+func _box_mesh(size: Vector3) -> BoxMesh:
+	if not _meshes.has(size):
+		var bm := BoxMesh.new()
+		bm.size = size
+		_meshes[size] = bm
+	return _meshes[size]
+
+
+func _cyl_mesh(key: String, radius: float) -> CylinderMesh:
+	if not _meshes.has(key):
+		var cm := CylinderMesh.new()
+		cm.top_radius = radius
+		cm.bottom_radius = radius
+		cm.height = 0.02
+		cm.radial_segments = 20
+		cm.rings = 1
+		_meshes[key] = cm
+	return _meshes[key]
+
+
+func _mat(color: Color, unshaded := false) -> StandardMaterial3D:
+	var key := color.to_html() + ("u" if unshaded else "l")
+	if not _mats.has(key):
+		var m := StandardMaterial3D.new()
+		m.albedo_color = color
+		m.roughness = 1.0
+		if unshaded:
+			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_mats[key] = m
+	return _mats[key]
 
 
 # ---------------------------------------------------------------- shield, finish, strike
