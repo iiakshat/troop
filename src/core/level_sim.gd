@@ -10,23 +10,39 @@ extends RefCounted
 ## Gates and obstacles ride the road (scroll speed); gangs also run (scroll + their speed),
 ## so they spawn earlier to arrive on time.
 ##
+## The scroll speed `S` is not constant: the squad stops running and stands its ground
+## (`halted`) while a boss is within `boss_halt` metres, and it stops `finish_hold` metres
+## short of the Gang HQ while any gang is still alive or yet to come. So bosses really walk
+## in (slowly, shooting) instead of holding a distance, and the HQ never scrolls past a fight.
+##
 ## Shooting rule (easy to explain to players): bullets stream down your lane and hit the
-## first thing they meet: a gang (gangs fill the whole road), a red gate, a barrel or a car.
+## first thing they meet: a gang (gangs fill the whole road), a red gate, a barricade, a
+## barrel or a car. Snipers are the one exception: they shoot the toughest gang in range.
 ##
 ## Gangs are blocks of rows. Bullets always kill from the front, so the gang's front is its
 ## frontmost *living* row. Nothing hurts the squad until that front physically reaches it;
 ## then the gang fights row by row (melee), each enemy taking `power` troops and dying.
+## Ranged gangs attack from a distance: gunmen/grenadiers shoot, molotovs lob firebombs
+## into the squad's lane (dodge by changing lane), sniper foes aim a laser then fire.
 
-var S: float            # scroll speed, m/s
+var S: float            # current scroll speed, m/s
+var S_base: float       # running speed
+var accel: float        # how fast the squad stops and starts, m/s²
 var fire_range: float
 var spawn_dist: float
 var contact_z: float
 var melee_tick: float
+var boss_halt: float
+var finish_hold: float
+var boss_hit_every: float
 
 var stats: Dictionary   # effective ally stats after upgrades
 var weapons: Dictionary
 var enemy_defs: Dictionary
+var obstacle_defs: Dictionary
 var powers: Dictionary
+var revive_cfg: Dictionary
+var star_cfg: Dictionary
 
 var squad := Squad.new()
 var lane := 1
@@ -35,10 +51,14 @@ var time := 0.0
 var state := "run"      # run | strike | lost
 var lose_cause := ""
 var finish_at := 0.0
+var halted := false     # the squad is standing its ground (boss fight or waiting at the HQ)
+var peak_squad := 0
+var revived := false
 
 var rows: Array = []        # gate rows on screen
 var obstacles: Array = []
 var hordes: Array = []
+var firebombs: Array = []   # in the air: {horde, lane, land, burn}
 var charges: Dictionary = {"shield": 0, "bomb": 0}
 var shield_t := 0.0
 var kills := 0
@@ -46,40 +66,73 @@ var rows_passed := 0
 var out: Array = []         # events for the view, drained each frame
 var target_kind := ""       # what the squad shot this tick: "horde" | "gate" | "obstacle" | ""
 var target_ref = null
+var snipe_ref = null        # the gang the snipers shot this tick (or null)
 
 var _spawns: Array = []     # pre-computed, sorted by the distance at which they appear
 var _next_spawn := 0
+var _pending_hordes := 0    # horde spawns not yet on screen
 var _wave_ats: Array = []   # arrival `at` of each wave event, in order
 var _wave_mods: Dictionary = {}  # wave index -> {"div": k, "strip": true}
 var _next_id := 1
 var _armour_note_t := 0.0
+var _joined: Dictionary = {}     # rank -> true once it arrived this level
 
 
-func _init(level: Dictionary, units_cfg: Dictionary, upgrades: Dictionary = {}) -> void:
+func _init(level: Dictionary = {}, units_cfg: Dictionary = {}, upgrades: Dictionary = {}) -> void:
+	if units_cfg.is_empty():
+		return  # clone() fills the fields
 	var w: Dictionary = units_cfg["world"]
-	S = float(w["scroll_speed"])
+	S_base = float(w["scroll_speed"])
+	S = S_base
+	accel = float(w.get("scroll_accel", 12.0))
 	fire_range = float(w["fire_range"])
 	spawn_dist = float(w["spawn_distance"])
 	contact_z = float(w["contact_z"])
 	melee_tick = float(w.get("melee_tick", 0.22))
+	boss_halt = float(w.get("boss_halt", 40.0))
+	finish_hold = float(w.get("finish_hold", 14.0))
+	boss_hit_every = float(w.get("boss_hit_every", 0.1))
 	stats = units_cfg["allies"].duplicate(true)
 	weapons = units_cfg["hero_weapons"]
 	enemy_defs = units_cfg["enemies"]
+	obstacle_defs = units_cfg.get("obstacles", {})
 	powers = units_cfg["powers"]
+	revive_cfg = units_cfg.get("revive", {})
+	star_cfg = level.get("stars", units_cfg.get("stars", {}))
 
 	var hero: Dictionary = stats["hero"]
 	hero["dmg"] = float(hero["dmg"]) + float(upgrades.get("knife", 0))
 	hero["rate"] = float(hero["rate"]) + 0.5 * float(upgrades.get("speed", 0))
 	squad.cap = int(w.get("max_squad", 0)) + int(upgrades.get("capacity", 0))
 	squad.add("constable", int(upgrades.get("squad", 0)))
+	# Pre-level booster: each head-start token brings a few constables.
+	var per_token := int(units_cfg.get("boosters", {}).get("headstart", 5))
+	squad.add("constable", int(upgrades.get("headstart", 0)) * per_token)
 
 	var ch: Dictionary = level.get("charges", {})
 	for k in ch:
 		charges[k] = int(ch[k])
-	# Police-station garage: extra powers at the start of every level.
+	# Police-station garage and booster tokens: extra powers at the start of the level.
 	charges["shield"] = int(charges["shield"]) + int(upgrades.get("shield", 0))
 	charges["bomb"] = int(charges["bomb"]) + int(upgrades.get("bomb", 0))
 	_build_spawns(level.get("events", []))
+	peak_squad = squad.total()
+
+
+## A gang's numbers: the enemy type, with any per-group overrides (boss variants etc.).
+func enemy_def(grp: Dictionary) -> Dictionary:
+	var def: Dictionary = enemy_defs[grp["enemy"]]
+	var over := false
+	for k in grp:
+		if k != "enemy" and k != "n" and k != "gap" and def.has(k):
+			over = true
+	if not over:
+		return def
+	var d := def.duplicate()
+	for k in grp:
+		if k != "enemy" and k != "n" and k != "gap" and def.has(k):
+			d[k] = grp[k]
+	return d
 
 
 func _build_spawns(events: Array) -> void:
@@ -99,13 +152,14 @@ func _build_spawns(events: Array) -> void:
 				_wave_ats.append(at)
 				for g in e.get("groups", []):
 					var grp: Dictionary = g
-					var def: Dictionary = enemy_defs[grp["enemy"]]
+					var def := enemy_def(grp)
 					var arrive := at + float(grp.get("gap", 0.0))
-					var vrel := S + float(def["speed"])
+					var vrel := S_base + float(def["speed"])
 					var stop := float(def.get("stop_at", 0.0))
 					_spawns.append({"kind": "horde", "ev": grp, "at": arrive, "wave": wave_index,
 						"label": String(e.get("label", "")),
-						"spawn_at": arrive - (spawn_dist - stop) * S / vrel})
+						"spawn_at": arrive - (spawn_dist - stop) * S_base / vrel})
+					_pending_hordes += 1
 				wave_index += 1
 	_spawns.sort_custom(func(a, b): return float(a["spawn_at"]) < float(b["spawn_at"]))
 
@@ -140,12 +194,59 @@ func use_power(id: String) -> bool:
 			else:
 				k = mini(n, maxi(int(floor(n * float(cfg["kill_pct"]) / 100.0)), int(cfg["min_kill"])))
 			h["shield"] = float(h["shield"]) * 0.5
-			_kill(h, k)
 			out.append({"type": "bomb", "horde": h["id"], "z": front_z(h), "killed": k})
+			_kill(h, k)
+			if h["boss"] and int(h["count"]) > 0:
+				_boss_hit(h, true)
 		_:
 			return false
 	charges[id] = int(charges[id]) - 1
 	return true
+
+
+## Brings the squad back after a loss (once per level): `troops` people (the hero plus
+## constables), gangs that were on top of the squad are shoved back, and a short shield
+## covers the restart. Returns false if the level isn't lost or was already revived.
+func revive(troops: int) -> bool:
+	if state != "lost" or revived:
+		return false
+	revived = true
+	squad.counts["hero"] = 1
+	squad.add("constable", maxi(troops, 1) - 1)
+	var push := float(revive_cfg.get("push", 14.0))
+	for h in hordes:
+		if front_z(h) > -push:
+			h["melee"] = false
+			h["melee_t"] = 0.0
+			h["z"] = -push + killed_rows(h) * float(h["row_gap"])
+	firebombs.clear()
+	shield_t = maxf(shield_t, float(revive_cfg.get("shield", 2.0)))
+	state = "run"
+	lose_cause = ""
+	out.append({"type": "revive", "troops": squad.total()})
+	return true
+
+
+## How many troops a revive brings back: `pct` % of the peak squad, at least 1.
+func revive_troops() -> int:
+	var n := int(ceil(peak_squad * float(revive_cfg.get("pct", 50)) / 100.0))
+	if squad.cap > 0:
+		n = mini(n, squad.cap)
+	return maxi(n, 1)
+
+
+## 0 until the level is won; then 1-3 from the share of the peak squad still standing
+## (level thresholds `stars: {star2, star3}` in percent, exact integer maths).
+func stars() -> int:
+	if state != "strike":
+		return 0
+	var t := squad.total()
+	var p := maxi(peak_squad, 1)
+	if t * 100 >= p * int(star_cfg.get("star3", 55)):
+		return 3
+	if t * 100 >= p * int(star_cfg.get("star2", 30)):
+		return 2
+	return 1
 
 
 # ---------------------------------------------------------------- tick
@@ -154,6 +255,7 @@ func step(dt: float) -> void:
 	if state != "run":
 		return
 	time += dt
+	_update_speed(dt)
 	traveled += S * dt
 	shield_t = maxf(shield_t - dt, 0.0)
 	_armour_note_t = maxf(_armour_note_t - dt, 0.0)
@@ -162,63 +264,140 @@ func step(dt: float) -> void:
 	_check_barrels()
 	_shoot(dt)
 	_gunfire(dt)
+	if state != "run":
+		return
+	_firebombs()
+	if state != "run":
+		return
 	_contacts(dt)
+	if state != "run":
+		return
 	_pass_rows()
+	if state != "run":
+		return
 	_pass_obstacles()
-	if state == "run" and finish_at > 0.0 and traveled >= finish_at and hordes.is_empty():
+	if state != "run":
+		return
+	peak_squad = maxi(peak_squad, squad.total())
+	if finish_at > 0.0 and traveled >= finish_at and hordes.is_empty() and _pending_hordes <= 0:
 		state = "strike"
 		out.append({"type": "finish"})
+
+
+## Running speed: stop for a boss in range, and stop short of the HQ while gangs live.
+func _update_speed(dt: float) -> void:
+	var target := S_base
+	var boss := false
+	for h in hordes:
+		if h["boss"] and front_z(h) >= -boss_halt:
+			boss = true
+			break
+	if boss:
+		target = 0.0
+	var hold := false
+	if finish_at > 0.0 and (not hordes.is_empty() or _pending_hordes > 0):
+		# Brake so the squad comes to rest exactly finish_hold metres before the HQ.
+		var remaining := finish_at - finish_hold - traveled
+		var limit := sqrt(2.0 * accel * maxf(remaining, 0.0))
+		if limit < target:
+			target = limit
+		if S > limit:
+			S = limit
+		hold = remaining <= 0.05
+	if S > target:
+		S = maxf(target, S - 2.0 * accel * dt)
+	else:
+		S = minf(target, S + accel * dt)
+	if S < 0.01 and target <= 0.0:
+		S = 0.0
+	halted = boss or hold
+	# Waiting at the HQ with gangs still to come: the next one pours out now (safety net;
+	# the level generator times every wave to arrive before this point).
+	if hold and S <= 0.0 and _pending_hordes > 0 and hordes.is_empty():
+		var pending := _pending_hordes
+		while _next_spawn < _spawns.size() and _pending_hordes == pending:
+			var sp: Dictionary = _spawns[_next_spawn]
+			_next_spawn += 1
+			_spawn_one(sp, true)
 
 
 func _spawn_due() -> void:
 	while _next_spawn < _spawns.size() and float(_spawns[_next_spawn]["spawn_at"]) <= traveled:
 		var sp: Dictionary = _spawns[_next_spawn]
 		_next_spawn += 1
-		var ev: Dictionary = sp["ev"]
-		match String(sp["kind"]):
-			"gates":
-				var gates: Array = []
-				for g in ev.get("gates", []):
-					var gate: Dictionary = (g as Dictionary).duplicate(true)
-					gate["progress"] = 0.0
-					if gate["op"] == "num" or gate["op"] == "pct":
-						gate["v"] = int(gate.get("v", 0))
-					gates.append(gate)
-				var row := {"id": _new_id(), "at": sp["at"], "gates": gates, "z": 0.0,
-					"slowmo": bool(ev.get("slowmo", false)), "tutorial": String(ev.get("tutorial", ""))}
-				row["z"] = -(float(row["at"]) - traveled)
-				rows.append(row)
-				out.append({"type": "row_spawn", "row": row})
-			"obstacle":
-				var ob := ev.duplicate(true)
-				ob["id"] = _new_id()
-				ob["hp_max"] = float(ob.get("hp", 10))
-				ob["hp"] = ob["hp_max"]
-				ob["z"] = -(float(sp["at"]) - traveled)
-				obstacles.append(ob)
-				out.append({"type": "obstacle_spawn", "ob": ob})
-			"finish":
-				out.append({"type": "finish_spawn", "at": sp["at"]})
-			"hint":
-				out.append({"type": "hint", "ev": ev})
-			"horde":
-				_spawn_horde(sp)
+		_spawn_one(sp)
 
 
-func _spawn_horde(sp: Dictionary) -> void:
+func _spawn_one(sp: Dictionary, early := false) -> void:
+	var ev: Dictionary = sp["ev"]
+	match String(sp["kind"]):
+		"gates":
+			var gates: Array = []
+			for g in ev.get("gates", []):
+				var gate: Dictionary = (g as Dictionary).duplicate(true)
+				gate["progress"] = 0.0
+				if gate["op"] == "num" or gate["op"] == "pct":
+					gate["v"] = int(gate.get("v", 0))
+				gates.append(gate)
+			var row := {"id": _new_id(), "at": sp["at"], "gates": gates, "z": 0.0,
+				"slowmo": bool(ev.get("slowmo", false)), "tutorial": String(ev.get("tutorial", ""))}
+			row["z"] = -(float(row["at"]) - traveled)
+			rows.append(row)
+			out.append({"type": "row_spawn", "row": row})
+		"obstacle":
+			var ob := ev.duplicate(true)
+			var defaults: Dictionary = obstacle_defs.get(String(ob.get("kind", "")), {})
+			for k in defaults:
+				if not ob.has(k) and not String(k).begins_with("_"):
+					ob[k] = defaults[k]
+			ob["id"] = _new_id()
+			if String(ob.get("kind", "")) == "pothole":
+				ob["hp"] = 0  # can't be shot
+			ob["hp_max"] = float(ob.get("hp", 10))
+			ob["hp"] = ob["hp_max"]
+			ob["z"] = -(float(sp["at"]) - traveled)
+			obstacles.append(ob)
+			out.append({"type": "obstacle_spawn", "ob": ob})
+		"finish":
+			out.append({"type": "finish_spawn", "at": sp["at"]})
+		"hint":
+			out.append({"type": "hint", "ev": ev})
+		"horde":
+			_pending_hordes -= 1
+			_spawn_horde(sp, early)
+
+
+func _spawn_horde(sp: Dictionary, early := false) -> void:
 	var grp: Dictionary = sp["ev"]
-	var def: Dictionary = enemy_defs[grp["enemy"]]
-	var vrel := S + float(def["speed"])
+	var def := enemy_def(grp)
+	var speed := float(def["speed"])
+	var vrel := S + speed
 	var stop := float(def.get("stop_at", 0.0))
+	var z := -stop - (float(sp["at"]) - traveled) * (S_base + speed) / S_base
+	if early:
+		z = maxf(z, -spawn_dist)
+	var attack := ""
+	if def.has("throw_every"):
+		attack = "firebomb"
+	elif def.has("aim"):
+		attack = "snipe"
+	elif float(def.get("shoot_every", 0.0)) > 0.0:
+		attack = "gun"
 	var h := {
 		"id": _new_id(), "wave": sp["wave"], "enemy": grp["enemy"], "label": sp["label"],
 		"count": int(grp["n"]), "start": int(grp["n"]),
 		"hp": float(def["hp"]), "armour": int(def["armour"]), "power": int(def["power"]),
-		"vrel": vrel, "stop": stop, "shoot_every": float(def.get("shoot_every", 0.0)),
-		"shot_dmg": int(def.get("shot_dmg", 1)),
+		"speed": speed, "vrel": vrel, "stop": stop,
+		"attack": attack, "shoot_every": float(def.get("throw_every", def.get("shoot_every", 0.0))),
+		"shoot_range": float(def.get("shoot_range", 0.0)),
+		"shot_dmg": int(def.get("shot_dmg", 1)), "burn": int(def.get("burn", 1)),
+		"flight": float(def.get("flight", 1.0)), "aim": float(def.get("aim", 0.0)), "aimed": false,
+		"first_shot": float(def.get("first_shot", def.get("throw_every", def.get("shoot_every", 0.0)))),
+		"boss": bool(def.get("boss", false)),
 		"cols": int(def.get("cols", 9)), "row_gap": float(def.get("row_gap", 0.95)),
-		"shield": 0.0, "z": -stop - (float(sp["at"]) - traveled) * vrel / S,
+		"shield": 0.0, "z": z,
 		"acc": 0.0, "shoot_t": 0.0, "stopped": false, "melee": false, "melee_t": 0.0,
+		"hit_t": -1.0,
 	}
 	var mods: Dictionary = _wave_mods.get(sp["wave"], {})
 	if mods.has("div"):
@@ -231,6 +410,8 @@ func _spawn_horde(sp: Dictionary) -> void:
 		mods["turncoat"] = int(mods["turncoat"]) - take
 		_turn(h, take)
 	h["shield"] = float(def.get("shield", 0.0)) * int(h["count"])
+	if h["boss"]:
+		h["max_hp"] = float(h["hp"]) * int(h["count"])
 	if h["count"] <= 0:
 		return
 	hordes.append(h)
@@ -245,6 +426,7 @@ func _move(dt: float) -> void:
 	for ob in obstacles:
 		ob["z"] = float(ob["z"]) + S * dt
 	for h in hordes:
+		h["vrel"] = S + float(h["speed"])
 		if h["melee"]:
 			# Rows behind keep walking up so the living front stays on the squad.
 			h["z"] = contact_z + killed_rows(h) * float(h["row_gap"])
@@ -255,46 +437,86 @@ func _move(dt: float) -> void:
 		if float(h["stop"]) > 0.0 and front_z(h) >= -float(h["stop"]):
 			h["z"] = -float(h["stop"]) + killed_rows(h) * float(h["row_gap"])
 			h["stopped"] = true
+			# They come in ready: the first volley follows `first_shot` s after they stop.
+			h["shoot_t"] = maxf(float(h["shoot_every"]) - float(h["first_shot"]), 0.0)
 
 
 func _shoot(dt: float) -> void:
 	target_kind = ""
 	target_ref = null
+	snipe_ref = null
+	# Snipers pick the toughest gang in range; everyone else fires down the lane.
+	var which := Squad.Fire.ALL
+	if squad.has_snipers(stats):
+		var tough = _toughest_horde(fire_range)
+		if tough != null:
+			which = Squad.Fire.MAIN
+			snipe_ref = tough
+			var hp := float(tough["hp"])
+			var n := int(tough["count"])
+			var sd := squad.dps(stats, weapons, int(tough["armour"]), hp, n, Squad.Fire.SNIPE) * dt
+			var sp := squad.pierce_dps(stats, weapons, hp, n, Squad.Fire.SNIPE) * dt
+			_damage_horde(tough, sd, sp)
 	var h = _front_horde(fire_range)
 	var t = _lane_target()
 	# Bullets hit whichever is nearer in the lane: the gang's front or a lane object.
 	if t != null and (h == null or float(t["z"]) > front_z(h)):
-		_shoot_lane(t, dt)
+		_shoot_lane(t, dt, which)
 		return
 	if h == null:
 		return
 	target_kind = "horde"
 	target_ref = h
 	var hp := float(h["hp"])
-	var d := squad.dps(stats, weapons, int(h["armour"]), hp)
+	var n := int(h["count"])
+	var d := squad.dps(stats, weapons, int(h["armour"]), hp, n, which)
 	if d <= 0.0:
-		if _armour_note_t <= 0.0 and squad.dps(stats, weapons, 0, hp) > 0.0:
+		if _armour_note_t <= 0.0 and squad.dps(stats, weapons, 0, hp, n, which) > 0.0:
 			_armour_note_t = 1.5
 			out.append({"type": "armour_block", "horde": h["id"]})
 		return
-	var dmg := d * dt
+	_damage_horde(h, d * dt, squad.pierce_dps(stats, weapons, hp, n, which) * dt)
+
+
+## Applies `dmg` (of which `pierce` passes riot shields) to a gang, killing whole enemies.
+func _damage_horde(h: Dictionary, dmg: float, pierce: float) -> void:
+	if dmg <= 0.0:
+		return
 	if float(h["shield"]) > 0.0:
 		# Riot shields soak non-piercing fire first; piercing rounds go straight through.
-		var pierce := squad.pierce_dps(stats, weapons, hp) * dt
 		var blocked := minf(float(h["shield"]), maxf(dmg - pierce, 0.0))
 		h["shield"] = float(h["shield"]) - blocked
 		dmg -= blocked
 		if blocked > 0.0 and float(h["shield"]) <= 0.0:
 			out.append({"type": "shield_broken", "horde": h["id"]})
+	var hp := float(h["hp"])
 	h["acc"] = float(h["acc"]) + dmg
 	var k := mini(int(floor(float(h["acc"]) / hp)), int(h["count"]))
 	if k > 0:
 		h["acc"] = float(h["acc"]) - k * hp
 		_kill(h, k)
+	if h["boss"] and int(h["count"]) > 0:
+		_boss_hit(h)  # (a kill already reported the death)
 
 
-func _shoot_lane(t: Dictionary, dt: float) -> void:
-	var dmg := squad.dps(stats, weapons, 0, 1000.0) * dt
+## Boss health for the big bar, at most every boss_hit_every seconds (always on death or
+## when forced, e.g. by a bomb).
+func _boss_hit(h: Dictionary, force := false) -> void:
+	var dead := int(h["count"]) <= 0
+	if not force and not dead and float(h["hit_t"]) >= 0.0 and time - float(h["hit_t"]) < boss_hit_every:
+		return
+	h["hit_t"] = time
+	out.append({"type": "boss_hit", "horde": h["id"], "hp": boss_hp(h), "max": int(h.get("max_hp", h["hp"]))})
+
+
+## Remaining boss health (whole points, what the bar's number shows).
+static func boss_hp(h: Dictionary) -> int:
+	return maxi(int(ceil(int(h["count"]) * float(h["hp"]) - float(h["acc"]))), 0)
+
+
+func _shoot_lane(t: Dictionary, dt: float, which: int) -> void:
+	# One target, so no bursts or splash: hp is huge and there is a single "enemy".
+	var dmg := squad.dps(stats, weapons, 0, 1000.0, 1, which) * dt
 	target_ref = t
 	if t.has("op"):  # a gate
 		target_kind = "gate"
@@ -332,17 +554,22 @@ func _check_barrels() -> void:
 				break
 
 
-## An armed barrel blows up every gang whose front is within its blast radius.
+## An armed barrel blows up the gangs whose front is within its blast radius, nearest to
+## the squad first, killing up to `kill` gang members in total.
 func _explode(b: Dictionary) -> void:
 	var radius := float(b.get("radius", 7.0))
-	var max_kill := int(b.get("kill", 30))
+	var left := int(b.get("kill", 30))
 	var total := 0
-	for h in hordes.duplicate():
-		if absf(front_z(h) - float(b["z"])) <= radius:
-			var k := mini(max_kill, int(h["count"]))
-			total += k
-			h["shield"] = 0.0
-			_kill(h, k)
+	var near: Array = hordes.filter(func(x): return absf(front_z(x) - float(b["z"])) <= radius)
+	near.sort_custom(func(x, y): return front_z(x) > front_z(y))
+	for h in near:
+		h["shield"] = 0.0
+		if h["boss"]:
+			continue  # a barrel only singes the boss
+		var k := mini(left, int(h["count"]))
+		left -= k
+		total += k
+		_kill(h, k)
 	out.append({"type": "barrel_boom", "ob": b, "killed": total})
 
 
@@ -353,6 +580,8 @@ func _kill(h: Dictionary, k: int) -> void:
 	kills += k
 	out.append({"type": "kill", "horde": h["id"], "n": k, "left": h["count"]})
 	if int(h["count"]) <= 0:
+		if h["boss"]:
+			_boss_hit(h, true)
 		hordes.erase(h)
 		out.append({"type": "horde_cleared", "horde": h["id"]})
 
@@ -366,6 +595,20 @@ func _front_horde(reach: float):
 	return best
 
 
+## The gang a sniper picks: bosses first, then the most hp x armour per enemy; nearest wins ties.
+func _toughest_horde(reach: float):
+	var best = null
+	var best_v := -1.0
+	for h in hordes:
+		if int(h["count"]) <= 0 or front_z(h) < -reach:
+			continue
+		var v := INF if h["boss"] else float(h["hp"]) * (1 + int(h["armour"]))
+		if best == null or v > best_v or (v == best_v and front_z(h) > front_z(best)):
+			best = h
+			best_v = v
+	return best
+
+
 ## How many whole rows have been shot away from the front.
 static func killed_rows(h: Dictionary) -> int:
 	return int((int(h["start"]) - int(h["count"])) / maxi(int(h["cols"]), 1))
@@ -376,6 +619,13 @@ static func front_z(h: Dictionary) -> float:
 	return float(h["z"]) - killed_rows(h) * float(h["row_gap"])
 
 
+## True while a gang is attacking from range (stopped, or a boss inside its shoot range).
+static func is_attacking(h: Dictionary) -> bool:
+	if String(h.get("attack", "")) == "" or h["melee"]:
+		return false
+	return h["stopped"] or (float(h["shoot_range"]) > 0.0 and front_z(h) >= -float(h["shoot_range"]))
+
+
 func _lane_target():
 	var best = null
 	var best_z := -INF
@@ -384,7 +634,7 @@ func _lane_target():
 		if z < -fire_range or z >= 0.0:
 			continue
 		for g in row["gates"]:
-			if int(g["lane"]) == lane and float(g.get("step", 0.0)) > 0.0 and int(g["v"]) < int(g["max"]):
+			if int(g["lane"]) == lane and float(g.get("step", 0.0)) > 0.0 and int(g["v"]) < int(g["max"]) and not g.get("blocked", false):
 				if z > best_z:
 					best = g
 					best_z = z
@@ -398,17 +648,56 @@ func _lane_target():
 
 func _gunfire(dt: float) -> void:
 	for h in hordes:
-		if not h["stopped"] or float(h["shoot_every"]) <= 0.0:
+		if not is_attacking(h) or float(h["shoot_every"]) <= 0.0:
 			continue
 		h["shoot_t"] = float(h["shoot_t"]) + dt
-		while float(h["shoot_t"]) >= float(h["shoot_every"]):
-			h["shoot_t"] = float(h["shoot_t"]) - float(h["shoot_every"])
-			if shield_t > 0.0:
-				out.append({"type": "blocked", "horde": h["id"], "n": h["count"]})
-			else:
-				_hurt(int(h["count"]) * int(h["shot_dmg"]), String(h["enemy"]), h["id"])
-			if state != "run":
-				return
+		var every := float(h["shoot_every"])
+		match String(h["attack"]):
+			"gun":
+				while float(h["shoot_t"]) >= every:
+					h["shoot_t"] = float(h["shoot_t"]) - every
+					if shield_t > 0.0:
+						out.append({"type": "blocked", "horde": h["id"], "n": h["count"]})
+					else:
+						_hurt(int(h["count"]) * int(h["shot_dmg"]), String(h["enemy"]), h["id"])
+					if state != "run":
+						return
+			"firebomb":
+				while float(h["shoot_t"]) >= every:
+					h["shoot_t"] = float(h["shoot_t"]) - every
+					var fb := {"horde": h["id"], "lane": lane, "land": time + float(h["flight"]),
+						"burn": int(h["count"]) * int(h["burn"])}
+					firebombs.append(fb)
+					out.append({"type": "firebomb_throw", "horde": h["id"], "lane": lane, "t": float(h["flight"])})
+			"snipe":
+				if not h["aimed"] and float(h["shoot_t"]) >= every - float(h["aim"]):
+					h["aimed"] = true
+					out.append({"type": "snipe_aim", "horde": h["id"]})
+				while float(h["shoot_t"]) >= every:
+					h["shoot_t"] = float(h["shoot_t"]) - every
+					h["aimed"] = false
+					var lost := 0
+					var blocked := shield_t > 0.0
+					if not blocked:
+						lost = _hurt(int(h["count"]) * int(h["shot_dmg"]), String(h["enemy"]), h["id"], false)
+					out.append({"type": "snipe", "horde": h["id"], "lost": lost, "blocked": blocked})
+					if state != "run":
+						return
+
+
+## Firebombs land in the lane they were thrown at; the squad burns only if it is still there.
+func _firebombs() -> void:
+	for fb in firebombs.duplicate():
+		if time < float(fb["land"]):
+			continue
+		firebombs.erase(fb)
+		var blocked := shield_t > 0.0 and int(fb["lane"]) == lane
+		var lost := 0
+		if int(fb["lane"]) == lane and not blocked:
+			lost = _hurt(int(fb["burn"]), "molotov", int(fb["horde"]), false)
+		out.append({"type": "firebomb_hit", "horde": fb["horde"], "lane": fb["lane"], "lost": lost, "blocked": blocked})
+		if state != "run":
+			return
 
 
 func _contacts(dt: float) -> void:
@@ -430,6 +719,8 @@ func _contacts(dt: float) -> void:
 		if shield_t <= 0.0:
 			lost = _hurt(power, String(h["enemy"]), h["id"], false)
 		out.append({"type": "melee", "horde": h["id"], "enemies": row, "lost": lost, "shielded": shield_t > 0.0})
+		if h["boss"]:
+			continue  # the boss keeps swinging: he never falls to his own strike
 		_kill(h, row)
 		if state != "run":
 			return
@@ -439,7 +730,7 @@ func _hurt(n: int, cause: String, source_id: int = 0, announce: bool = true) -> 
 	var lost := squad.lose(n)
 	if announce and lost > 0:
 		out.append({"type": "hurt", "n": lost, "cause": cause, "source": source_id})
-	if not squad.hero_alive():
+	if not squad.hero_alive() and state == "run":
 		state = "lost"
 		lose_cause = cause
 		out.append({"type": "lost", "cause": cause})
@@ -458,10 +749,12 @@ func _pass_rows() -> void:
 				picked = g
 		var before := squad.total()
 		var delta := 0
-		if picked != null:
+		var blocked: bool = picked != null and picked.get("blocked", false)
+		if picked != null and not blocked:
 			delta = _apply_gate(picked)
+		peak_squad = maxi(peak_squad, squad.total())
 		out.append({"type": "row_pass", "row": row, "gate": picked, "before": before,
-			"after": squad.total(), "delta": delta})
+			"after": squad.total(), "delta": delta, "blocked": blocked})
 		if picked != null and not squad.hero_alive():
 			state = "lost"
 			lose_cause = "gate"
@@ -475,7 +768,11 @@ func _apply_gate(g: Dictionary) -> int:
 			var v: int = g["v"]
 			return squad.add("constable", v) if v >= 0 else -squad.lose(-v)
 		"recruit":
-			return squad.add(String(g["unit"]), int(g.get("n", 1)))
+			var unit := String(g["unit"])
+			var added := squad.add(unit, int(g.get("n", 1)))
+			out.append({"type": "rank_join", "unit": unit, "n": added, "first_time": not _joined.has(unit)})
+			_joined[unit] = true
+			return added
 		"mul":
 			return squad.multiply(int(g["k"]))
 		"div":
@@ -523,6 +820,8 @@ func _apply_foe_mod(g: Dictionary) -> void:
 			# Converts from the gangs of that wave already on screen; the rest applies at spawn.
 			var left := int(g.get("n", 5))
 			for h in spawned:
+				if h["boss"]:
+					continue  # the Kingpin never switches sides
 				var k := mini(left, int(h["count"]))
 				if k > 0:
 					_turn(h, k)
@@ -539,6 +838,8 @@ func _apply_foe_mod(g: Dictionary) -> void:
 	for h in spawned:
 		var before: int = h["count"]
 		if g["op"] == "foe_div":
+			if h["boss"]:
+				continue  # bosses are one person; halving is for crowds
 			var killed := int(h["start"]) - before
 			h["count"] = int(floor(before / float(g["k"])))
 			h["start"] = int(h["count"]) + killed  # halved from the back; the front stays put
@@ -557,13 +858,52 @@ func _pass_obstacles() -> void:
 		if float(ob["z"]) < 0.0:
 			continue
 		obstacles.erase(ob)
-		if int(ob["lane"]) == lane and float(ob["hp"]) > 0.0 and not ob.get("armed", false):
-			var lost := _hurt(int(ob.get("dmg", 5)), String(ob.get("kind", "barricade")), ob["id"], false)
+		var kind := String(ob.get("kind", "barricade"))
+		var in_lane := int(ob["lane"]) == lane
+		if kind == "pothole":
+			if in_lane:
+				var n := int(ob.get("fall", 0))
+				if ob.has("fall_pct"):
+					n = int(floor(squad.total() * int(ob["fall_pct"]) / 100.0))
+				# The hero always hops over: a pothole costs troops but never ends the level.
+				n = mini(n, squad.total() - 1)
+				var lost := _hurt(n, "pothole", ob["id"], false)
+				out.append({"type": "pothole_pass", "id": ob["id"], "lane": ob["lane"], "lost": lost, "ob": ob})
+				out.append({"type": "obstacle_hit", "ob": ob, "lost": lost})
+			else:
+				out.append({"type": "obstacle_pass", "ob": ob})
+		elif in_lane and float(ob["hp"]) > 0.0 and not ob.get("armed", false):
+			var n := int(ob.get("dmg", 5))
+			if ob.has("dmg_pct"):
+				n = int(floor(squad.total() * int(ob["dmg_pct"]) / 100.0))
+			var lost := _hurt(n, kind, ob["id"], false)
+			if kind == "barricade":
+				var g = _block_next_gate(int(ob["lane"]), float(ob.get("block_reach", 12.0)))
+				out.append({"type": "barricade_hit", "id": ob["id"], "lane": ob["lane"], "lost": lost,
+					"ob": ob, "blocked_gate": g})
 			out.append({"type": "obstacle_hit", "ob": ob, "lost": lost})
-			if state != "run":
-				return
 		else:
 			out.append({"type": "obstacle_pass", "ob": ob})
+		if state != "run":
+			return
+
+
+## A barricade you crash through wrecks the gate right behind it in that lane (within reach).
+## Returns that gate (now `blocked`) or null.
+func _block_next_gate(l: int, reach: float):
+	var best = null
+	var best_z := -INF
+	for row in rows:
+		var z := float(row["z"])
+		if z >= 0.0 or z < -reach:
+			continue
+		for g in row["gates"]:
+			if int(g["lane"]) == l and not g.get("blocked", false) and z > best_z:
+				best = g
+				best_z = z
+	if best != null:
+		best["blocked"] = true
+	return best
 
 
 func _new_id() -> int:
@@ -581,6 +921,27 @@ func drain() -> Array:
 	var e := out
 	out = []
 	return e
+
+
+## A deep copy that plays on independently (route search in tests/tune.gd).
+func clone() -> LevelSim:
+	var c := LevelSim.new()
+	for p in ["S", "S_base", "accel", "fire_range", "spawn_dist", "contact_z", "melee_tick",
+			"boss_halt", "finish_hold", "boss_hit_every", "weapons", "enemy_defs", "obstacle_defs",
+			"powers", "revive_cfg", "star_cfg", "lane", "traveled", "time", "state", "lose_cause",
+			"finish_at", "halted", "peak_squad", "revived", "shield_t", "kills", "rows_passed",
+			"_spawns", "_next_spawn", "_pending_hordes", "_wave_ats", "_next_id", "_armour_note_t"]:
+		c.set(p, get(p))
+	c.stats = stats
+	c.squad = squad.duplicate_squad()
+	c.rows = rows.duplicate(true)
+	c.obstacles = obstacles.duplicate(true)
+	c.hordes = hordes.duplicate(true)
+	c.firebombs = firebombs.duplicate(true)
+	c.charges = charges.duplicate()
+	c._wave_mods = _wave_mods.duplicate(true)
+	c._joined = _joined.duplicate()
+	return c
 
 
 static func strike_coins(economy: Dictionary, troops: int, mult: int) -> int:

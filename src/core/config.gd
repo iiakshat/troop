@@ -2,7 +2,7 @@ class_name Config
 extends RefCounted
 ## Loads the JSON tuning files in config/. Pure, so tests and tools can use it headless.
 
-const LEVEL_COUNT := 5
+const LEVEL_COUNT := 50
 
 
 static func load_json(path: String) -> Variant:

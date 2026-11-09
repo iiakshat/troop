@@ -79,3 +79,41 @@ func test_cap_limits_growth() -> void:
 	s.multiply(3)
 	eq(s.total(), 30, "x3 of 20 stops at the cap")
 	eq(s.count("hero"), 1, "hero kept")
+
+
+func test_value_line_comes_from_config() -> void:
+	var stats: Dictionary = Config.units()["allies"]
+	eq(Squad.value_vs_constable(stats, "constable"), 1.0, "constable = 1")
+	for rank in ["sergeant", "inspector", "swat", "sniper", "commando"]:
+		var u: Dictionary = stats[rank]
+		var want := float(u["dmg"]) * float(u["rate"]) * float(u.get("multi", 1)) * float(u.get("splash", 1))
+		want /= float(stats["constable"]["dmg"]) * float(stats["constable"]["rate"])
+		check(absf(Squad.value_vs_constable(stats, rank) - want) < 1e-6, "%s value line from config" % rank)
+	# Against one armoured boss the sniper is worth far more than against a crowd.
+	var vs_boss := Squad.value_vs_constable(stats, "sniper", 360.0, 1, 1)
+	check(vs_boss >= 2.0 * Squad.value_vs_constable(stats, "sniper"), "sniper shines vs bosses (%.1f)" % vs_boss)
+	eq(Squad.value_vs_constable(stats, "nobody"), 0.0, "unknown rank = 0")
+
+
+func test_commando_splash_hits_up_to_five() -> void:
+	var stats: Dictionary = Config.units()["allies"]
+	var s := Squad.new()
+	s.counts["hero"] = 0
+	s.add("commando", 1)
+	var one := float(stats["commando"]["dmg"]) * float(stats["commando"]["rate"])
+	var splash := int(stats["commando"]["splash"])
+	eq(s.dps(stats, {}, 0, 1.0, 100), one * splash, "full splash into a crowd")
+	eq(s.dps(stats, {}, 0, 1.0, 3), one * 3.0, "never more hits than enemies")
+	eq(s.dps(stats, {}, 0, 1.0, 1), one, "one target, one hit")
+
+
+func test_new_ranks_are_lost_before_the_hero() -> void:
+	var s := Squad.new()
+	s.add("commando", 2)
+	s.add("sniper", 1)
+	s.add("sergeant", 3)
+	eq(s.lose(4), 4, "lost 4")
+	eq(s.count("sergeant"), 0, "sergeants first")
+	eq(s.count("sniper"), 0, "then snipers")
+	eq(s.count("commando"), 2, "commandos outrank snipers")
+	eq(s.count("hero"), 1, "hero last")

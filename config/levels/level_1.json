@@ -1,24 +1,29 @@
 {
-  "_design": "First Blood. Teaches: move, recruit, x2, shooting a red gate until it flips. Big crowds early: feel powerful in 30 seconds.",
-  "id": 1, "name": "First Blood", "charges": {},
+  "_design": "First Blood. Teaches: move, +N, x2, shooting a red gate until it flips. The squad grows past 100 in under a minute and mows down crowds of hundreds: power fantasy first.",
+  "id": 1,
+  "name": "Underpass",
+  "district": 1,
+  "boss": false,
+  "target_win": 0.78,
+  "target_ratio": -1.0,
+  "stars": {"star2": 30, "star3": 60},
+  "charges": {},
   "events": [
-    { "at": 30,  "type": "wave", "groups": [ { "enemy": "thug", "n": 10 } ] },
-    { "at": 34,  "type": "hint", "id": "swipe", "icon": "swipe" },
-    { "at": 58,  "type": "gates", "tutorial": "swipe", "gates": [
-      { "lane": 0, "op": "num", "v": 4 },
-      { "lane": 2, "op": "num", "v": 10 } ] },
-    { "at": 92,  "type": "wave", "groups": [ { "enemy": "thug", "n": 34 } ] },
-    { "at": 124, "type": "gates", "gates": [
-      { "lane": 0, "op": "num", "v": 6 },
-      { "lane": 1, "op": "mul", "k": 2 },
-      { "lane": 2, "op": "num", "v": 8 } ] },
-    { "at": 158, "type": "wave", "groups": [ { "enemy": "thug", "n": 80 } ] },
-    { "at": 168, "type": "hint", "id": "red_gate", "icon": "aim" },
-    { "at": 196, "type": "gates", "gates": [
-      { "lane": 0, "op": "num", "v": 5 },
-      { "lane": 1, "op": "num", "v": -10, "step": 2.5, "max": 20 },
-      { "lane": 2, "op": "num", "v": 5 } ] },
-    { "at": 236, "type": "wave", "label": "BIG GANG", "groups": [ { "enemy": "thug", "n": 150 } ] },
-    { "at": 256, "type": "finish" }
+    {"at": 31, "type": "wave", "groups": [{"enemy": "thug", "n": 8}]},
+    {"at": 33, "type": "hint", "id": "red_gate", "icon": "aim"},
+    {"at": 36, "type": "hint", "id": "swipe", "icon": "swipe"},
+    {"at": 61, "type": "gates", "tutorial": "swipe", "gates": [{"lane": 0, "op": "num", "v": 4}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 3}, {"lane": 2, "op": "num", "v": 10}]},
+    {"at": 96, "type": "wave", "groups": [{"enemy": "thug", "n": 34}]},
+    {"at": 130, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 6}, {"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "num", "v": 8}]},
+    {"at": 165, "type": "wave", "groups": [{"enemy": "thug", "n": 70}]},
+    {"at": 201, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 12}, {"lane": 1, "op": "num", "v": -4, "step": 1.5, "max": 8}, {"lane": 2, "op": "mul", "k": 2}]},
+    {"at": 236, "type": "wave", "groups": [{"enemy": "thug", "n": 120}]},
+    {"at": 274, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "num", "v": -10, "step": 2.5, "max": 20}, {"lane": 2, "op": "num", "v": 20}]},
+    {"at": 312, "type": "wave", "groups": [{"enemy": "thug", "n": 160}]},
+    {"at": 347, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -12, "step": 3, "max": 24}, {"lane": 1, "op": "num", "v": 30}, {"lane": 2, "op": "mul", "k": 2}]},
+    {"at": 387, "type": "wave", "groups": [{"enemy": "thug", "n": 220}]},
+    {"at": 423, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 25}, {"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "num", "v": -15, "step": 3, "max": 30}]},
+    {"at": 467, "type": "wave", "label": "BIG GANG", "groups": [{"enemy": "thug", "n": 300}]},
+    {"at": 496, "type": "finish"}
   ]
 }

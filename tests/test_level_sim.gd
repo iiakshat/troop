@@ -147,8 +147,9 @@ func test_swat_bursts_hit_two_weak_enemies() -> void:
 	var s := Squad.new()
 	s.counts["hero"] = 0
 	s.add("swat", 1)
-	eq(s.dps(stats, {}, 0, 1.0), 6.0, "1 dmg x 3/s x 2 enemies")
-	eq(s.dps(stats, {}, 0, 8.0), 3.0, "no double hit on tough enemies")
+	var one: float = float(stats["swat"]["dmg"]) * float(stats["swat"]["rate"])
+	eq(s.dps(stats, {}, 0, 1.0), one * 2.0, "dmg x rate x 2 enemies")
+	eq(s.dps(stats, {}, 0, 8.0), one, "no double hit on tough enemies")
 
 
 func test_foe_halving_and_bomb() -> void:
@@ -180,13 +181,394 @@ func test_bomb_on_the_boss_is_flat_damage() -> void:
 
 
 func test_levels_are_winnable_and_reward_planning() -> void:
-	var l1 := Config.level(1)
-	eq(_run(l1, [2, 1, 1])["state"], "strike", "L1 smart path wins")
-	eq(_run(l1, [0, 0, 0])["state"], "strike", "L1 weakest real path still wins")
+	# Every level stores a winning lane route found by tests/tune.gd (`route`; levels 1-10
+	# also `route_np`, which wins without powers). Random routes (sampled, seeded) must not
+	# do better than the planned one on average: planning pays.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+	var planned_better := 0
+	for n in range(1, Config.LEVEL_COUNT + 1):
+		var lv := Config.level(n)
+		var route: Array = lv.get("route", [])
+		check(not route.is_empty(), "L%d has a stored route" % n)
+		var best := _run(lv, route)
+		eq(best["state"], "strike", "L%d planned route wins" % n)
+		if n <= 10:
+			eq(_run(lv, lv.get("route_np", route), false)["state"], "strike", "L%d wins without powers" % n)
+		if n % 3 != 1 and n > 3:
+			continue  # sample: random routes on a third of the levels keep the suite fast
+		var rows := Autopilot.gate_row_count(lv)
+		var sum := 0
+		for i in 4:
+			var r: Array = []
+			for j in rows:
+				r.append(rng.randi_range(0, 2))
+			var res := _run(lv, r)
+			sum += int(res["troops"]) if res["state"] == "strike" else 0
+		check(int(best["troops"]) * 4 >= sum, "L%d planned route beats random routes on average" % n)
+		if int(best["troops"]) * 4 > sum:
+			planned_better += 1
+	check(planned_better >= 10, "planning clearly pays on most sampled levels (%d)" % planned_better)
+	# Operation order (level 2, rows 2-3): +12 then x3 beats x3 then +12.
 	var l2 := Config.level(2)
-	var smart2 := _run(l2, [2, 2, 2, 0])
-	eq(smart2["state"], "strike", "L2 planned path wins")
-	check(int(smart2["troops"]) > int(_run(l2, [2, 0, 0, 2])["troops"]), "L2 add-then-multiply beats the reverse")
-	eq(_run(Config.level(3), [0, 2, 1])["state"], "strike", "L3 planned path wins")
-	eq(_run(Config.level(4), [1, 2, 0])["state"], "strike", "L4 planned path wins")
-	eq(_run(Config.level(5), [1, 2, 1, 0])["state"], "strike", "L5 planned path beats the Kingpin")
+	var smart := LevelSim.new(l2, units)
+	Autopilot.play(smart, Autopilot.new([0, 2, 2]), 1.0 / 30.0, 3)
+	var rev := LevelSim.new(l2, units)
+	Autopilot.play(rev, Autopilot.new([0, 0, 0]), 1.0 / 30.0, 3)
+	check(smart.squad.total() > rev.squad.total(), "L2 add-then-multiply beats the reverse (%d vs %d)" % [smart.squad.total(), rev.squad.total()])
+
+
+# ---------------------------------------------------------------- v1 rules
+
+func _events_of(seen: Array, type: String) -> Array:
+	return seen.filter(func(e): return e["type"] == type)
+
+
+## Steps until an event of `type` appears; returns that event ({} if it never did).
+func _until_event(sim: LevelSim, type: String, max_steps := 6000) -> Dictionary:
+	for i in max_steps:
+		sim.step(1.0 / 30.0)
+		var found := _events_of(sim.drain(), type)
+		if not found.is_empty():
+			return found[0]
+		if sim.state != "run":
+			break
+	return {}
+
+
+func test_boss_walks_in_shooting_and_never_holds_distance() -> void:
+	var lvl := {"events": [
+		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 80}]},
+		{"at": 120, "type": "wave", "label": "KINGPIN", "groups": [{"enemy": "boss", "n": 1, "hp": 1200}]},
+		{"at": 150, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	var hits: Array = []
+	var shots_walking := 0
+	var last_front := -INF
+	var closing := true
+	var halted := true
+	var finish_early := false
+	for i in 9000:
+		sim.step(1.0 / 30.0)
+		for e in sim.drain():
+			match String(e["type"]):
+				"boss_hit":
+					hits.append({"t": sim.time, "hp": int(e["hp"]), "max": int(e["max"])})
+				"hurt":
+					for h in sim.hordes:
+						if h["boss"] and String(e["cause"]) == "boss" and not h["stopped"] and not h["melee"]:
+							shots_walking += 1
+				"finish":
+					finish_early = finish_early or not sim.hordes.is_empty()
+		for h in sim.hordes:
+			if not h["boss"]:
+				continue
+			check(not h["stopped"], "a boss never stops to hold a distance")
+			check(int(h.get("max_hp", 0)) == 1200, "boss carries max_hp")
+			var f := LevelSim.front_z(h)
+			if f < last_front - 1e-4:
+				closing = false
+			last_front = f
+			if f >= -sim.boss_halt + 3.0 and sim.S > 0.0:
+				halted = false
+		if sim.state != "run":
+			break
+	check(closing, "the boss only ever comes closer")
+	check(halted, "the street stops while the boss walks in, so he never drifts backwards")
+	check(shots_walking > 0, "the boss shoots while walking")
+	eq(sim.state, "strike", "planned squad beats the boss")
+	check(not finish_early, "no finish while the boss lives")
+	check(hits.size() >= 3, "boss_hit events (%d)" % hits.size())
+	if hits.size() < 3:
+		return
+	eq(int(hits[-1]["hp"]), 0, "last boss_hit reports 0 hp")
+	eq(int(hits[0]["max"]), 1200, "boss_hit max")
+	for n in range(1, hits.size() - 1):
+		check(float(hits[n]["t"]) - float(hits[n - 1]["t"]) >= sim.boss_hit_every - 1e-3, "boss_hit throttled")
+	for n in range(1, hits.size()):
+		check(int(hits[n]["hp"]) <= int(hits[n - 1]["hp"]), "boss hp only falls")
+
+
+func test_failing_squad_meets_the_boss_in_melee() -> void:
+	var lvl := {"events": [
+		{"at": 60, "type": "wave", "groups": [{"enemy": "boss", "n": 1, "hp": 5000, "shot_dmg": 0}]},
+		{"at": 90, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	var seen := _step_until(sim, func(): return sim.state != "run", 20000)
+	eq(sim.state, "lost", "hero alone loses")
+	check(not _events_of(seen, "melee_start").is_empty(), "the boss walked all the way into melee")
+
+
+func test_finish_waits_for_every_gang_and_always_ends() -> void:
+	# A wave scheduled after the HQ: the squad holds short of it, the gang pours out early.
+	var lvl := {"events": [
+		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 30}]},
+		{"at": 50, "type": "wave", "groups": [{"enemy": "brute", "n": 6}]},
+		{"at": 200, "type": "wave", "groups": [{"enemy": "thug", "n": 20}]},
+		{"at": 60, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	var bad := false
+	var seen: Array = []
+	for i in 20000:
+		sim.step(1.0 / 30.0)
+		var ev := sim.drain()
+		seen.append_array(ev)
+		var live: bool = not sim.hordes.is_empty() or sim._pending_hordes > 0
+		if live and sim.traveled > sim.finish_at - sim.finish_hold + 0.1:
+			bad = true
+		for e in ev:
+			if e["type"] == "finish" and live:
+				bad = true
+		if sim.state != "run":
+			break
+	check(not bad, "the HQ never scrolls past a live or pending gang")
+	eq(sim.state, "strike", "the level ended")
+	eq(_events_of(seen, "horde_spawn").size(), 2, "both gangs came out")
+
+
+func _ranged_level(enemy: String, n: int) -> Dictionary:
+	return {"events": [
+		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 60}]},
+		{"at": 90, "type": "wave", "groups": [{"enemy": enemy, "n": n, "hp": 4000}]},
+		{"at": 140, "type": "finish"}]}
+
+
+func test_molotov_firebomb_hits_the_lane_it_was_thrown_at() -> void:
+	var sim := LevelSim.new(_ranged_level("molotov", 2), units)
+	sim.set_lane(1)
+	var throw := _until_event(sim, "firebomb_throw")
+	check(not throw.is_empty(), "a firebomb was thrown")
+	if throw.is_empty():
+		return
+	eq(int(throw["lane"]), 1, "thrown at the squad's lane")
+	check(float(throw["t"]) > 0.0, "flight time given")
+	var burn := 2 * int(units["enemies"]["molotov"]["burn"])
+	# Stay: burn. Step aside: nothing. Shield: blocked.
+	var stay := sim.clone()
+	var hit := _until_event(stay, "firebomb_hit")
+	eq(int(hit.get("lost", -1)), burn, "stayed in the lane: burned")
+	eq(bool(hit.get("blocked", true)), false, "not blocked")
+	var dodge := sim.clone()
+	dodge.set_lane(0)
+	var before := dodge.squad.total()
+	hit = _until_event(dodge, "firebomb_hit")
+	eq(int(hit.get("lost", -1)), 0, "stepped aside: no burn")
+	eq(dodge.squad.total(), before, "squad intact")
+	var shield := sim.clone()
+	shield.charges["shield"] = 1
+	check(shield.use_power("shield"), "shield up")
+	hit = _until_event(shield, "firebomb_hit")
+	eq(bool(hit.get("blocked", false)), true, "shield blocks the firebomb")
+	eq(int(hit.get("lost", -1)), 0, "no burn under the shield")
+
+
+func test_sniper_foe_aims_then_fires() -> void:
+	var sim := LevelSim.new(_ranged_level("sniper_foe", 3), units)
+	sim.set_lane(1)
+	check(not _until_event(sim, "snipe_aim").is_empty(), "laser telegraph")
+	var aim_t := sim.time
+	var shielded := sim.clone()
+	var shot := _until_event(sim, "snipe")
+	eq(int(shot.get("lost", -1)), 3 * int(units["enemies"]["sniper_foe"]["shot_dmg"]), "each sniper kills shot_dmg")
+	var aim := float(units["enemies"]["sniper_foe"]["aim"])
+	check(absf(sim.time - aim_t - aim) < 0.1, "laser shows `aim` seconds before the shot")
+	shielded.charges["shield"] = 1
+	check(shielded.use_power("shield"), "shield up")
+	shot = _until_event(shielded, "snipe")
+	eq(bool(shot.get("blocked", false)), true, "shield blocks the sniper")
+	eq(int(shot.get("lost", -1)), 0, "nobody lost")
+
+
+func test_grenadier_shot_kills_three() -> void:
+	var sim := LevelSim.new(_ranged_level("grenadier", 2), units)
+	sim.set_lane(1)
+	var hurt := _until_event(sim, "hurt")
+	eq(String(hurt.get("cause", "")), "grenadier", "cause")
+	eq(int(hurt.get("n", -1)), 2 * int(units["enemies"]["grenadier"]["shot_dmg"]), "2 grenadiers x 3")
+
+
+func test_pothole_costs_troops_in_its_lane_only() -> void:
+	var lvl := _gate_level([{"lane": 0, "op": "num", "v": 10}, {"lane": 1, "op": "num", "v": 10}, {"lane": 2, "op": "num", "v": 10}],
+		[{"at": 40, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 3},
+		 {"at": 45, "type": "obstacle", "kind": "pothole", "lane": 2, "fall_pct": 50}])
+	eq(_run(lvl, [0])["troops"], 11, "left lane: no hole")
+	eq(_run(lvl, [1])["troops"], 8, "middle: fell in, -3")
+	eq(_run(lvl, [2])["troops"], 6, "right: -50% rounded down")
+	var deep := {"events": [{"at": 30, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 9}, {"at": 60, "type": "finish"}]}
+	var alone := _run(deep, [1])
+	eq(alone["state"], "strike", "the hero hops over: a pothole never ends the level")
+	eq(alone["troops"], 1, "hero alone")
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	var seen := _step_until(sim, func(): return sim.state != "run")
+	var pass_ev := _events_of(seen, "pothole_pass")
+	eq(pass_ev.size(), 1, "one pothole_pass")
+	if pass_ev.size() == 1:
+		eq(int(pass_ev[0]["lost"]), 3, "lost 3")
+		eq(int(pass_ev[0]["lane"]), 1, "lane")
+	for e in seen:
+		check(not (e["type"] == "obstacle_broken" and String(e["ob"]["kind"]) == "pothole"), "potholes can't be shot away")
+
+
+func _barricade_level(hp: int) -> Dictionary:
+	return {"events": [
+		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 10}]},
+		{"at": 60, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": hp, "dmg": 4},
+		{"at": 66, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 20}]},
+		{"at": 100, "type": "finish"}]}
+
+
+func test_barricade_shoot_it_or_pay_and_lose_the_gate() -> void:
+	eq(_run(_barricade_level(3), [1, 1])["troops"], 31, "barricade shot down: gate behind it counts")
+	var sim := LevelSim.new(_barricade_level(100000), units)
+	sim.set_lane(1)
+	var seen := _step_until(sim, func(): return sim.state != "run")
+	var hit := _events_of(seen, "barricade_hit")
+	eq(hit.size(), 1, "crashed into the barricade")
+	if hit.size() == 1:
+		eq(int(hit[0]["lost"]), 4, "cost dmg troops")
+	var rp := _events_of(seen, "row_pass")
+	eq(bool(rp[-1]["blocked"]), true, "the gate behind it is wrecked")
+	eq(sim.squad.total(), 11 - 4, "no +20")
+
+
+func test_sniper_rank_shoots_the_toughest_gang() -> void:
+	var lvl := {"events": [
+		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "recruit", "unit": "sniper", "n": 3}]},
+		{"at": 90, "type": "wave", "groups": [{"enemy": "thug", "n": 60}, {"enemy": "brute", "n": 3, "gap": 6}]},
+		{"at": 140, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	var both := func() -> bool:
+		if sim.hordes.size() < 2:
+			return false
+		for h in sim.hordes:
+			if LevelSim.front_z(h) < -sim.fire_range:
+				return false
+		return sim.snipe_ref != null
+	_step_until(sim, both)
+	check(sim.snipe_ref != null and String(sim.snipe_ref["enemy"]) == "brute", "snipers pick the brutes behind the thugs")
+	check(sim.target_ref != null and String(sim.target_ref["enemy"]) == "thug", "everyone else shoots the front")
+
+
+func test_rank_join_reports_the_first_arrival() -> void:
+	var lvl := _gate_level([{"lane": 1, "op": "recruit", "unit": "sergeant", "n": 3}],
+		[{"at": 40, "type": "gates", "gates": [{"lane": 1, "op": "recruit", "unit": "sergeant", "n": 2}]}])
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	var seen := _step_until(sim, func(): return sim.state != "run")
+	var joins := _events_of(seen, "rank_join")
+	eq(joins.size(), 2, "two recruit gates")
+	if joins.size() == 2:
+		eq(bool(joins[0]["first_time"]), true, "first sergeants")
+		eq(bool(joins[1]["first_time"]), false, "then not first")
+	eq(sim.squad.count("sergeant"), 5, "5 sergeants")
+
+
+func test_stars_peak_and_revive() -> void:
+	var lvl := _gate_level([{"lane": 1, "op": "num", "v": 19}], [{"at": 40, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 10}])
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	check(sim.stars() == 0, "no stars before the finish")
+	_step_until(sim, func(): return sim.state != "run")
+	eq(sim.peak_squad, 20, "peak squad")
+	eq(sim.stars(), 2, "half the peak left: 2 stars (30/55)")
+	lvl["stars"] = {"star2": 60, "star3": 80}
+	var strict := LevelSim.new(lvl, units)
+	strict.set_lane(1)
+	_step_until(strict, func(): return strict.state != "run")
+	eq(strict.stars(), 1, "level thresholds")
+	eq(_run(_gate_level([{"lane": 1, "op": "num", "v": 9}]), [1])["stars"], 3, "untouched squad: 3 stars")
+
+	var lose := {"events": [
+		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 20}]},
+		{"at": 60, "type": "wave", "groups": [{"enemy": "brute", "n": 10, "hp": 100000}]},
+		{"at": 100, "type": "finish"}]}
+	var ls := LevelSim.new(lose, units)
+	ls.set_lane(1)
+	_step_until(ls, func(): return ls.state != "run")
+	eq(ls.state, "lost", "lost to brutes")
+	eq(ls.stars(), 0, "a loss has no stars")
+	check(not LevelSim.new(lose, units).revive(5), "no revive while running")
+	var n := ls.revive_troops()
+	eq(n, 11, "50% of the peak of 21, rounded up")
+	check(ls.revive(n), "revived")
+	eq(ls.state, "run", "running again")
+	eq(ls.squad.total(), 11, "squad back")
+	var rev := _events_of(ls.drain(), "revive")
+	eq(rev.size(), 1, "revive event")
+	if rev.size() == 1:
+		eq(int(rev[0]["troops"]), 11, "revive event troops")
+	for h in ls.hordes:
+		check(LevelSim.front_z(h) <= -float(units["revive"]["push"]) + 0.01, "gangs pushed back")
+	check(ls.shield_t > 0.0, "a short shield covers the restart")
+	_step_until(ls, func(): return ls.state != "run")
+	check(not ls.revive(n), "only once per level")
+
+
+func test_boosters_come_in_through_upgrades() -> void:
+	var lvl := {"charges": {"shield": 1}, "events": [{"at": 60, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units, {"headstart": 2, "shield": 1, "bomb": 2})
+	eq(sim.squad.total(), 1 + 2 * int(units["boosters"]["headstart"]), "head start constables")
+	eq(int(sim.charges["shield"]), 2, "level shield + token")
+	eq(int(sim.charges["bomb"]), 2, "bomb tokens")
+	eq(sim.peak_squad, sim.squad.total(), "peak starts at the starting squad")
+
+
+func test_generated_levels_follow_the_rules() -> void:
+	var hint_ids := {}
+	var lucky_levels: Array = []
+	var offers := ["num+", "mul", "recruit", "weapon", "power", "foe_div", "foe_strip", "turncoat", "pct+"]
+	for n in range(1, Config.LEVEL_COUNT + 1):
+		var lv := Config.level(n)
+		check(not lv.is_empty(), "level %d exists" % n)
+		if lv.is_empty():
+			continue
+		eq(int(lv.get("district", 0)), int(ceil(n / 10.0)), "L%d district" % n)
+		check(lv.has("stars") and int(lv["stars"]["star2"]) < int(lv["stars"]["star3"]), "L%d star thresholds" % n)
+		var bosses := 0
+		var lucky := 0
+		var finish := 0.0
+		var obstacle_lanes := {}
+		for e in lv["events"]:
+			if e["type"] == "obstacle":
+				obstacle_lanes["%d:%d" % [int(e["at"]), int(e["lane"])]] = true
+		for e in lv["events"]:
+			match String(e["type"]):
+				"finish":
+					finish = float(e["at"])
+				"hint":
+					check(not hint_ids.has(e["id"]), "hint %s shows once ever (again in L%d)" % [e["id"], n])
+					hint_ids[e["id"]] = true
+				"wave":
+					for g in e["groups"]:
+						check(int(units["enemies"][g["enemy"]]["unlock"]) <= n, "L%d: %s before its unlock" % [n, g["enemy"]])
+						if g["enemy"] == "boss":
+							bosses += 1
+				"gates":
+					var n_off := 0
+					var lanes := {}
+					for g in e["gates"]:
+						lanes[int(g["lane"])] = true
+						var op := String(g["op"])
+						if op == "num" or op == "pct":
+							op += "+" if int(g["v"]) > 0 else "-"
+						if offers.has(op):
+							n_off += 1
+						if op == "recruit":
+							check(int(units["allies"][g["unit"]]["unlock"]) <= n, "L%d: %s recruit before its unlock" % [n, g["unit"]])
+					for l in 3:
+						if not lanes.has(l) and not obstacle_lanes.has("%d:%d" % [int(e["at"]), l]):
+							failures.append("L%d row at %d: lane %d holds neither a gate nor an obstacle" % [n, int(e["at"]), l])
+					check(n_off >= 1, "L%d row at %d has an offer" % [n, int(e["at"])])
+					if n_off >= 3:
+						lucky += 1
+		eq(bosses, 1 if n % 10 == 0 else 0, "L%d boss" % n)
+		check(lucky <= 1, "L%d at most one lucky row" % n)
+		if lucky > 0:
+			lucky_levels.append(n)
+		var secs := finish / float(units["world"]["scroll_speed"])
+		check(secs >= 58.0 and secs <= 92.0, "L%d track %.0f s" % [n, secs])
+	for i in range(1, lucky_levels.size()):
+		check(int(lucky_levels[i]) - int(lucky_levels[i - 1]) >= 3, "lucky rows at most 1 per 3 levels (%s)" % str(lucky_levels))
