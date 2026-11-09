@@ -231,3 +231,22 @@ func test_existing_api_still_works() -> void:
 	check(g.hint_seen("swipe"), "hint")
 	check(g.upgrades().has("knife") and g.coin_bonus() == 0.0, "upgrades")
 	g.free()
+
+
+func test_rank_card_due_once_and_improvements() -> void:
+	var g := _game()
+	eq(g.rank_card_due(1), "", "no card at level 1")
+	eq(g.rank_card_due(3), "", "none before the sergeant")
+	eq(g.rank_card_due(4), "sergeant", "sergeant card before level 4")
+	g.mark_rank_card("sergeant")
+	eq(g.rank_card_due(4), "", "shown once")
+	eq(g.rank_card_due(8), "inspector", "next rank later")
+	g.mark_rank_seen("inspector")
+	eq(g.rank_card_due(8), "", "a rank already met in a level needs no card")
+	g.save["coins"] = 100000
+	var p0: int = g.squad_power()
+	check(g.buy_room("armory") and g.buy_room("armory"), "two armory levels")
+	check(g.squad_power() > p0, "Squad Power grew")
+	eq(g.take_improvements(), [{"room": "armory", "before": 0, "after": 2}], "one line per room, first before to last after")
+	eq(g.take_improvements(), [], "cleared once taken")
+	g.free()
