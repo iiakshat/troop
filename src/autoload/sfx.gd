@@ -8,6 +8,9 @@ extends Node
 ## consistent. Each id is rate-limited so 60 guns don't turn into noise. Ids without a file
 ## fall back to a sound synthesised on first use; unknown ids are silent.
 ##
+## Safe to call at any time: before _ready (players are made on first use), outside the
+## scene tree (headless test scripts) or with no audio files at all. It never errors.
+##
 ## Music: Sfx.play_music("menu" | "level" | "boss") crossfades between looping tracks
 ## (music_<mode>.ogg). The old bool form still works: true = level, false = menu.
 
@@ -25,6 +28,13 @@ const ALIASES := {"strike": "boom", "crash": "boom"}
 ## call; it now gets the shatter plus falling shards.
 const COMBOS := {"glass": [["glass_break", 0.0, 0.0], ["glass_tinkle", 0.16, -3.0]]}
 
+## Most copies of one id sounding at once. A new play over the cap is dropped, so a full
+## squad firing reads as a steady volley, not a wall of noise. Default 3.
+const MAX_SAME := {
+	"knife": 3, "shot": 4, "shot_big": 3, "shot_rifle": 3, "hit": 3, "punch": 3, "die": 3,
+	"coin": 4, "spin_tick": 2, "tick": 2, "glass_break": 3, "glass_tinkle": 2, "boom": 2,
+	"tap": 2, "hurt": 2, "boss_roar": 1, "fire": 2,
+}
 ## Minimum seconds between two plays of the same id.
 const MIN_GAP := {
 	"knife": 0.06, "shot": 0.05, "shot_big": 0.08, "shot_rifle": 0.06, "shot_sniper": 0.25,
@@ -37,7 +47,7 @@ const MIN_GAP := {
 ## Pitch spread per id (+/- fraction). Default 0.03. Musical sounds get none, so they stay
 ## in tune with each other (star1-3 are a chord).
 const PITCH_SPREAD := {
-	"knife": 0.03, "shot": 0.04, "shot_big": 0.03, "shot_rifle": 0.03, "hit": 0.05,
+	"knife": 0.0, "shot": 0.04, "shot_big": 0.03, "shot_rifle": 0.03, "hit": 0.05,
 	"punch": 0.05, "die": 0.04, "hurt": 0.03, "glass_break": 0.04, "glass_tinkle": 0.05,
 	"coin": 0.0, "coin_bag": 0.0, "win": 0.0, "lose": 0.0, "upgrade": 0.0, "banner": 0.0,
 	"rank_up": 0.0, "gate_good": 0.0, "gate_bad": 0.0, "star1": 0.0, "star2": 0.0,
@@ -45,15 +55,19 @@ const PITCH_SPREAD := {
 	"build_done": 0.0, "chest_open": 0.0, "collect": 0.0, "recruit": 0.0, "tap": 0.0,
 	"error": 0.0, "flip": 0.0, "tick": 0.0, "spin_tick": 0.02, "boss_roar": 0.0,
 }
-## Mix trim per id in dB, added to the caller's volume. Files are levelled to the same
-## loudness, so this is where the mix gets balanced without touching call sites.
+## Mix trim per id in dB, added to the caller's volume. tools/make_sfx.py levels every file
+## it builds (loudest 50 ms: big hits -11..-13, weapons and bodies -12..-16, rewards -13..-16,
+## ticks -20). The older Kenney / rubberduck files below were louder than that, so they are
+## trimmed onto the same plan here: UI and rewards never sit above the gameplay hits.
 const TRIM_DB := {
-	"hit": -6.0, "die": -5.0, "punch": -3.0, "knife": -2.0, "tick": -4.0, "spin_tick": -5.0,
-	"glass_tinkle": -3.0, "tap": -3.0, "boss_roar": 1.0, "boom": 1.0,
+	"upgrade": -6.5, "win": -3.5, "lose": -6.0, "banner": -4.5, "error": -3.5,
+	"recruit": -3.0, "gate_good": -4.0, "flip": -4.5, "tick": -4.0, "clink": -3.5,
+	"blast": -1.5, "tap": -8.0, "swoosh": -3.0,
 }
 const _PITCH_STEPS := [0.0, 0.6, -0.6, 1.0, -1.0, 0.3, -0.3]
 
 var _players: Array[AudioStreamPlayer] = []
+var _player_id: PackedStringArray = []  # id each voice played last
 var _next := 0
 var _variants: Dictionary = {}  # id -> Array[AudioStream] (from files)
 var _synth: Dictionary = {}     # id -> AudioStream synthesised on first use
@@ -66,16 +80,28 @@ var _music_cur := 0
 var _music_mode := ""
 var _music_tween: Tween
 var _ducked := false
+var _setup_done := false
 
 
 func _ready() -> void:
 	# Keep sounding while the tree is paused (ad popup, pause menu): its taps need sound.
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_setup()
+	if _music_mode != "":  # play_music() was asked for before the tree was ready
+		play_music(_music_mode)
+
+
+## Makes the voices and loads the files once. Called lazily, so Sfx works before _ready.
+func _setup() -> void:
+	if _setup_done:
+		return
+	_setup_done = true
 	for i in VOICES:
 		var p := AudioStreamPlayer.new()
 		p.bus = "Master"
 		add_child(p)
 		_players.append(p)
+		_player_id.append("")
 	for i in 2:
 		var m := AudioStreamPlayer.new()
 		m.bus = "Master"
@@ -88,7 +114,9 @@ func _ready() -> void:
 # ---------------------------------------------------------------- sounds
 
 func play(id: String, volume_db := 0.0, pitch := 1.0) -> void:
-	if not _sound_on():
+	_setup()
+	# Outside the scene tree (test scripts, before boot) nothing can sound: stay silent.
+	if not is_inside_tree() or not _sound_on():
 		return
 	if COMBOS.has(id):
 		for part in COMBOS[id]:
@@ -101,8 +129,11 @@ func play(id: String, volume_db := 0.0, pitch := 1.0) -> void:
 	var now := Time.get_ticks_msec() / 1000.0
 	if now - float(_last_play.get(id, -1.0)) < float(MIN_GAP.get(id, 0.0)):
 		return
+	if _playing_count(id) >= int(MAX_SAME.get(id, 3)):
+		return
 	_last_play[id] = now
 	var p := _free_player()
+	_player_id[_players.find(p)] = id
 	p.stream = stream
 	p.volume_db = volume_db + float(TRIM_DB.get(id, 0.0))
 	var spread := float(PITCH_SPREAD.get(id, 0.03))
@@ -117,11 +148,30 @@ func has_sound(id: String) -> bool:
 	if COMBOS.has(id):
 		return true
 	id = ALIASES.get(id, id)
+	_setup()
 	return _variants.has(id) or _synth.has(id) or _SYNTH.has(id)
 
 
 func _sound_on() -> bool:
-	return bool(Game.save.get("sound", true))
+	var g: Node = get_node_or_null("/root/Game")
+	if g == null or not (g.get("save") is Dictionary):
+		return true
+	return bool((g.get("save") as Dictionary).get("sound", true))
+
+
+func _music_on() -> bool:
+	var g: Node = get_node_or_null("/root/Game")
+	if g == null or not (g.get("save") is Dictionary):
+		return true
+	return bool((g.get("save") as Dictionary).get("music", true))
+
+
+func _playing_count(id: String) -> int:
+	var n := 0
+	for i in _players.size():
+		if _player_id[i] == id and _players[i].playing:
+			n += 1
+	return n
 
 
 func _play_later(id: String, delay: float, volume_db: float, pitch: float) -> void:
@@ -213,10 +263,13 @@ static func _list_dir(dir: String) -> PackedStringArray:
 
 ## mode: "menu" | "level" | "boss" (a bool also works: true = level, false = menu).
 func play_music(mode: Variant = "menu") -> void:
+	_setup()
 	var m := _music_mode_of(mode)
 	_music_mode = m
+	if not is_inside_tree():  # _ready starts it
+		return
 	var cur := _music[_music_cur]
-	if not bool(Game.save.get("music", true)):
+	if not _music_on():
 		_fade_music(cur, SILENT_DB, 0.3, true)
 		_fade_music(_music[1 - _music_cur], SILENT_DB, 0.3, true)
 		return
@@ -251,6 +304,8 @@ func duck_music(on: bool) -> void:
 	if _ducked == on:
 		return
 	_ducked = on
+	if not is_inside_tree() or _music.is_empty():
+		return
 	var cur := _music[_music_cur]
 	if cur.playing:
 		_fade_music(cur, _music_target(_music_mode), 0.25, false)
