@@ -84,6 +84,15 @@ static func district_reached(save: Dictionary, d: int, economy: Dictionary = {})
 	return d <= 1 or district_liberated(save, d - 1, economy)
 
 
+## Coins paid once when district `d` is liberated (city.liberation_bonus[d-1], scaled like
+## other rewards by nothing: the list already grows per district). 0 if not configured.
+static func liberation_bonus(d: int, economy: Dictionary = {}) -> int:
+	var list: Array = cfg(economy).get("liberation_bonus", [])
+	if d < 1 or d > list.size():
+		return 0
+	return int(list[d - 1])
+
+
 ## How many districts in a row, from the first, are liberated.
 static func districts_liberated(save: Dictionary, economy: Dictionary = {}) -> int:
 	var n := 0

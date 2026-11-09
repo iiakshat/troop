@@ -234,6 +234,12 @@ func win_level(level: int, finale_coins: int, stars_won: int, stats: Dictionary 
 		counters["stars3"] = int(counters.get("stars3", 0)) + 1
 	_record(counters)
 	var lib_after := districts_liberated()
+	# Liberating a district pays a one-time bonus on top of the level's coins (not doubled by
+	# the x2 ad, which doubles `coins` only).
+	var lib_bonus := 0
+	for d in range(lib_before + 1, lib_after + 1):
+		lib_bonus += City.liberation_bonus(d, economy)
+	save["coins"] = int(save["coins"]) + lib_bonus
 	write_save()
 	var params := info.duplicate()
 	params.merge({"level": level, "result": "win", "stars": stars_won, "coins": coins, "first": first}, true)
@@ -247,6 +253,7 @@ func win_level(level: int, finale_coins: int, stars_won: int, stats: Dictionary 
 		"coins": coins, "first_clear": first, "stars": stars(level), "stars_gained": gained,
 		"star_chest_ready": bool(star_chest_progress()["ready"]),
 		"liberated": lib_after if lib_after > lib_before else 0,
+		"liberation_bonus": lib_bonus,
 		"mult": Economy.level_coin_mult(level, economy),
 	}
 
