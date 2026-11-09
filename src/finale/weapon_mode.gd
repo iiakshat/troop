@@ -16,6 +16,7 @@ var kick := 0.0                # recoil pitch on top of the aim (radians), recov
 var _touch := false
 var _last := Vector2.ZERO
 var _auto := false             # autoplay asked for a shot
+var _fill: OmniLight3D
 
 
 func setup(s: BottleShot) -> FinaleWeapon:
@@ -130,6 +131,24 @@ func finish() -> void:
 
 
 # ---------------------------------------------------------------- helpers
+
+## A soft light riding with the camera so the weapon in hand never goes black in a dark stash.
+func add_fill() -> void:
+	var l := OmniLight3D.new()
+	l.name = "Fill"
+	l.light_color = Color("fff1dc")
+	l.light_energy = 1.3
+	l.omni_range = 1.6
+	l.shadow_enabled = false
+	l.top_level = true
+	add_child(l)
+	_fill = l
+
+
+func place_fill(cam: Transform3D) -> void:
+	if _fill:
+		_fill.global_position = cam * Vector3(0.25, 0.22, 0.05)
+
 
 ## Leaves a tracer streak: a thin glowing box from `a` to `b`.
 static func streak_mesh(color: Color, width: float) -> MeshInstance3D:

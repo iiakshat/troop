@@ -52,7 +52,7 @@ static func neon_bottle(parent: Node3D, pos: Vector3, h: float, color: Color, li
 	var root := Node3D.new()
 	root.position = pos
 	parent.add_child(root)
-	var m := WeaponModels.mat(color, 0.0, 0.4, 5.0)
+	var m := WeaponModels.mat(color, 0.0, 0.4, 2.2)
 	var prof := [Vector2(0.0, 0.0), Vector2(0.3, 0.0), Vector2(0.34, 0.06), Vector2(0.34, 0.56),
 		Vector2(0.28, 0.72), Vector2(0.11, 0.84), Vector2(0.11, 1.08), Vector2(0.14, 1.12), Vector2(0.0, 1.12)]
 	for s in [-1.0, 1.0]:
@@ -193,8 +193,8 @@ static func _carnival(shot: BottleShot, c: Vector3) -> void:
 	for i in 10:
 		var p := box(shot, Vector3(0.7, 0.05, 1.4), c + Vector3(-3.15 + 0.7 * i, 5.35, 0.9), Color("fff1d6") if i % 2 == 0 else Color("d8283a"))
 		p.rotation.x = deg_to_rad(-18)
-	box(shot, Vector3(7.0, 1.0, 0.5), c + Vector3(0, 0.5, 2.6), Color("6b1a20"))
-	box(shot, Vector3(7.2, 0.08, 0.7), c + Vector3(0, 1.02, 2.6), Color("e8c27a"))
+	box(shot, Vector3(7.0, 0.75, 0.5), c + Vector3(0, 0.375, 2.2), Color("6b1a20"))
+	box(shot, Vector3(7.2, 0.08, 0.7), c + Vector3(0, 0.77, 2.2), Color("e8c27a"))
 	# Pennants on a string out front.
 	var pm := WeaponModels.mat(Color("ffd23f"), 0.0, 0.6)
 	for i in 12:
@@ -235,7 +235,7 @@ static func _factory(shot: BottleShot, c: Vector3) -> void:
 		var lamp := box(shot, Vector3(0.5, 0.2, 0.5), c + Vector3(side * 2.0, 5.2, 1.2), Color("ffab3d"), 4.0)
 		lamp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	neon_bottle(shot, c + Vector3(-2.6, 3.0, 0.06), 1.1, NEON["factory"])
-	_spots(shot, c, 5.5, 5.0, 1.8, 3.6, true)
+	_spots(shot, c, 5.5, 5.0, 1.8, 3.6, false)
 
 
 static func _rooftop(shot: BottleShot, c: Vector3) -> void:

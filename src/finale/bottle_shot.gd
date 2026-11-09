@@ -321,6 +321,7 @@ func _process(delta: float) -> void:
 					_mode.finish()
 				if theme == "rooftop":
 					visible = false   # our roof would cover the squad on the street
+				print("FINALE ", logic.weapon, " broken=", logic.broken_count(), "+", logic.broken_count(true), "/", logic.targets(), " shots_left=", logic.shots_left, " best=", logic.best_streak, " t=", _ft)
 				done.emit({"broken": logic.broken_count(), "gold": logic.broken_count(true),
 					"mult": logic.multiplier(), "coins": logic.coins(troops, station_bonus),
 					"combo": logic.best_streak})

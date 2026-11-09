@@ -7,7 +7,7 @@ extends FinaleWeapon
 ## drops (zeroed at `zero` m). A hit is filmed from behind the bullet in slow motion; then the
 ## bolt is cycled (cycle_s) before the next round. Rounds are limited (BottleLogic shots).
 
-const RIFLE_AT := Vector3(0.06, -0.075, -0.06)   # rifle origin in camera space (unscoped)
+const RIFLE_AT := Vector3(0.13, -0.13, -0.12)   # rifle origin in camera space (unscoped)
 const SCOPE_IN := 0.18                          # seconds to raise the scope
 
 var _rifle: Node3D
@@ -23,7 +23,6 @@ var _flight: Dictionary = {}
 var _hold := 0.0
 var _cycle_t := 0.0
 var _bullet: Node3D
-var _trail: MeshInstance3D
 var _casings: Array = []
 var _look_at := Vector3.ZERO
 var _noise := FastNoiseLite.new()
@@ -76,6 +75,7 @@ func _ready() -> void:
 	_noise.frequency = 3.0
 	_rifle = WeaponModels.rifle()
 	add_child(_rifle)
+	add_fill()
 	_bolt = _rifle.get_node("Bolt")
 	_ui = CanvasLayer.new()
 	_ui.layer = 1
@@ -121,19 +121,27 @@ func _scope(on: bool) -> void:
 	_scoped = on
 
 
+## Autoplay: raise the scope, settle on the next bottle for a moment, then fire (no sway).
 func auto_fire() -> void:
-	if _phase != "ready":
+	if _phase != "ready" or _auto:
 		return
+	if logic.next_target() < 0:
+		return
+	_auto = true
+	_scope(true)
+
+
+func _auto_tick() -> void:
 	var i := logic.next_target()
 	if i < 0:
+		_auto = false
 		return
-	_scope(true)
-	_scope_k = 1.0
-	_scope_s = float(wcfg.get("steady_s", 1.6)) * 0.5
 	var v := logic.solve(eye_h(), i, speed(), shot._ft)
 	look_along(v, zero())
 	_sway = Vector2.ZERO
-	_fire(v)
+	if _scope_k >= 1.0 and _scope_s >= 0.45:
+		_auto = false
+		_fire(v)
 
 
 func _fire(v: Vector3) -> void:
@@ -152,11 +160,15 @@ func _fire(v: Vector3) -> void:
 		# Bullet cam: slow motion from behind the round.
 		_phase = "bullet"
 		shot._scale = float(wcfg.get("bullet_cam", 0.22))
-		_bullet = WeaponModels.bullet(4.0)
+		_bullet = WeaponModels.bullet(5.0)
 		_bullet.top_level = true
 		add_child(_bullet)
-		_trail = FinaleWeapon.streak_mesh(Color(0.85, 0.92, 1.0, 0.5), 0.02)
-		add_child(_trail)
+		var glint := OmniLight3D.new()
+		glint.light_color = Color("ffd9a0")
+		glint.light_energy = 2.0
+		glint.omni_range = 0.6
+		glint.position = Vector3(0.15, 0.2, 0.3)
+		_bullet.add_child(glint)
 		_scoped = false
 		_scope_k = 0.0
 	else:
@@ -170,12 +182,15 @@ func tick(delta: float, d: float) -> void:
 		_scope_s += delta
 	kick = move_toward(kick, 0.0, deg_to_rad(1.6) / 0.5 * delta)
 	_update_sway()
+	if _auto and _phase == "ready":
+		_auto_tick()
 	_tick_casings(d)
 	var cam := Transform3D(view_basis(_sway.x * _scope_k, _sway.y * _scope_k), eye())
 	var fov := float(wcfg.get("fov", 46.0))
 	var sfov := float(wcfg.get("scope_fov", 2.8))
 	# Zoom in log space so the scope snaps in like an optic, not a slow dolly.
 	shot._fov = exp(lerpf(log(fov), log(sfov), smoothstep(0.0, 1.0, _scope_k)))
+	place_fill(cam)
 	shot._cam = cam
 	shot._focus = -1.0
 	shot._roll = 0.0
@@ -243,10 +258,10 @@ func _tick_bullet(delta: float) -> void:
 	var vel := v + Vector3(0, -logic.gravity(), 0) * tt
 	var dir := vel.normalized()
 	_bullet.global_transform = Transform3D(Basis.looking_at(dir, Vector3.UP), p)
-	FinaleWeapon.place_streak(_trail, shot.to_world(logic.trajectory(o, v, maxf(tt - 0.012, 0.0))), p)
 	var side := dir.cross(Vector3.UP).normalized()
-	var eye := p - dir * 0.9 + Vector3.UP * 0.1 + side * 0.12
-	shot._cam = Transform3D(Basis.looking_at(p + dir * 4.0 - eye, Vector3.UP), eye)
+	# Three-quarter view from behind and beside the round, so its profile reads.
+	var eye := p - dir * 0.55 + Vector3.UP * 0.07 + side * 0.32
+	shot._cam = Transform3D(Basis.looking_at(p + dir * 2.5 - eye, Vector3.UP), eye)
 	shot._fov = 32.0
 	_overlay.alpha = 0.0
 	_rifle.visible = false
@@ -255,7 +270,6 @@ func _tick_bullet(delta: float) -> void:
 		shot.break_bottle(i, dir, int(f["streak"]))
 		_look_at = shot._bottle_center(i, shot._ft)
 		_bullet.queue_free()
-		_trail.queue_free()
 		_flight = {}
 		shot._scale = 1.0
 		_phase = "look"

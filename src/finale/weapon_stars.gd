@@ -195,8 +195,8 @@ func _tick_flight(delta: float) -> void:
 	var eye := p + side * 0.35 - dir * 0.7 + Vector3.UP * 0.12
 	var look := p + dir * 0.4
 	var target := Transform3D(Basis.looking_at(look - eye, Vector3.UP), eye)
-	shot._cam = shot._cam.interpolate_with(target, minf(_cam_t * 6.0, 1.0))
-	shot._fov = lerpf(shot._fov, 52.0, minf(delta * 8.0, 1.0))
+	shot._cam = target
+	shot._fov = 52.0
 	shot._focus = 2.5
 	shot._blur = 0.05
 

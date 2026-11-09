@@ -6,7 +6,7 @@ extends FinaleWeapon
 ## (shown top right, different every arrow) pushes it sideways. Held at full draw past
 ## steady_s the arm starts to shake. Arrows fly a real gravity arc and stick where they land.
 
-const HOLD_AT := Vector3(-0.07, -0.06, -0.55)   # the bow's grip in camera space
+const HOLD_AT := Vector3(-0.1, -0.04, -0.55)   # the bow's grip in camera space
 const DRAW_MAX := 0.42                          # metres the nock comes back at full draw
 
 var _bow: Node3D
@@ -25,6 +25,7 @@ func _ready() -> void:
 	_rng.seed = logic.level * 7 + 3
 	_bow = WeaponModels.bow()
 	add_child(_bow)
+	add_fill()
 	_arrow = WeaponModels.arrow()
 	_bow.add_child(_arrow)
 	_update_string()
@@ -62,17 +63,30 @@ func handle_input(event: InputEvent) -> void:
 					_draw = 0.0
 
 
+## Autoplay: draw fully on the next bottle (allowing for wind and drop), then loose.
 func auto_fire() -> void:
-	if not _flight.is_empty() or _hold > 0.0:
+	if not _flight.is_empty() or _hold > 0.0 or _auto:
 		return
+	if logic.next_target() < 0:
+		return
+	_auto = true
+	_drawing = true
+	_held = 0.0
+
+
+func _auto_tick() -> void:
 	var i := logic.next_target()
 	if i < 0:
+		_auto = false
+		_drawing = false
 		return
 	var w := logic.wind(logic.shots_fired)
-	var v := logic.solve(eye_h(), i, power_speed(1.0), shot._ft, w)
+	var v := logic.solve(eye_h() + Vector3(0, -0.02, 0), i, power_speed(1.0), shot._ft, w)
 	look_along(v, base_zero())
-	_draw = 1.0
-	_loose(v)
+	if _draw >= 1.0 and _held >= 0.25:
+		_auto = false
+		_drawing = false
+		_loose(v)
 
 
 func _loose(v: Vector3) -> void:
@@ -100,6 +114,8 @@ func tick(delta: float, _d: float) -> void:
 		_draw = minf(_draw + delta / float(wcfg.get("draw_s", 0.8)), 1.0)
 		if _draw >= 1.0:
 			_held += delta
+	if _auto:
+		_auto_tick()
 	# Holding full draw too long: the arm starts to shake (and it shakes the shot).
 	var over := maxf(_held - float(wcfg.get("steady_s", 2.2)), 0.0)
 	var amp := deg_to_rad(float(wcfg.get("shake_deg", 0.9))) * minf(over / 1.5, 1.5)
@@ -107,12 +123,13 @@ func tick(delta: float, _d: float) -> void:
 	_shake = Vector2(sin(tt * 13.0) + 0.6 * sin(tt * 29.0 + 1.0), sin(tt * 17.0 + 2.0) + 0.5 * sin(tt * 31.0)) * amp * 0.6
 	var cam := Transform3D(view_basis(_shake.x, _shake.y), eye())
 	# Drawing pulls the bow a touch closer and tilts it upright; the camera zooms in slightly.
-	var bowx := Transform3D(Basis.from_euler(Vector3(0, 0, deg_to_rad(8.0 - 6.0 * _draw))), HOLD_AT + Vector3(0, 0, 0.04 * _draw))
+	var bowx := Transform3D(Basis.from_euler(Vector3(0, 0, deg_to_rad(12.0 - 5.0 * _draw))), HOLD_AT + Vector3(0, 0, 0.04 * _draw))
 	_bow.global_transform = cam * bowx
 	_update_string()
 	# The green pin sits on the line of sight at the grip's distance.
 	var pin: Node3D = _bow.get_node("Pin")
 	pin.global_position = cam * Vector3(0, 0, HOLD_AT.z + 0.01)
+	place_fill(cam)
 	shot._cam = cam
 	shot._fov = float(wcfg.get("fov", 34.0)) * (1.0 - 0.12 * _draw)
 	shot._focus = -1.0

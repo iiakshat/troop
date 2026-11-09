@@ -29,14 +29,14 @@
     "pistol": {
       "_note": "First person, iron sights. mag rounds per magazine; reload_s = reload animation; kick_deg = muzzle rise per shot, recovered over recover_s. speed = bullet speed along the range (m/s); slow = time scale while a bullet is out.",
       "distance": 13.0, "speed": 120.0, "gravity": 9.8, "hit_radius": 0.15, "aspect": 1.7,
-      "eye_y": 1.62, "mag": 6, "reload_s": 1.15, "kick_deg": 4.5, "recover_s": 0.4, "fov": 30.0,
+      "eye_y": 1.62, "mag": 6, "reload_s": 1.15, "kick_deg": 4.5, "recover_s": 0.4, "fov": 24.0, "zero": 10.0,
       "sens": 0.06, "slow": 0.3,
-      "per_row": 4, "spacing": 0.75, "row_h": 0.8, "y0": 1.15, "amp_scale": 0.8
+      "per_row": 4, "spacing": 0.75, "row_h": 0.8, "y0": 1.45, "amp_scale": 0.8
     },
     "bow": {
       "_note": "First person. Hold to draw (draw_s to full), drag to aim, release to loose. The pin sight is set for a full draw with no wind at the base distance; past steady_s the arm starts to shake. Wind pushes sideways (difficulty.wind x wind).",
       "distance": 17.0, "speed_min": 12.0, "speed_max": 30.0, "gravity": 9.8, "hit_radius": 0.19, "aspect": 1.5,
-      "eye_y": 1.6, "draw_s": 0.8, "steady_s": 2.2, "shake_deg": 0.9, "wind": 1.0, "fov": 34.0, "sens": 0.06,
+      "eye_y": 1.6, "draw_s": 0.8, "steady_s": 2.2, "shake_deg": 0.9, "wind": 1.0, "fov": 28.0, "sens": 0.06,
       "per_row": 4, "spacing": 0.8, "row_h": 0.85, "y0": 1.2, "amp_scale": 0.8
     },
     "stars": {

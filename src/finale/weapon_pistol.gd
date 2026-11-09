@@ -10,6 +10,7 @@ extends FinaleWeapon
 const MUZZLE := Vector3(0, -0.026, -0.385)
 const PORT := Vector3(0.0145, -0.018, -0.25)
 const GRIP := Vector3(0, -0.1, -0.2)
+const HOLD := Vector3(0, 0, -0.34)       # arms out: the rear sight ~0.55 m from the eye
 
 var _gun: Node3D
 var _slide: Node3D
@@ -32,6 +33,7 @@ var _drag_total := Vector2.ZERO
 func _ready() -> void:
 	_gun = WeaponModels.pistol()
 	add_child(_gun)
+	add_fill()
 	_slide = _gun.get_node("Gun/Slide")
 	_mag = _gun.get_node("Gun/Mag")
 	_flash = MeshInstance3D.new()
@@ -162,9 +164,10 @@ func tick(delta: float, d: float) -> void:
 	var r := _reload_pose()
 	var local := Transform3D(Basis(), GRIP) * Transform3D(Basis.from_euler(Vector3(deg_to_rad(9.0) * _snap + r.x, r.y, r.z)), -GRIP)
 	local.origin += Vector3(0, -0.12 * r.w, 0.045 * _snap + 0.05 * r.w)
-	_gun.global_transform = cam * local
+	_gun.global_transform = cam * Transform3D(Basis(), HOLD) * local
 	var back := 0.035 * (sin(_slide_t * PI) if _slide_t < 1.0 else 0.0)
 	_slide.position.z = 0.035 if _locked else back
+	place_fill(cam)
 	shot._cam = cam
 	shot._fov = float(wcfg.get("fov", 30.0))
 	shot._focus = -1.0

@@ -54,6 +54,11 @@ static func skin() -> StandardMaterial3D:
 	return mat(Color("c98f6a"), 0.0, 0.75)
 
 
+## Jacket sleeve (the hero's casual clothes): forearms read as sleeves, not bare slabs.
+static func sleeve() -> StandardMaterial3D:
+	return mat(Color("34405a"), 0.0, 0.9)
+
+
 static func glove() -> StandardMaterial3D:
 	return mat(Color("2a2d33"), 0.0, 0.85)
 
@@ -108,18 +113,18 @@ static func pistol() -> Node3D:
 	hand.name = "Hand"
 	gun.add_child(hand)
 	var g := glove()
-	var sk := skin()
+	var sk := sleeve()
 	var palm := box(hand, Vector3(0.05, 0.08, 0.07), Vector3(0.006, -0.105, -0.2), g)
 	palm.rotation.x = deg_to_rad(-16)
 	for k in 3:
 		box(hand, Vector3(0.036, 0.016, 0.02), Vector3(-0.012, -0.095 - k * 0.022, -0.235 - k * 0.006), g)
 	box(hand, Vector3(0.014, 0.014, 0.05), Vector3(-0.022, -0.05, -0.28), g)   # thumb along the frame
-	var wrist := box(hand, Vector3(0.06, 0.06, 0.2), Vector3(0.01, -0.16, -0.09), sk)
-	wrist.rotation.x = deg_to_rad(28)
+	var wrist := box(hand, Vector3(0.045, 0.045, 0.2), Vector3(0.03, -0.19, -0.09), sk)
+	wrist.rotation = Vector3(deg_to_rad(34), deg_to_rad(12), 0)
 	var support := box(hand, Vector3(0.05, 0.075, 0.08), Vector3(-0.03, -0.11, -0.215), g)
 	support.rotation.z = deg_to_rad(-12)
-	var arm2 := box(hand, Vector3(0.06, 0.06, 0.22), Vector3(-0.07, -0.18, -0.1), sk)
-	arm2.rotation = Vector3(deg_to_rad(30), deg_to_rad(-18), 0)
+	var arm2 := box(hand, Vector3(0.045, 0.045, 0.22), Vector3(-0.08, -0.2, -0.1), sk)
+	arm2.rotation = Vector3(deg_to_rad(34), deg_to_rad(-22), 0)
 	return root
 
 
@@ -188,7 +193,7 @@ static func rifle() -> Node3D:
 	var g := glove()
 	box(root, Vector3(0.05, 0.08, 0.07), Vector3(0.0, -0.11, -0.08), g)
 	box(root, Vector3(0.055, 0.05, 0.1), Vector3(0.0, -0.1, -0.36), g)
-	var sk := skin()
+	var sk := sleeve()
 	var a1 := box(root, Vector3(0.065, 0.065, 0.3), Vector3(0.04, -0.2, 0.02), sk)
 	a1.rotation.x = deg_to_rad(25)
 	var a2 := box(root, Vector3(0.065, 0.065, 0.32), Vector3(-0.06, -0.21, -0.22), sk)
@@ -243,8 +248,8 @@ static func bow() -> Node3D:
 	root.add_child(string)
 	var g := glove()
 	box(root, Vector3(0.06, 0.09, 0.07), Vector3(0.005, -0.005, 0.01), g)
-	var arm := box(root, Vector3(0.065, 0.065, 0.32), Vector3(0.06, -0.06, 0.18), skin())
-	arm.rotation = Vector3(deg_to_rad(10), deg_to_rad(28), 0)
+	var arm := box(root, Vector3(0.055, 0.055, 0.32), Vector3(-0.05, -0.1, 0.17), sleeve())
+	arm.rotation = Vector3(deg_to_rad(22), deg_to_rad(-28), 0)
 	return root
 
 
