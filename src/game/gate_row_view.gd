@@ -121,7 +121,9 @@ func refresh(gate: Dictionary, ticked := false) -> void:
 	var label: Label3D = p["label"]
 	var icon: Sprite3D = p["icon"]
 	label.text = info["text"]
-	label.font_size = 150 if String(info["text"]).length() <= 4 else 84
+	var chars := String(info["text"]).length()
+	# Fit the lane: long numbers ("+40%", "-120") shrink so neighbours never touch.
+	label.font_size = 150 if chars <= 2 else (130 if chars == 3 else (108 if chars == 4 else 84))
 	var icon_name := String(info.get("icon", ""))
 	icon.visible = icon_name != ""
 	if icon.visible:
@@ -131,7 +133,7 @@ func refresh(gate: Dictionary, ticked := false) -> void:
 		icon.position.x = 0.0 if solo else -0.6
 		icon.pixel_size = (1.35 if solo else 1.05) / 320.0
 		label.position.x = 0.0 if solo else 0.55
-		label.font_size = 130
+		label.font_size = 130 if chars <= 2 else 100
 	else:
 		label.position.x = 0.0
 	var c: Color = GREY if blocked else info["color"]

@@ -32,7 +32,7 @@ const ALLY_SFX := {
 	"sniper": ["shot_sniper", "shot_rifle", -6.0], "commando": ["launcher", "boom", -12.0],
 }
 const CHAR_H := 1.85            # baked character height (config/characters.json)
-const BOSS_SCALE := 2.2         # bosses are drawn this much bigger than a thug
+const BOSS_SCALE := 2.6         # bosses are drawn this much bigger than a thug
 const LASER_POOL := 6           # sniper telegraph beams on screen at once
 const STEER_PER_SCREEN := 14.0   # metres of squad travel for a full-width finger drag
 const LANE_SLACK := 0.35         # metres past the midpoint before the lane flips (no flicker)
@@ -91,6 +91,8 @@ var _boss_music := false
 var _anim_t := 0.0             # animation clock (seconds)
 static var _meshes: Dictionary = {}     # size -> BoxMesh / name -> Mesh, shared by every level
 static var _mats: Dictionary = {}       # Color -> StandardMaterial3D
+## Debug arg `events=1`: print each sim event with its frame (to aim screenshots).
+static var _log_events := OS.get_cmdline_user_args().has("events=1")
 
 const RUN_SPEED := 1.7         # the baked walk cycle played faster reads as a run
 const CORPSE_CAP := 260        # bodies lying on the road (oldest go first)
@@ -289,6 +291,8 @@ func _update_time_scale() -> void:
 
 func _handle_events(events: Array) -> void:
 	for e in events:
+		if _log_events and not String(e["type"]) in ["kill", "gate_tick", "boss_hit"]:
+			print("EV %d %s %s" % [Engine.get_process_frames(), e["type"], e["horde"].get("enemy", "") if e.get("horde") is Dictionary else ""])
 		match String(e["type"]):
 			"row_spawn":
 				var v := GateRowView.new().setup(e["row"], font, LANE_X)
@@ -881,10 +885,14 @@ func _update_boss_bar(hv: Dictionary, d: float) -> void:
 	var front := _horde_front(hv)
 	var k := BOSS_SCALE * crowd_scale((hv["offs"] as Array).size())
 	# Always above the scaled model's head, never inside it.
-	bar.position = Vector3(front.x, CHAR_H * k + 1.0, front.z)
+	# Faces the camera and grows with distance, so it reads the same far up the street;
+	# its bottom edge stays above the scaled model's head.
+	var size := 1.0
 	var cam := get_viewport().get_camera_3d()
 	if cam:
 		bar.basis = cam.global_transform.basis
+		size = clampf(cam.global_position.distance_to(front) / 16.0, 1.0, 3.2)
+	bar.position = Vector3(front.x, CHAR_H * k + 0.5 + 0.4 * size, front.z)
 	var hp := LevelSim.boss_hp(h)
 	var mx := maxf(float(h.get("max_hp", h["hp"])), 1.0)
 	var fill: MeshInstance3D = hv["bar_fill"]
@@ -897,7 +905,7 @@ func _update_boss_bar(hv: Dictionary, d: float) -> void:
 	var fl := float(hv.get("hit_flash", 0.0))
 	hv["hit_flash"] = maxf(fl - d * 8.0, 0.0)
 	(fill.material_override as StandardMaterial3D).albedo_color = Color("e0484f").lerp(Color.WHITE, fl * 0.8)
-	bar.scale = Vector3.ONE * (1.0 + 0.08 * fl)
+	bar.scale = Vector3.ONE * size * (1.0 + 0.08 * fl)
 
 
 func _quad(size: Vector2, color: Color, priority: int) -> MeshInstance3D:
@@ -1330,7 +1338,8 @@ func _build_pothole(n: Node3D, ob: Dictionary) -> void:
 	var lab := GateRowView._label(font, 110, 0.011)
 	lab.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	lab.modulate = Color("ff5a5f")
-	lab.position = Vector3(0, 1.3, 0)
+	# On the hole's near lip, in front of any gate sign sharing the lane.
+	lab.position = Vector3(0, 0.55, 1.5)
 	lab.text = ("-%d%%" % int(ob["fall_pct"])) if ob.has("fall_pct") else ("-%d" % int(ob.get("fall", 0)))
 	n.add_child(lab)
 
