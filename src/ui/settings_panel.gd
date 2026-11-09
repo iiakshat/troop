@@ -9,9 +9,10 @@ City, cars, food, UI: Kenney (CC0)
 Street props: Kay Lousberg / KayKit (CC0)
 Icons: game-icons.net by Lorc, Delapouite, Skoll,
 Sbed, Andy Meneely, Guard13007 (CC BY 3.0)
-Sounds: Kenney, rubberduck (CC0)
+Sounds: Kenney, rubberduck, qubodup and OpenGameArt artists (CC0)
+Glass: Gravity Sound (CC BY 4.0), spookymodem (CC BY 3.0)
 Gunshots: Vincent Sevedge (CC BY 3.0)
-Music: made with Google Lyria; XCVG (CC0)
+Music: made with Google Lyria
 Painted art: made with Google Gemini
 Fonts: Luckiest Guy (Apache 2.0), Lilita One (OFL)"""
 
