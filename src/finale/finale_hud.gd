@@ -6,7 +6,7 @@ extends CanvasLayer
 ##   right      the combo (flame + ×N), big while a streak runs, cracks and fades on a miss
 ##   bottom     ammo: one icon per shot (knife, bullet, arrow, star) + the number left;
 ##              a pistol shows its magazine as rounds and the spare rounds as +N
-##   top right  wind (bow): an arrow showing its direction and strength + m/s
+##   top left (under the bottles)  wind (bow): an arrow showing its direction and strength + m/s
 ##   reload     a pulsing magazine with a swipe-down arrow when the pistol is empty
 
 const AMMO_ICONS := {"knife": "knife", "pistol": "bullet", "sniper": "bullet", "bow": "arrow", "stars": "star"}
@@ -229,11 +229,12 @@ func _ready() -> void:
 	mrow.add_child(_mult_label)
 	# Combo: flame + ×N, right side.
 	_combo_root = Control.new()
-	_combo_root.set_anchors_and_offsets_preset(Control.PRESET_CENTER_RIGHT)
-	_combo_root.offset_left = -236
-	_combo_root.offset_right = -26
-	_combo_root.offset_top = -250
-	_combo_root.offset_bottom = -110
+	# Top right, above the target area (mid-screen it covered the top shelf).
+	_combo_root.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	_combo_root.offset_left = -330
+	_combo_root.offset_right = -22
+	_combo_root.offset_top = 8
+	_combo_root.offset_bottom = 148
 	_combo_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_combo_root.modulate.a = 0.0
 	add_child(_combo_root)
@@ -241,18 +242,24 @@ func _ready() -> void:
 	_flame.position = Vector2(0, 10)
 	_flame.size = Vector2(110, 110)
 	_combo_root.add_child(_flame)
-	_combo_label = UiKit.label("×2", 96, Color("ffb13a"), 18)
-	_combo_label.position = Vector2(80, 10)
-	_combo_label.size = Vector2(130, 116)
+	_combo_label = UiKit.label("×2", 88, Color("ffb13a"), 18)
+	# Anchored to the right edge and growing leftwards: a wide "×2.5" never runs off screen.
+	_combo_label.anchor_left = 1.0
+	_combo_label.anchor_right = 1.0
+	_combo_label.offset_left = -208
+	_combo_label.offset_right = 0
+	_combo_label.offset_top = 10
+	_combo_label.offset_bottom = 126
+	_combo_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	_combo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_combo_root.add_child(_combo_label)
 	# Wind (bow).
 	_wind_root = Control.new()
-	_wind_root.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	_wind_root.offset_left = -170
-	_wind_root.offset_right = -16
-	_wind_root.offset_top = 30
-	_wind_root.offset_bottom = 150
+	_wind_root.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)  # under the bottle count
+	_wind_root.offset_left = 10
+	_wind_root.offset_right = 164
+	_wind_root.offset_top = 110
+	_wind_root.offset_bottom = 230
 	_wind_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_wind_root.visible = false
 	add_child(_wind_root)
@@ -335,6 +342,8 @@ func set_multiplier(m: float, gold: bool) -> void:
 func set_combo(n: int, factor: float) -> void:
 	if n >= 2:
 		_combo_label.text = "×%s" % fmt(factor)
+		# The flame sits just left of the number, whatever its width.
+		_flame.position.x = maxf(_combo_root.size.x - _combo_label.get_minimum_size().x - 104.0, 0.0)
 		_combo_punch = 1.0
 		_combo_break = 0.0
 		_combo_root.modulate = Color(1, 1, 1, 1)
