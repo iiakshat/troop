@@ -1643,6 +1643,8 @@ func _update_obstacle(od: Dictionary, d: float) -> void:
 	var armed := bool(ob.get("armed", false))
 	if armed:
 		on.scale = Vector3.ONE * (1.0 + 0.12 * absf(sin(_anim_t * 16.0)))
+		if od.has("tag"):
+			(od["tag"] as Node3D).visible = false  # an armed barrel no longer hurts the squad
 	od["chip_t"] = float(od["chip_t"]) - d
 	var lab = od["label"]
 	if lab == null:
