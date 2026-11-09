@@ -1,14 +1,16 @@
 class_name BottleShot
 extends Node3D
-## End-of-level Bottle Shot. The hero gets one knife per bottle; drag to aim at the bottle
-## wall, release to throw. Each throw is a little film:
-##   1. a side-on tracking shot right beside the spinning knife, in slow motion, with the
-##      bottles growing behind it;
-##   2. ~0.15 s before contact, a cut to a front three-quarter close-up of the target;
-##   3. on contact time snaps back to full speed and the bottle bursts into glass shards and
-##      a short spray of the drink (streaks only, no droplet balls); the knife buries itself
-##      in the planks behind. A miss thunks into the wood and the camera holds on it.
-## Rules (hits, multiplier, coins) live in BottleLogic and are decided at the throw.
+## End-of-level Bottle Shot, played inside the gang's stash (FinaleStash, one set per
+## district). The district also picks the weapon, and the weapon decides the whole set-up:
+## distance, camera, aiming, ammo and physics (BottleLogic has the rules, config/finale.json
+## the numbers).
+##   knife   (here) drag to aim at the bottles, release to throw. Each throw is a little film:
+##           a side-on tracking shot beside the spinning knife in slow motion, a cut to a
+##           close-up ~0.15 s before contact, the bottle bursting into glass and drink, the
+##           knife buried in the planks (a miss thunks into the wood and the camera holds on it).
+##   pistol, bow, stars, sniper: FinaleWeapon subclasses (weapon_*.gd) drive input, camera and
+##           projectiles; they call break_bottle / show_miss / shot_over here.
+## The HUD (FinaleHud) shows bottles left, ammo, the combo and the multiplier.
 
 signal done(result: Dictionary)
 
@@ -33,6 +35,7 @@ const CLOSE_DOLLY := 0.5       # extra pull-back while the glass flies
 const MISS_DIST := 0.75         # close-up distance from a knife stuck in the wood
 const BOTTLE_SCALE := 1.3
 const STAGE_KNIFE_IN := 0.04    # metres a stuck knife's tip sinks into the planks
+const INTRO := 0.75             # real seconds of the burst-in camera move
 
 var logic: BottleLogic
 var world: World
@@ -42,13 +45,19 @@ var troops := 0
 var station_bonus := 0.0
 var hero_pos := Vector3.ZERO
 var on_throw: Callable        # LevelView plays the hero's throw animation
+var hud: FinaleHud
+var theme := "bar"
 
+var _mode: FinaleWeapon = null  # null = knives (handled here)
+var _floor_y := 0.0           # stand floor height (the sniper shoots from roof to roof)
+var _bscale := BOTTLE_SCALE   # bottle scale (shrinks with the level's difficulty row)
 var _wall_z := -7.5
 var _wall_front := -7.475
 var _ft := 0.0                # finale clock (game time; slows down in slow motion)
 var _scale := 1.0             # current time scale
-var _bottles: Array = []      # Node3D per bottle
+var _bottles: Array = []      # Node3D per bottle (decoys are clay jugs)
 var _glows: Array = []        # caustic blob (and halo) per bottle
+var _plates: Array = []       # steel plates (stars)
 var _rack: Node3D
 var _reticle: MeshInstance3D
 var _aim := Vector2(0, 1.8)
@@ -61,6 +70,7 @@ var _knife_dir := Vector3.FORWARD
 var _knife_t0 := 0.0
 var _knife_t1 := 0.0
 var _knife_hit := -1
+var _knife_streak := 0
 var _t_contact := 0.0
 var _k_contact := 1.0
 var _contacted := false
@@ -79,8 +89,12 @@ var _aim_fov := AIM_FOV
 var _aim_focus := 6.0
 var _focus := 6.0
 var _blur := 0.1
-var _state := "aim"           # aim | flying | impact | tally | finished
+var _state := "intro"         # intro | aim | flying | impact | tally | finished
 var _wait := 0.0
+var _intro_t := 0.0
+var _intro_from := Transform3D()
+var _intro_fov := 50.0
+var _shown_bottles := 0       # bottles left as the HUD shows them (drops on the visible break)
 var _throw_n := 0
 var _shatters: Array = []
 var _stuck: Array = []
@@ -94,33 +108,6 @@ var _blade_color := Color("e6eaf0")
 var _cord_color := Color(0.55, 0.1, 0.12)
 var _later: Array = []        # {t, id, vol}: sounds scheduled in real time
 var _dust_mat: ShaderMaterial
-var _ui: CanvasLayer
-var _knife_icons: Array = []
-var _mult_root: Control
-var _mult_label: Label
-var _rays: Rays
-var _flash: ColorRect
-var _mult_shown := 1.0
-var _mult_from := 1.0
-var _mult_to := 1.0
-var _mult_t := 1.0
-var _punch := 0.0
-var _punch_gold := false
-
-
-## Sunburst behind the multiplier when it jumps.
-class Rays extends Control:
-	var color := Color(1.0, 0.85, 0.3, 0.0)
-	var spin := 0.0
-
-	func _draw() -> void:
-		var c := size * 0.5
-		var r := maxf(size.x, size.y) * 0.5
-		for i in 14:
-			var a := spin + TAU * i / 14.0
-			var w := 0.09 if i % 2 == 0 else 0.05
-			var pts := PackedVector2Array([c, c + Vector2(cos(a - w), sin(a - w)) * r, c + Vector2(cos(a + w), sin(a + w)) * r])
-			draw_colored_polygon(pts, color)
 
 
 func setup(w: World, f: Fx, fnt: Font, level_id: int, troop_count: int, hero: Vector3, bonus: float) -> BottleShot:
@@ -132,7 +119,11 @@ func setup(w: World, f: Fx, fnt: Font, level_id: int, troop_count: int, hero: Ve
 	station_bonus = bonus
 	var cfg: Dictionary = Config.load_json("res://config/finale.json")
 	logic = BottleLogic.new(cfg, level_id)
-	_wall_z = hero.z + float(cfg["wall_z"])
+	theme = String((cfg.get("district_stash", {}) as Dictionary).get(str(logic.district), FinaleStash.theme_of(logic.district)))
+	_floor_y = float(logic.wcfg.get("elevation", 0.0))
+	_bscale = BOTTLE_SCALE * logic.size
+	# Bottles stand on the plane z = hero - distance; the back wall is 0.25 m behind them.
+	_wall_z = hero.z - logic.distance - 0.25
 	_wall_front = _wall_z + 0.025
 	return self
 
@@ -145,18 +136,40 @@ func _ready() -> void:
 		_cord_color = _trail_color.darkened(0.35)
 	_build_wall()
 	_build_trail()
-	_build_ui()
+	hud = FinaleHud.new().setup(logic)
+	hud.layer = 2
+	add_child(hud)
+	match logic.weapon:
+		"pistol": _mode = WeaponPistol.new()
+		"bow": _mode = WeaponBow.new()
+		"stars": _mode = WeaponStars.new()
+		"sniper": _mode = WeaponSniper.new()
+	if _mode:
+		_mode.setup(self)
+		add_child(_mode)
 	_aim_lens()
-	_fov = _aim_fov
-	_focus = _aim_focus
-	_cam = _aim_view()
+	# Burst in: the squad kicks the door; the camera rushes from the street into the stash.
+	_intro_from = world.camera.transform
+	_cam = _intro_from
+	_intro_fov = world.camera.fov
+	_fov = _intro_fov
+	_focus = -1.0
+	_shown_bottles = logic.remaining()
+	hud.flash(0.85)
+	world.shake(0.5)
+	Sfx.play("punch", 2.0, 0.8)
+	Sfx.play("boom", -6.0, 1.3)
+	_later.append({"t": 0.25, "id": "swoosh", "vol": 0.0})
 	_apply_camera()
-	Sfx.play("swoosh")
 
 
 # ---------------------------------------------------------------- input
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _mode:
+		if _state == "aim":
+			_mode.handle_input(event)
+		return
 	if _state != "aim":
 		return
 	var pos := Vector2.ZERO
@@ -177,7 +190,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif released and _aiming:
 		_aiming = false
 		_aim = _screen_to_wall(pos)
-		throw_at(_aim)
+		_throw_knife(_aim)
 
 
 func _screen_to_wall(p: Vector2) -> Vector2:
@@ -188,12 +201,26 @@ func _screen_to_wall(p: Vector2) -> Vector2:
 		return _aim
 	var t := (_wall_z - from.z) / dir.z
 	var hit := from + dir * t
-	return Vector2(clampf(hit.x - hero_pos.x, -2.4, 2.4), clampf(hit.y, 0.6, 3.6))
+	return Vector2(clampf(hit.x - hero_pos.x, -2.4, 2.4), clampf(hit.y - _floor_y, 0.6, 3.6))
 
 
-## Throws a knife at a wall point (x relative to the hero, y = height). Also used by autoplay.
+## Autoplay (and tests): a perfect shot at the next target bottle with whatever weapon this
+## district uses. `aim` is ignored except as a fallback for knives.
 func throw_at(aim: Vector2) -> void:
-	if _state != "aim" or logic.knives_left <= 0:
+	if _state != "aim":
+		return
+	if _mode:
+		_mode.auto_fire()
+		return
+	var i := logic.next_target()
+	if i >= 0:
+		aim = logic.position(i, _ft + logic.flight_time(logic.distance - 0.15))
+	_throw_knife(aim)
+
+
+## Throws a knife at a wall point (x relative to the hero, y = height).
+func _throw_knife(aim: Vector2) -> void:
+	if _state != "aim" or logic.shots_left <= 0:
 		return
 	_knife_from = hero_pos + Vector3(0.25, 1.45, -0.4)
 	_knife_to = Vector3(hero_pos.x + aim.x, aim.y, _wall_z + 0.12)
@@ -201,6 +228,7 @@ func throw_at(aim: Vector2) -> void:
 	_knife_t0 = _ft
 	_knife_t1 = _ft + flight
 	_knife_hit = logic.throw(aim, _knife_t1)
+	_knife_streak = logic.streak
 	_knife_dir = (_knife_to - _knife_from).normalized()
 	# The tip ends buried in the planks on the same line; the balance point sits TIP behind.
 	var tip := _knife_from + _knife_dir * ((_wall_front - STAGE_KNIFE_IN - _knife_from.z) / _knife_dir.z)
@@ -233,7 +261,7 @@ func throw_at(aim: Vector2) -> void:
 	_cam = _track_view(_knife_from)
 	_fov = TRACK_FOV
 	_blur = 0.05
-	_update_icons()
+	hud.refresh(_shown_bottles)
 	Sfx.play("knife", 2.0)
 	Sfx.play("swoosh", -4.0, 0.55)
 	if on_throw.is_valid():
@@ -246,7 +274,6 @@ func _process(delta: float) -> void:
 	if _state == "finished":
 		return
 	_tick_sounds(delta)
-	_tick_ui(delta)
 	var d := delta * _scale
 	if _hitstop > 0.0:
 		_hitstop -= delta
@@ -260,9 +287,54 @@ func _process(delta: float) -> void:
 	if _dust_mat:
 		_dust_mat.set_shader_parameter("t", _ft)
 	match _state:
+		"intro":
+			if _mode:
+				_mode.tick(delta, d)   # the weapon is already in hand at the end of the rush
+			_intro_t += delta
+			var k := smoothstep(0.0, INTRO, _intro_t)
+			_cam = _intro_from.interpolate_with(_rest_view(), k)
+			_fov = lerpf(_intro_fov, _rest_fov(), k)
+			if _intro_t >= INTRO:
+				_state = "aim"
+				_cam_mode = "aim"
+				_focus = _aim_focus
+				if _mode:
+					_mode.begin()
+		"aim", "flying", "impact":
+			if _mode:
+				_mode.tick(delta, d)
+			else:
+				_knife_frame(delta)
+		"tally":
+			_wait -= delta
+			var k := minf(delta * 3.0, 1.0)
+			if _mode:
+				_mode.tick(delta, d)
+			else:
+				_cam = _cam.interpolate_with(_aim_view(), k)
+				_fov = lerpf(_fov, _aim_fov, k)
+				_focus = lerpf(_focus, _aim_focus, k)
+			if _wait <= 0.0:
+				_state = "finished"
+				world.set_camera_override(null)
+				world.set_lens(-1.0)
+				hud.queue_free()
+				if _mode:
+					_mode.finish()
+				if theme == "rooftop":
+					visible = false   # our roof would cover the squad on the street
+				done.emit({"broken": logic.broken_count(), "gold": logic.broken_count(true),
+					"mult": logic.multiplier(), "coins": logic.coins(troops, station_bonus),
+					"combo": logic.best_streak})
+				return  # the camera is handed back; don't take it again below
+	_apply_camera()
+
+
+func _knife_frame(delta: float) -> void:
+	match _state:
 		"aim":
 			_reticle.visible = true
-			_reticle.position = Vector3(hero_pos.x + _aim.x, _aim.y, _wall_z + 0.3)
+			_reticle.position = Vector3(hero_pos.x + _aim.x, _floor_y + _aim.y, _wall_z + 0.3)
 			_reticle.rotation.z += delta * 2.0
 			var k := minf(delta * 6.0, 1.0)
 			_cam = _cam.interpolate_with(_aim_view(), k)
@@ -277,31 +349,29 @@ func _process(delta: float) -> void:
 			_close_t += delta
 			_cam = _close_view()
 			if _wait <= 0.0:
-				if logic.knives_left > 0 and logic.broken_count() + logic.broken_count(true) < logic.count():
-					_state = "aim"
-					_cam_mode = "aim"
-					_aim_lens()
-				else:
-					_state = "tally"
-					_cam_mode = "aim"
-					_wait = 1.0
-					Sfx.play("win")
-		"tally":
-			_wait -= delta
-			var k := minf(delta * 3.0, 1.0)
-			_cam = _cam.interpolate_with(_aim_view(), k)
-			_fov = lerpf(_fov, _aim_fov, k)
-			_focus = lerpf(_focus, _aim_focus, k)
-			if _wait <= 0.0:
-				_state = "finished"
-				world.set_camera_override(null)
-				world.set_lens(-1.0)
-				_ui.queue_free()
-				done.emit({"broken": logic.broken_count(), "gold": logic.broken_count(true),
-					"mult": logic.multiplier(), "coins": logic.coins(troops, station_bonus)})
-				return  # the camera is handed back; don't take it again below
-	_apply_camera()
+				shot_over()
 
+
+## A shot (and its film) is over: aim again, or tally when nothing is left to do.
+func shot_over() -> void:
+	if not logic.finished():
+		_state = "aim"
+		_cam_mode = "aim"
+		_aim_lens()
+	else:
+		_state = "tally"
+		_cam_mode = "aim"
+		_wait = 1.0
+		Sfx.play("win")
+
+
+## Camera and lens the finale rests on between shots.
+func _rest_view() -> Transform3D:
+	return _mode.rest_view() if _mode else _aim_view()
+
+
+func _rest_fov() -> float:
+	return _mode.rest_fov() if _mode else _aim_fov
 
 func _fly(delta: float) -> void:
 	_real += delta
@@ -350,17 +420,28 @@ func _contact() -> void:
 	_scale = 1.0
 	if _knife_hit < 0:
 		return
-	var i := _knife_hit
+	_close_target = _bottle_center(_knife_hit, _ft)
+	break_bottle(_knife_hit, _knife_dir, _knife_streak)
+
+
+## Bottle (or decoy jug) `i` bursts, hit along `dir`; `streak` = hits in a row after this one
+## (0 for a decoy), for the combo display. Weapons call this when their projectile arrives.
+func break_bottle(i: int, dir: Vector3, streak: int, loud := true) -> void:
 	var b: Node3D = _bottles[i]
-	_close_target = _bottle_center(i, _ft)
+	if not b.visible:
+		return
 	var gold := logic.is_gold(i)
+	var decoy := logic.is_decoy(i)
 	var motion := String(logic.layout.get("motion", "static"))
 	var shelf := {}
 	if motion == "static":
-		shelf = {"y": b.global_position.y, "x0": hero_pos.x - 2.0, "x1": hero_pos.x + 2.0,
+		shelf = {"y": b.global_position.y, "x0": hero_pos.x - 2.5, "x1": hero_pos.x + 2.5,
 			"z0": _wall_z - 0.03, "z1": _wall_z + 0.47}
-	var neck: Node3D
-	if motion == "swing":
+	var neck: Node3D = null
+	if decoy:
+		for c in b.get_children():
+			(c as Node3D).visible = false
+	elif motion == "swing":
 		# Hanging bottles keep their neck on the string; it swings on alone.
 		neck = BottleMesh.break_apart(b, false, true)
 		b.add_child(neck)
@@ -371,21 +452,35 @@ func _contact() -> void:
 	for g in _glows[i]:
 		(g as Node3D).visible = false
 	var shape := int(b.get_meta("shape", 0))
-	var sh := Shatter.new().setup(b.global_position, BOTTLE_SCALE, _knife_dir, BottleMesh.glass_color(b),
+	var sh := Shatter.new().setup(b.global_position, _bscale, dir, BottleMesh.glass_color(b),
 		BottleMesh.drink_color(b), gold, _wall_front, shelf, neck, BottleMesh.height(shape))
 	add_child(sh)
 	_shatters.append(sh)
 	_hitstop = HIT_STOP
-	_flash.color.a = 0.32 if gold else 0.22
-	world.shake(0.22)
-	Sfx.play("glass_break", 2.0)
+	if loud:
+		world.shake(0.22 if _mode == null else 0.0)
+	Sfx.play("glass_break", 2.0 if loud else -2.0, 0.8 if decoy else 1.0)
 	_later.append({"t": 0.3, "id": "glass_tinkle", "vol": -3.0})
-	Sfx.play("coin", -4.0, 1.2)
 	Game.vibrate(60)
+	if decoy:
+		# A clay jug: it breaks, but it is the gang's trap; the combo is gone.
+		Sfx.play("blocked", -2.0)
+		hud.flash(0.25, Color(1.0, 0.3, 0.2))
+		hud.set_combo(0, 1.0)
+		return
+	_shown_bottles = maxi(_shown_bottles - 1, 0)
+	hud.set_bottles(_shown_bottles)
+	hud.flash(0.32 if gold else 0.22)
+	Sfx.play("coin", -4.0, 1.0 + 0.1 * mini(streak, 6))
 	if gold:
-		# Gold glitter comes out of the Shatter itself (big confetti blocks look crude this close).
 		Game.vibrate(120)
-	_set_multiplier(logic.multiplier(), gold)
+	hud.set_combo(streak, logic.combo_for(streak))
+	hud.set_multiplier(logic.multiplier(), gold)
+
+
+## A shot that broke nothing: the combo is gone.
+func show_miss() -> void:
+	hud.set_combo(0, 1.0)
 
 
 func _stick() -> void:
@@ -401,6 +496,7 @@ func _stick() -> void:
 		Sfx.play("thunk", -8.0)
 		fx.burst(tip + Vector3(0, 0, 0.02), Color(0.55, 0.38, 0.22), 4, 1.6, 0.012, 0.3)
 	else:
+		show_miss()
 		Sfx.play("thunk", 2.0)
 		fx.burst(tip + Vector3(0, 0, 0.02), Color(0.55, 0.38, 0.22), 9, 2.0, 0.015, 0.35)
 		world.shake(0.12)
@@ -510,14 +606,19 @@ func _close_view() -> Transform3D:
 
 # ---------------------------------------------------------------- bottles
 
+## Half a bottle's height: logic heights are bottle centres, the meshes stand on their base.
+func _half_h() -> float:
+	return 0.4 * _bscale / BOTTLE_SCALE
+
+
 func _bottle_world(i: int, t: float) -> Vector3:
 	var p := logic.position(i, t)
-	return Vector3(hero_pos.x + p.x, p.y - 0.4, _wall_z + 0.25)
+	return Vector3(hero_pos.x + p.x, _floor_y + p.y - _half_h(), _wall_z + 0.25)
 
 
 func _bottle_center(i: int, t: float) -> Vector3:
 	var b: Node3D = _bottles[i]
-	var h := BottleMesh.height(int(b.get_meta("shape", 0))) * BOTTLE_SCALE
+	var h := BottleMesh.height(int(b.get_meta("shape", 0))) * _bscale
 	return _bottle_world(i, t) + Vector3(0, h * 0.5, 0)
 
 
@@ -526,7 +627,16 @@ func _bottle_radius(i: int) -> float:
 	var r := 0.0
 	for p in BottleMesh.SHAPES[int(b.get_meta("shape", 0))]["profile"]:
 		r = maxf(r, (p as Vector2).x)
-	return r * BOTTLE_SCALE
+	return r * _bscale
+
+
+## World point of a hero-space point (BottleLogic's frame: hero at the origin, floor y = 0).
+func to_world(p: Vector3) -> Vector3:
+	return Vector3(hero_pos.x + p.x, _floor_y + p.y, hero_pos.z + p.z)
+
+
+func to_hero(p: Vector3) -> Vector3:
+	return Vector3(p.x - hero_pos.x, p.y - _floor_y, p.z - hero_pos.z)
 
 
 func _move_bottles() -> void:
@@ -540,90 +650,59 @@ func _move_bottles() -> void:
 			b.rotation.z = (p.x - float(base["x"])) * -0.5
 	if motion == "slide" or motion == "drive":
 		_rack.position.x = hero_pos.x + logic.position(0, _ft).x - float(logic.layout["bottles"][0]["x"])
+	for k in _plates.size():
+		var pp := logic.plate_position(k, _ft)
+		(_plates[k] as Node3D).position = Vector3(hero_pos.x + pp.x, _floor_y + pp.y, _wall_z + 0.22)
 
 
 # ---------------------------------------------------------------- build
 
 func _build_wall() -> void:
 	var motion := String(logic.layout.get("motion", "static"))
-	# Gallery: a warm plank wall with a frame, lit by two spotlights so every bottle throws
-	# a shadow on it, a string of glowing bulbs across the top, faint beams with dust.
-	var wall := MeshInstance3D.new()
-	var wm := BoxMesh.new()
-	wm.size = Vector3(6.4, 4.4, 0.25)
-	wall.mesh = wm
-	var pm := ShaderMaterial.new()
-	pm.shader = load("res://src/finale/planks.gdshader")
-	wall.material_override = pm
-	wall.position = Vector3(hero_pos.x, 2.0, _wall_z - 0.1)
-	add_child(wall)
-	for side in [-1, 1]:
-		var post := World._box(Vector3(0.3, 4.6, 0.4), Color("3b2414"))
-		post.position = Vector3(hero_pos.x + side * 3.25, 2.1, _wall_z)
-		add_child(post)
-	var beam := World._box(Vector3(6.9, 0.32, 0.45), Color("3b2414"))
-	beam.position = Vector3(hero_pos.x, 4.3, _wall_z)
-	add_child(beam)
-	var bulb_mat := StandardMaterial3D.new()
-	bulb_mat.albedo_color = Color("ffd98a")
-	bulb_mat.emission_enabled = true
-	bulb_mat.emission = Color("ffc65a")
-	bulb_mat.emission_energy_multiplier = 4.0
-	for i in 13:
-		var bulb := MeshInstance3D.new()
-		var sm := SphereMesh.new()
-		sm.radius = 0.06
-		sm.height = 0.12
-		bulb.mesh = sm
-		bulb.material_override = bulb_mat
-		var x := -3.0 + i * 0.5
-		bulb.position = Vector3(hero_pos.x + x, 4.05 - 0.12 * sin(fposmod(x, 1.0) * PI), _wall_z + 0.3)
-		add_child(bulb)
-	var spots: Array = []
-	for side in [-1, 1]:
-		var spot := SpotLight3D.new()
-		spot.light_color = Color("ffe2b0")
-		spot.light_energy = 3.2
-		spot.spot_range = 14.0
-		spot.spot_angle = 32.0
-		spot.shadow_enabled = true
-		spot.position = Vector3(hero_pos.x + side * 2.4, 4.6, _wall_z + 4.0)
-		add_child(spot)
-		var target := Vector3(hero_pos.x + side * 0.4, 1.8, _wall_z)
-		spot.look_at(target, Vector3.UP)
-		spots.append({"pos": spot.position, "dir": (target - spot.position).normalized()})
-		_add_beam(spot.position, target, 32.0)
-	_add_dust(spots, 32.0)
+	FinaleStash.build(self, theme)
 	_rack = Node3D.new()
 	add_child(_rack)
 	_rack.position = Vector3(hero_pos.x, 0, 0)
 	var heights := {}
+	var extent := 0.0
 	for b in logic.layout["bottles"]:
-		heights[snappedf(float(b["y"]) - 0.4, 0.01)] = true  # shelf top = the bottle base
+		heights[snappedf(float(b["y"]) - _half_h(), 0.01)] = true  # shelf top = the bottle base
+		extent = maxf(extent, absf(float(b["x"])))
 	if motion == "swing":
-		var bar := World._box(Vector3(4.2, 0.12, 0.12), Color("2b2b2b"))
-		bar.position = Vector3(hero_pos.x, 3.2, _wall_z + 0.25)
+		var bar := World._box(Vector3(extent * 2.0 + 1.4, 0.12, 0.12), Color("2b2b2b"))
+		var top := 0.0
+		for h in heights:
+			top = maxf(top, float(h))
+		bar.position = Vector3(hero_pos.x, _floor_y + top + 1.45, _wall_z + 0.25)
 		add_child(bar)
 	else:
+		var width := extent * 2.0 + (1.0 if motion == "static" else 0.7) * _bscale
+		if theme == "factory" and motion != "static":
+			width = extent * 2.0 + 1.4
 		for h in heights:
-			var shelf := World._box(Vector3(4.0 if motion == "static" else 2.8, 0.08, 0.5), Color("8a5a32"))
-			shelf.position = Vector3(0, float(h) - 0.04, _wall_z + 0.22)
+			var shelf := FinaleStash.shelf(theme, width)
+			shelf.position = Vector3(0, _floor_y + float(h), _wall_z + 0.22)
 			_rack.add_child(shelf)
 	var level_seed := int(logic.layout.get("seed", 0))
 	for i in logic.count():
 		var gold := logic.is_gold(i)
-		var hue := fmod(0.31 + i * 0.17, 1.0)
-		var bottle := BottleMesh.make(gold, hue, (i * 3 + level_seed + logic.count()) % 4)
-		bottle.scale = Vector3.ONE * BOTTLE_SCALE
+		var bottle: Node3D
+		if logic.is_decoy(i):
+			bottle = _jug()
+		else:
+			var hue := fmod(0.31 + i * 0.17, 1.0)
+			bottle = BottleMesh.make(gold, hue, (i * 3 + level_seed + logic.count()) % 4)
+		bottle.scale = Vector3.ONE * _bscale
 		add_child(bottle)
 		_bottles.append(bottle)
 		var glows: Array = []
-		# Caustic: light through the drink pools as a coloured glow on the planks behind.
-		var drink := BottleMesh.drink_color(bottle)
-		var c := _glow_quad(Vector2(0.34, 0.5), drink.lerp(Color.WHITE, 0.3), 0.28, 0.0)
-		c.position = Vector3(0.0, 0.2, -0.17)
-		bottle.add_child(c)
-		glows.append(c)
+		if not logic.is_decoy(i):
+			# Caustic: light through the drink pools as a coloured glow on the wall behind.
+			var drink := BottleMesh.drink_color(bottle)
+			var c := _glow_quad(Vector2(0.34, 0.5), drink.lerp(Color.WHITE, 0.3), 0.28, 0.0)
+			c.position = Vector3(0.0, 0.2, -0.17)
+			bottle.add_child(c)
+			glows.append(c)
 		if gold:
 			var halo := _glow_quad(Vector2(0.95, 1.1), Color(1.0, 0.78, 0.3), 0.55, 0.35)
 			halo.position = Vector3(0.0, 0.32, -0.18)
@@ -634,6 +713,19 @@ func _build_wall() -> void:
 			var string := World._box(Vector3(0.012, 1.0, 0.012), Color("dddddd"))
 			string.position = Vector3(0, 0.62 + 0.5, 0)
 			bottle.add_child(string)
+	# Steel plates for the throwing stars: angled so a star skims off along the row.
+	var steel := WeaponModels.mat(Color("aeb6bf"), 0.9, 0.22)
+	for p in logic.layout.get("plates", []):
+		var plate := Node3D.new()
+		add_child(plate)
+		var w := float(logic.wcfg.get("plate_w", 0.4)) * logic.size
+		var h := float(logic.wcfg.get("plate_h", 0.6)) * logic.size
+		var face := WeaponModels.box(plate, Vector3(w, h, 0.03), Vector3.ZERO, steel)
+		face.rotation.y = float(p["dir"]) * 0.5
+		for s in [-1.0, 1.0]:
+			WeaponModels.box(plate, Vector3(0.025, 0.025, 0.04), Vector3(s * w * 0.35, h * 0.38, 0.02), WeaponModels.mat(Color("3a3f46"), 0.8, 0.4))
+		WeaponModels.box(plate, Vector3(0.06, 0.4, 0.06), Vector3(0, -h * 0.5 - 0.2, -0.05), WeaponModels.mat(Color("3a3f46"), 0.8, 0.4))
+		_plates.append(plate)
 	_move_bottles()
 	_reticle = MeshInstance3D.new()
 	var tm := TorusMesh.new()
@@ -646,7 +738,40 @@ func _build_wall() -> void:
 	rm.albedo_color = Color("ff3b3b")
 	rm.no_depth_test = true
 	_reticle.material_override = rm
+	_reticle.visible = false
 	add_child(_reticle)
+
+
+## Decoy: a clay jug (breaking it resets the combo). Same metas as a bottle for Shatter.
+func _jug() -> Node3D:
+	var root := Node3D.new()
+	root.set_meta("shape", 0)
+	root.set_meta("glass", Color("b0603a"))
+	root.set_meta("drink", Color(0.45, 0.3, 0.2, 0.6))
+	var clay := WeaponModels.mat(Color("b0603a"), 0.0, 0.85)
+	var body := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 0.15
+	sm.height = 0.36
+	body.mesh = sm
+	body.material_override = clay
+	body.position.y = 0.19
+	root.add_child(body)
+	var neck := WeaponModels.tube(root, 0.055, 0.14, Vector3(0, 0.4, 0), clay)
+	neck.rotation.x = PI * 0.5
+	var band := WeaponModels.tube(root, 0.152, 0.03, Vector3(0, 0.22, 0), WeaponModels.mat(Color("e9d7b0"), 0.0, 0.8))
+	band.rotation.x = PI * 0.5
+	var handle := MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = 0.045
+	tm.outer_radius = 0.07
+	handle.mesh = tm
+	handle.material_override = clay
+	handle.position = Vector3(0.14, 0.3, 0)
+	handle.rotation.x = PI * 0.5
+	root.add_child(handle)
+	return root
+
 
 
 func _glow_quad(size: Vector2, color: Color, strength: float, pulse: float) -> MeshInstance3D:
@@ -773,94 +898,6 @@ func _draw_trail() -> void:
 	_trail_mesh.surface_end()
 
 
-func _build_ui() -> void:
-	_ui = CanvasLayer.new()
-	add_child(_ui)
-	_flash = ColorRect.new()
-	_flash.color = Color(1, 1, 1, 0)
-	_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	UiKit.full_rect(_flash)
-	_ui.add_child(_flash)
-	var row := HBoxContainer.new()
-	row.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-	row.offset_top = -170
-	row.offset_bottom = -70
-	row.offset_left = -180
-	row.offset_right = 180
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 26)
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_ui.add_child(row)
-	for i in logic.knives_left:
-		var icon := UiKit.icon("knife", 84)
-		row.add_child(icon)
-		_knife_icons.append(icon)
-	_mult_root = Control.new()
-	_mult_root.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	_mult_root.offset_top = 120
-	_mult_root.offset_bottom = 300
-	_mult_root.offset_left = -220
-	_mult_root.offset_right = 220
-	_mult_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_ui.add_child(_mult_root)
-	_rays = Rays.new()
-	UiKit.full_rect(_rays)
-	_rays.offset_left = 40
-	_rays.offset_right = -40
-	_rays.offset_top = -60
-	_rays.offset_bottom = 60
-	_rays.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_mult_root.add_child(_rays)
-	_mult_label = UiKit.label("×1", 96, UiKit.GOLD, 18)
-	UiKit.full_rect(_mult_label)
-	_mult_label.modulate.a = 0.85
-	_mult_root.add_child(_mult_label)
-
-
-func _update_icons() -> void:
-	for i in _knife_icons.size():
-		(_knife_icons[i] as Control).modulate.a = 1.0 if i < logic.knives_left else 0.2
-
-
-## The multiplier jumps: it counts up from the old value with a punch, a flash and rays.
-func _set_multiplier(m: float, gold: bool) -> void:
-	_mult_from = _mult_shown
-	_mult_to = m
-	_mult_t = 0.0
-	_punch = 1.0
-	_punch_gold = gold
-	_rays.color = Color(1.0, 0.62, 0.15, 0.0) if gold else Color(1.0, 0.9, 0.45, 0.0)
-	_mult_label.modulate.a = 1.0
-
-
-func _tick_ui(delta: float) -> void:
-	if _flash.color.a > 0.0:
-		_flash.color.a = maxf(_flash.color.a - delta * 3.0, 0.0)
-	if _mult_t < 1.0:
-		_mult_t = minf(_mult_t + delta / 0.35, 1.0)
-		_mult_shown = lerpf(_mult_from, _mult_to, 1.0 - pow(1.0 - _mult_t, 3.0))
-		_mult_label.text = "×%s" % _fmt(_mult_to if _mult_t >= 1.0 else snappedf(_mult_shown, 0.5))
-	if _punch > 0.0:
-		_punch = maxf(_punch - delta / (0.6 if _punch_gold else 0.45), 0.0)
-		var big := 1.25 if _punch_gold else 0.9
-		var s := 1.0 + big * _punch * _punch + 0.12 * sin(_punch * PI * 4.0) * _punch
-		_mult_label.pivot_offset = _mult_label.size * 0.5
-		_mult_label.scale = Vector2.ONE * s
-		_mult_label.rotation = sin(_punch * 22.0) * 0.1 * _punch
-		var ls := _mult_label.label_settings
-		ls.font_color = UiKit.GOLD.lerp(Color.WHITE, clampf(_punch * 1.6 - 0.6, 0.0, 1.0))
-		_rays.spin += delta * 1.6
-		_rays.color.a = 0.75 * _punch
-		_rays.pivot_offset = _rays.size * 0.5
-		_rays.scale = Vector2.ONE * (0.7 + (1.0 - _punch) * 0.7)
-		_rays.queue_redraw()
-		if _punch <= 0.0:
-			_mult_label.scale = Vector2.ONE
-			_mult_label.rotation = 0.0
-			ls.font_color = UiKit.GOLD
-			_rays.color.a = 0.0
-			_rays.queue_redraw()
-
-
+## Kept for other screens that format multipliers this way.
 static func _fmt(m: float) -> String:
-	return str(int(m)) if is_equal_approx(m, round(m)) else "%.1f" % m
+	return FinaleHud.fmt(m)

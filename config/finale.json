@@ -1,27 +1,57 @@
 {
-  "_note": "Bottle Shot finale. One knife per bottle (+ extra_knives). Bottles sit on a shelf wall `wall_z` metres in front of the hero; x/y are wall-plane positions (y = height). motion: static | slide (whole set moves sideways) | swing (each bottle swings on a string) | drive (rides the boss van). Coins = (clear_bonus + troops x per_troop) x (1 + bonus per normal bottle) x (gold_mult if the gold bottle broke) x station bonus.",
-  "extra_knives": 0,
-  "knife_speed": 14.0,
-  "wall_z": -5.8,
-  "hit_radius": 0.24,
+  "_note": "Bottle Shot finale, played inside the gang's stash. The district picks the weapon and the stash set; the level's place inside its district (0 = first, 9 = boss) picks the difficulty row. Bottles stand on a plane `distance` metres in front of the hero (x sideways, y height above the stand's floor). Shots = target bottles (normal + gold) + spare. Coins = (clear_bonus + troops x per_troop) x (1 + sum over hits of bonus_per_bottle x combo) x (gold_mult if the gold bottle broke) x station bonus. combo = 1 + combo_step x (hits in a row - 1), capped at combo_max; a miss or a decoy resets it.",
   "per_troop": 0.5,
   "clear_bonus": 20,
   "bonus_per_bottle": 0.5,
   "gold_mult": 2.0,
-  "layouts": {
-    "1": { "motion": "static", "bottles": [
-      { "x": -0.9, "y": 1.45 }, { "x": 0.0, "y": 1.45 }, { "x": 0.9, "y": 1.45 },
-      { "x": 0.45, "y": 2.35, "gold": true } ] },
-    "2": { "motion": "static", "bottles": [
-      { "x": -1.2, "y": 1.45 }, { "x": -0.4, "y": 1.45 }, { "x": 0.4, "y": 1.45 }, { "x": 1.2, "y": 1.45 },
-      { "x": -0.8, "y": 2.35 }, { "x": 0.8, "y": 2.35, "gold": true } ] },
-    "3": { "motion": "slide", "amp": 0.9, "speed": 1.1, "bottles": [
-      { "x": -0.9, "y": 1.45 }, { "x": 0.0, "y": 1.45 }, { "x": 0.9, "y": 1.45 },
-      { "x": -0.45, "y": 2.35 }, { "x": 0.45, "y": 2.35, "gold": true } ] },
-    "4": { "motion": "swing", "amp": 0.55, "speed": 1.6, "bottles": [
-      { "x": -1.1, "y": 1.9 }, { "x": -0.35, "y": 2.1 }, { "x": 0.35, "y": 1.9 }, { "x": 1.1, "y": 2.1, "gold": true } ] },
-    "5": { "motion": "drive", "amp": 1.6, "speed": 0.9, "bottles": [
-      { "x": -0.8, "y": 1.6 }, { "x": 0.0, "y": 1.6 }, { "x": 0.8, "y": 1.6 },
-      { "x": -0.4, "y": 2.4 }, { "x": 0.4, "y": 2.4 }, { "x": 0.0, "y": 3.1, "gold": true } ] }
+  "combo_step": 0.5,
+  "combo_max": 3.0,
+  "district_weapon": { "1": "knife", "2": "pistol", "3": "bow", "4": "stars", "5": "sniper" },
+  "district_stash": { "1": "bar", "2": "carnival", "3": "docks", "4": "factory", "5": "rooftop" },
+  "difficulty": {
+    "_note": "One entry per level inside a district. count = normal bottles (one gold bottle is added), decoys = clay jugs that reset the combo, spare = shots beyond one per target, size = bottle and hit-zone scale, dist = x the weapon's distance, amp/speed = motion (metres, rad/s), wind = metres/s^2 of sideways push at most (bow only).",
+    "count":  [3, 3, 4, 4, 5, 5, 6, 6, 7, 6],
+    "decoys": [0, 0, 0, 0, 1, 1, 1, 2, 2, 2],
+    "spare":  [2, 2, 2, 1, 1, 1, 1, 0, 0, 0],
+    "size":   [1.0, 1.0, 0.96, 0.94, 0.92, 0.9, 0.88, 0.86, 0.84, 0.84],
+    "dist":   [1.0, 1.0, 1.03, 1.06, 1.09, 1.12, 1.15, 1.18, 1.21, 1.25],
+    "motion": ["static", "static", "static", "slide", "static", "swing", "slide", "swing", "slide", "drive"],
+    "amp":    [0.0, 0.0, 0.0, 0.6, 0.0, 0.4, 0.8, 0.5, 1.0, 1.2],
+    "speed":  [1.0, 1.0, 1.0, 0.9, 1.0, 1.4, 1.1, 1.6, 1.3, 1.0],
+    "wind":   [0.4, 0.6, 0.9, 1.1, 1.3, 1.5, 1.7, 1.9, 2.1, 2.3]
+  },
+  "weapons": {
+    "knife": {
+      "_note": "Drag to aim, release to throw. Straight line plus a small visual arc; slow-motion chase camera.",
+      "distance": 5.55, "speed": 14.0, "hit_radius": 0.24, "aspect": 1.0,
+      "per_row": 4, "spacing": 0.9, "row_h": 0.9, "y0": 1.45, "amp_scale": 1.0
+    },
+    "pistol": {
+      "_note": "First person, iron sights. mag rounds per magazine; reload_s = reload animation; kick_deg = muzzle rise per shot, recovered over recover_s. speed = bullet speed along the range (m/s); slow = time scale while a bullet is out.",
+      "distance": 13.0, "speed": 120.0, "gravity": 9.8, "hit_radius": 0.15, "aspect": 1.7,
+      "eye_y": 1.62, "mag": 6, "reload_s": 1.15, "kick_deg": 4.5, "recover_s": 0.4, "fov": 24.0, "zero": 10.0,
+      "sens": 0.06, "slow": 0.3,
+      "per_row": 4, "spacing": 0.75, "row_h": 0.8, "y0": 1.45, "amp_scale": 0.8
+    },
+    "bow": {
+      "_note": "First person. Hold to draw (draw_s to full), drag to aim, release to loose. The pin sight is set for a full draw with no wind at the base distance; past steady_s the arm starts to shake. Wind pushes sideways (difficulty.wind x wind).",
+      "distance": 17.0, "speed_min": 12.0, "speed_max": 30.0, "gravity": 9.8, "hit_radius": 0.19, "aspect": 1.5,
+      "eye_y": 1.6, "draw_s": 0.8, "steady_s": 2.2, "shake_deg": 0.9, "wind": 1.0, "fov": 28.0, "sens": 0.06,
+      "per_row": 4, "spacing": 0.8, "row_h": 0.85, "y0": 1.2, "amp_scale": 0.8
+    },
+    "stars": {
+      "_note": "Swipe: direction aims, swipe speed sets the throw speed (slow = drops). Steel plates beside the rows bounce a star along the row for ricochet_len metres.",
+      "distance": 7.5, "speed_min": 7.0, "speed_max": 20.0, "swipe_fast": 2600.0, "gravity": 9.8,
+      "hit_radius": 0.22, "aspect": 1.3, "ricochet_len": 2.4, "ricochet_speed": 12.0, "plate_w": 0.42, "plate_h": 0.62,
+      "per_row": 4, "spacing": 0.85, "row_h": 0.9, "y0": 1.4, "amp_scale": 0.9
+    },
+    "sniper": {
+      "_note": "Rooftop to rooftop. Touch to raise the scope, drag to aim, release to fire. Sway (breathing) + tremor; for steady_s after scoping in the sway drops to steady_k, then grows to worse_k. Zeroed at `zero` metres. cycle_s = bolt action. bullet_cam = time scale of the slow-motion bullet camera on a hit.",
+      "distance": 105.0, "speed": 300.0, "gravity": 9.8, "zero": 100.0, "hit_radius": 0.19, "aspect": 1.6,
+      "eye_y": 1.6, "elevation": 14.0, "fov": 46.0, "scope_fov": 2.8, "sens": 0.012,
+      "sway_deg": 0.28, "tremor_deg": 0.05, "steady_s": 1.6, "steady_k": 0.15, "worse_k": 2.4, "worse_s": 3.0,
+      "cycle_s": 0.95, "bullet_cam": 0.22,
+      "per_row": 4, "spacing": 0.9, "row_h": 0.9, "y0": 1.2, "amp_scale": 1.0
+    }
   }
 }
