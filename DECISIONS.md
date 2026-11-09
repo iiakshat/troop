@@ -132,3 +132,15 @@ Unity wasn't installed, would need about 15 GB plus a licence sign-in, and is he
 **Good play stays powerful** (owner, 2026-11-09). Planned routes finish at 85-100% of their peak squad (the spec had aimed for 30-60%); the owner chose to keep it that way. Difficulty comes from sloppy routes losing, not from punishing good ones.
 
 **Troops smaller than the hero, a step behind him** (owner, 2026-11-09). Troops draw at 0.85 of the hero's size (0.68 in big crowds) and form up about 1 m further back, so the hero reads as the leader.
+
+## v1.1 economy and why-upgrade (2026-11-09, ECON-UI)
+
+**1-3 buys after nearly every win, fewer deeper in.** `tests/econ_sim.gd` plays levels 1-50 with a typical player (`tests/econ_model.gd`: 3 sessions of 5 levels a day, 4 h apart, ~2 bottles, 2.3 stars; the welcome-back, daily and spin coins are spent at session start, not counted as a win's buys) who buys what the map's pointer suggests. With the v1.1 numbers 94% of wins buy 1-3 things, none buy nothing in districts 1-3, and buys per win fall from about 2 (districts 1-2) to about 1 (districts 4-5), where the x2 ad is what turns a thin win into a purchase. `test_purchase_curve_holds` keeps this.
+
+**What changed to get there.** The current district's buildings can be upgraded to lv 2 before its boss falls (`pre_liberation_max_level`), liberating a district pays a one-time bonus (250/500/750/1000/1500), a third builder, station rooms cheaper and flatter (knife/range 80 x1.45, training 110 x1.45, barracks and evidence x1.6, garage x2.2; the third knife/range/training level is open in district 1) so late rooms stay within a few wins instead of 4-7k, district 5 buildings earn 28% less per hour (coins scarcer at the end). Level coins grow 4% per level (was 3%). Income x1.6 per building upgrade stays as specified.
+
+**Squad Power** is one number from the station's real effects (hero knife damage x throws/s, starting constables, squad cap, charges, coin bonus; weights in `economy.json` "power"). The lobby top bar and the Station show it; level nodes from the current one to 4 ahead show the recommended power (`power.recommended`, fitted to 80% of what the sim player has), red with a tinted node when the squad is weaker. Every level is still winnable without upgrades; the number explains, it does not gate.
+
+**One pointer, one pick.** After the first build, the hand bobs over the single best purchase: when under the next level's recommended power, the room with the most power per coin (hand on the Station button), otherwise the building with the most income per coin (hand on the building), else the best room. Cosmetics are never pointed at. A loss shows the room whose next level adds the most power (affordable ones first) as before > after, with the hand on the Station when it is affordable.
+
+**New Rank card** shows once per rank, before the level where it unlocks (or before the next level for a player who passed it without meeting the rank); a rank already met in a level gets no card.
