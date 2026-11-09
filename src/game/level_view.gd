@@ -1074,8 +1074,9 @@ func _update_visuals(d: float) -> void:
 				_hero_throw_t += d
 				if _hero_throw_t > 0.75:
 					_hero_throw_t = -1.0
-			var clip := "punch" if _hero_throw_t >= 0.0 else "idle"
-			(_crowds["hero"] as Crowd).push(Transform3D(basis, pos), clip, maxf(_hero_throw_t, 0.0) if clip == "punch" else _anim_t)
+			var throw_clip := "throw" if Crowd.clips.has("throw") else "punch"
+			var clip := throw_clip if _hero_throw_t >= 0.0 else "idle"
+			(_crowds["hero"] as Crowd).push(Transform3D(basis, pos), clip, maxf(_hero_throw_t, 0.0) if clip == throw_clip else _anim_t)
 		elif aim > 0.0:
 			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis.scaled(Vector3.ONE * (1.0 if a["kind"] == "hero" else troop_k)), pos), "shoot", _anim_t + ph, float(a["flash"]))
 		elif moving:
@@ -1552,33 +1553,11 @@ func _spawn_finish(at: float) -> void:
 			var tile := World._box(Vector3(0.49, 0.03, 0.5), Color.WHITE if (i + j) % 2 == 0 else Color(0.1, 0.1, 0.1))
 			tile.position = Vector3(-4.75 + i * 0.5, 0.02, j * 0.5)
 			_finish.add_child(tile)
-	# Gang hideout: the strike target.
-	_hq = Node3D.new()
+	# The gang's stash front, themed per district (bar, carnival stall, docks, factory, rooftop
+	# lounge) with its neon bottle sign: where Bottle Shot happens once the squad bursts in.
+	_hq = FinaleStash.facade(district)
 	_hq.position = Vector3(0, 0, -16)
 	_finish.add_child(_hq)
-	var body := World._box(Vector3(9, 6, 4), Color("4a3b3b"))
-	body.position = Vector3(0, 3, 0)
-	_hq.add_child(body)
-	var roof := World._box(Vector3(9.6, 0.6, 4.6), Color("2b2222"))
-	roof.position = Vector3(0, 6.3, 0)
-	_hq.add_child(roof)
-	var door := World._box(Vector3(2.4, 3.2, 0.2), Color("8c2a2a"))
-	door.position = Vector3(0, 1.6, 2.05)
-	_hq.add_child(door)
-	for x in [-3.0, 3.0]:
-		var win := World._box(Vector3(1.6, 1.0, 0.2), Color("1b1b1b"))
-		win.position = Vector3(x, 3.8, 2.05)
-		_hq.add_child(win)
-	# The gang's sign is its hood icon, not words (no floating words on game objects).
-	var sign_tex := UiKit.icon_texture("hood")
-	if sign_tex:
-		var sign := Sprite3D.new()
-		sign.texture = sign_tex
-		sign.pixel_size = 2.4 / maxf(1.0, float(sign_tex.get_width()))
-		sign.modulate = Color("ff6b6b") if not UiKit.is_gloss("hood") else Color.WHITE
-		sign.shaded = false
-		sign.position = Vector3(0, 5.0, 2.2)
-		_hq.add_child(sign)
 	var bar_bg := World._box(Vector3(6.2, 0.5, 0.2), Color(0.1, 0.1, 0.1))
 	bar_bg.position = Vector3(0, 7.3, 0)
 	_hq.add_child(bar_bg)
@@ -1594,6 +1573,7 @@ func _begin_strike() -> void:
 	fx.scroll_speed = 0.0
 	strike_ready.emit()
 	var hero := _slot_pos(0, _allies.size())
+	_hq.visible = false   # the squad bursts in: the finale is played inside the stash
 	finale = BottleShot.new().setup(world, fx, font, level_id, sim.squad.total(), hero, Game.coin_bonus())
 	finale.on_throw = func(): _hero_throw_t = 0.0
 	finale.done.connect(_on_finale_done)
