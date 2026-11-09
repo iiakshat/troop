@@ -10,7 +10,9 @@ extends Node
 ## Debug args (after `--`, key=value):
 ##   level=N        start level N at once (no boosters)    autoplay=1  lanes=2,1,1  strike=1
 ##   boosters=headstart,bomb   tokens to take into a level= run (free, for tests)
+##   stop_at=win|loss|revive (screenshot 3 s into that screen, then quit)
 ##   frames=N screenshot=path shots=100,200 out=prefix  report=1 (print the result)
+##   revive=1 (offer the revive under autoplay too; revive=auto also takes it after 1 s)
 ##   reset=1 (fresh save)  coins=N (and unlock every level)  save=path (play on a copy of that
 ##   JSON save, never written)  lobby=1 (menu even for a new player)  ads=1 (show the ad
 ##   popup even under autoplay)
@@ -61,6 +63,7 @@ func _ready() -> void:
 		# Test runs keep the player's real analytics log clean.
 		Analytics.log_path = "user://events_debug.log"
 		Analytics.old_path = "user://events_debug.old.log"
+	get_tree().process_frame.connect(_on_frame)
 	world = World.new()
 	add_child(world)
 	fx = Fx.new()
@@ -359,9 +362,10 @@ func _on_finished(r: Dictionary) -> void:
 		if r.has("mult"):
 			shown["mult"] = r["mult"]
 		result.show_win(current_level, shown, current_level < Config.LEVEL_COUNT)
+		_stop_at("win")
 		if _args.has("report"):
 			print("WIN ", _last_win)
-	elif not view.sim.revived and not _revive_offered and not _autoplay():
+	elif not view.sim.revived and not _revive_offered and (not _autoplay() or _args.has("revive")):
 		_offer_revive(r)
 		return
 	else:
@@ -377,12 +381,20 @@ func _offer_revive(r: Dictionary) -> void:
 	p.revive.connect(_do_revive, CONNECT_ONE_SHOT)
 	p.give_up.connect(func(): _show_loss(r), CONNECT_ONE_SHOT)
 	ui.add_child(p)
+	_stop_at("revive")
+	if String(_args.get("revive", "")) == "auto":
+		_after(1.0, func():
+			if is_instance_valid(p):
+				p.emit_signal("revive")
+				p.queue_free())
 
 
 func _do_revive() -> void:
 	if view == null:
 		return
 	var troops := view.sim.revive_troops()
+	if _args.has("report"):
+		print("REVIVE troops=", troops, " peak=", view.sim.peak_squad)
 	if view.has_method("revive"):
 		view.call("revive", troops)
 	elif view.sim.revive(troops):
@@ -403,6 +415,7 @@ func _show_loss(r: Dictionary) -> void:
 		return
 	Game.lose_level(current_level, _run_stats(r), _run_info(r))
 	result.show_loss(current_level, String(r.get("cause", "")), view.sim.progress(), view.sim.peak_squad)
+	_stop_at("loss")
 	if hud:
 		hud.visible = false
 
@@ -428,6 +441,16 @@ func _leave_result(go_next: bool) -> void:
 		ui.add_child(p)
 	else:
 		after_chest.call()
+
+
+## stop_at=win|loss|revive with screenshot=path: save the screen 3 s into that screen, then quit.
+func _stop_at(what: String) -> void:
+	if String(_args.get("stop_at", "")) != what:
+		return
+	_after(3.0, func():
+		if _args.has("screenshot"):
+			get_viewport().get_texture().get_image().save_png(String(_args["screenshot"]))
+		get_tree().quit())
 
 
 func _after(seconds: float, cb: Callable) -> void:
@@ -507,7 +530,6 @@ func _notification(what: int) -> void:
 func _process(_delta: float) -> void:
 	if _pilot and view and view.sim.state == "run":
 		_pilot.drive(view.sim)
-	_frame += 1
 	if _args.has("strike") and view and view.finale and view.finale._state == "aim" and _frame % 40 == 0:
 		# Autoplay the finale: aim where the next unbroken bottle will be when the knife lands.
 		var lg: BottleLogic = view.finale.logic
@@ -515,6 +537,12 @@ func _process(_delta: float) -> void:
 			if not lg.broken[i]:
 				view.finale.throw_at(lg.position(i, view.finale._ft + 0.55))
 				break
+
+
+## Frame counter for screenshots: a SceneTree signal, so it keeps counting while an ad popup
+## pauses the game.
+func _on_frame() -> void:
+	_frame += 1
 	if _args.has("shots") and String(_args["shots"]).split(",").has(str(_frame)):
 		get_viewport().get_texture().get_image().save_png("%s_%d.png" % [_args.get("out", "shot"), _frame])
 	if _args.has("frames") and _frame == int(_args["frames"]):

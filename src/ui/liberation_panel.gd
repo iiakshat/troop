@@ -1,9 +1,10 @@
 class_name LiberationPanel
 extends RetentionPanel
 ## After a district boss falls: the district is liberated. Trophy ribbon, the district number
-## under a crown, its 5 ruined buildings popping in one by one with a hammer (they can be
-## rebuilt now), star bursts, and one hammer button that closes (main.gd then scrolls the map
-## to the district). Icons and numbers only.
+## next to a crown, its 5 buildings (ruined or rebuilt) popping in one by one with a hammer
+## badge (liberated = they can be upgraded; the next district's ruins can now be rebuilt),
+## star bursts, and one hammer button that closes (main.gd then scrolls the map to the
+## district). Icons and numbers only.
 
 var district := 1
 
@@ -52,7 +53,7 @@ func _ready() -> void:
 	after(0.9, func(): burst(centre(num_label), 12, first_icon(["crown", "star_icon"])))
 
 
-## One ruined building with a small hammer badge (it can be rebuilt now).
+## One building as it stands (ruin or rebuilt) with a small hammer badge.
 func _tile(id: String) -> Control:
 	var box := Control.new()
 	box.custom_minimum_size = Vector2(180, 180)
@@ -62,7 +63,8 @@ func _tile(id: String) -> Control:
 	tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	UiKit.full_rect(tr)
-	var path := "res://assets/city/%s_ruin.png" % id
+	var built := int(Game.building_state(id).get("earning_lv", 0)) >= 1
+	var path := "res://assets/city/%s%s.png" % [id, "" if built else "_ruin"]
 	tr.texture = load(path) as Texture2D if ResourceLoader.exists(path) else UiKit.icon_texture("star_icon")
 	box.add_child(tr)
 	var badge := icon_safe(first_icon(["hammer", "station"]), 60)
