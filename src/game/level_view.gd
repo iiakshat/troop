@@ -980,8 +980,9 @@ func _sync_allies(source: Vector3) -> void:
 
 ## Figure scale for a crowd of n shown figures: full size up to 20, down to 78% at 80+,
 ## so a huge army reads as a dense mob instead of a pile-up.
+## Owner: troops a bit smaller than the hero (0.85), shrinking to 0.68 in big crowds.
 static func crowd_scale(n: int) -> float:
-	return lerpf(1.0, 0.78, clampf((n - 20) / 60.0, 0.0, 1.0))
+	return lerpf(0.85, 0.68, clampf((n - 20) / 60.0, 0.0, 1.0))
 
 
 func _slot_pos(slot: int, n: int) -> Vector3:
@@ -993,7 +994,8 @@ func _slot_pos(slot: int, n: int) -> Vector3:
 	var r := 0.4 * k * sqrt(i + 0.7)
 	var a := i * 2.39996
 	var radius := 0.4 * k * sqrt(maxf(n, 1))
-	return Vector3(_squad_x + cos(a) * r * 1.35, 0, 0.3 + radius * 0.45 + sin(a) * r * 0.5 + lift)
+	# The force forms up a little behind the hero (owner: "a bit far, but not very").
+	return Vector3(_squad_x + cos(a) * r * 1.35, 0, 1.1 + radius * 0.45 + sin(a) * r * 0.5 + lift)
 
 
 # ---------------------------------------------------------------- visuals
@@ -1013,7 +1015,7 @@ func _update_visuals(d: float) -> void:
 
 	# Allies
 	var n := _allies.size()
-	var ally_k := crowd_scale(_allies.size())
+	var troop_k := crowd_scale(_allies.size())
 	for a in _allies:
 		var target := _slot_pos(int(a["slot"]), n)
 		var pos: Vector3 = a["pos"]
@@ -1043,11 +1045,11 @@ func _update_visuals(d: float) -> void:
 			var clip := "punch" if _hero_throw_t >= 0.0 else "idle"
 			(_crowds["hero"] as Crowd).push(Transform3D(basis, pos), clip, maxf(_hero_throw_t, 0.0) if clip == "punch" else _anim_t)
 		elif aim > 0.0:
-			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis.scaled(Vector3.ONE * ally_k), pos), "shoot", _anim_t + ph, float(a["flash"]))
+			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis.scaled(Vector3.ONE * (1.0 if a["kind"] == "hero" else troop_k)), pos), "shoot", _anim_t + ph, float(a["flash"]))
 		elif moving:
-			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis.scaled(Vector3.ONE * ally_k), pos), "run", (_anim_t + ph) * RUN_SPEED, float(a["flash"]))
+			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis.scaled(Vector3.ONE * (1.0 if a["kind"] == "hero" else troop_k)), pos), "run", (_anim_t + ph) * RUN_SPEED, float(a["flash"]))
 		else:
-			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis.scaled(Vector3.ONE * ally_k), pos), "idle", _anim_t + ph, float(a["flash"]))
+			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis.scaled(Vector3.ONE * (1.0 if a["kind"] == "hero" else troop_k)), pos), "idle", _anim_t + ph, float(a["flash"]))
 
 	# Enemies
 	for id in _hordes:

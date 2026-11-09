@@ -112,3 +112,7 @@ Unity wasn't installed, would need about 15 GB plus a licence sign-in, and is he
 **Gang HQ sign is the gang's hood icon**, not the words "GANG HQ" (no words on game objects).
 
 **Music:** a level always starts on the level loop; LevelView switches to the boss loop when the Kingpin walks in and back when he dies; a revive resumes whichever is right.
+
+**Good play stays powerful** (owner, 2026-11-09). Planned routes finish at 85-100% of their peak squad (the spec had aimed for 30-60%); the owner chose to keep it that way. Difficulty comes from sloppy routes losing, not from punishing good ones.
+
+**Troops smaller than the hero, a step behind him** (owner, 2026-11-09). Troops draw at 0.85 of the hero's size (0.68 in big crowds) and form up about 1 m further back, so the hero reads as the leader.
