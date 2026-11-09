@@ -49,9 +49,11 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		var kv := a.trim_prefix("--").split("=", true, 1)
 		_args[kv[0]] = kv[1] if kv.size() > 1 else "1"
-	if _args.has("save") and FileAccess.file_exists(String(_args["save"])):
+	if _args.has("save"):
+		# Never fall back to the player's real save: a missing file means a blank new player.
 		Game.save_path = ""
-		Game.boot(Config.load_json(String(_args["save"])))
+		var path := String(_args["save"])
+		Game.boot(Config.load_json(path) if FileAccess.file_exists(path) else {})
 		Game.set_meta("debug_save", true)
 	if _args.has("reset"):
 		Game.reset_progress()

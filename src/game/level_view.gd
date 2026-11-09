@@ -1503,11 +1503,16 @@ func _spawn_finish(at: float) -> void:
 		var win := World._box(Vector3(1.6, 1.0, 0.2), Color("1b1b1b"))
 		win.position = Vector3(x, 3.8, 2.05)
 		_hq.add_child(win)
-	var sign := GateRowView._label(font, 110, 0.014)
-	sign.text = "GANG HQ"
-	sign.modulate = Color("ff6b6b")
-	sign.position = Vector3(0, 5.2, 2.2)
-	_hq.add_child(sign)
+	# The gang's sign is its hood icon, not words (no floating words on game objects).
+	var sign_tex := UiKit.icon_texture("hood")
+	if sign_tex:
+		var sign := Sprite3D.new()
+		sign.texture = sign_tex
+		sign.pixel_size = 2.4 / maxf(1.0, float(sign_tex.get_width()))
+		sign.modulate = Color("ff6b6b") if not UiKit.is_gloss("hood") else Color.WHITE
+		sign.shaded = false
+		sign.position = Vector3(0, 5.0, 2.2)
+		_hq.add_child(sign)
 	var bar_bg := World._box(Vector3(6.2, 0.5, 0.2), Color(0.1, 0.1, 0.1))
 	bar_bg.position = Vector3(0, 7.3, 0)
 	_hq.add_child(bar_bg)
