@@ -214,8 +214,8 @@ static func bow() -> Node3D:
 		var prev := Vector3(0, s * 0.08, 0)
 		for k in range(1, 9):
 			var f := k / 8.0
-			var y := s * (0.08 + (BOW_TIP_Y - 0.08) * f)
-			var z := -0.09 * sin(f * PI * 0.85) + (BOW_TIP_Z + 0.02) * f * f
+			var y: float = s * (0.08 + (BOW_TIP_Y - 0.08) * f)
+			var z: float = -0.09 * sin(f * PI * 0.85) + (BOW_TIP_Z + 0.02) * f * f
 			var p := Vector3(0, y, z)
 			var seg := box(root, Vector3(0.03 - f * 0.014, 1.0, 0.012), (prev + p) * 0.5, wood)
 			seg.scale.y = prev.distance_to(p) + 0.004
@@ -311,7 +311,7 @@ static func star() -> Node3D:
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(mi)
 	var hub := tube(root, 0.012, 0.01, Vector3.ZERO, mat(Color("2a2d33"), 0.6, 0.4))
-	hub.rotation.x = 0.0
+	hub.rotation.x = PI * 0.5
 	return root
 
 
