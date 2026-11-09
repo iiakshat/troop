@@ -114,8 +114,8 @@ func ring(at: Vector3, color: Color, n := 36, speed := 9.0, size := 0.2) -> void
 
 ## Splash of burning fuel that keeps flickering on the road for `life` seconds.
 func fire(at: Vector3, life := 1.4) -> void:
-	burst(at + Vector3(0, 0.3, 0), Color(1.0, 0.55, 0.1), 22, 7.0, 0.32, 0.5, 4.0, 8.0)
-	burst(at + Vector3(0, 0.3, 0), Color(1.0, 0.85, 0.25), 12, 5.0, 0.22, 0.4, 5.0, 8.0)
+	burst(at + Vector3(0, 0.3, 0), Color(1.0, 0.55, 0.1), 30, 8.0, 0.45, 0.6, 4.0, 8.0)
+	burst(at + Vector3(0, 0.3, 0), Color(1.0, 0.3, 0.08), 16, 6.0, 0.32, 0.5, 5.0, 8.0)
 	if _fires.size() >= MAX_FIRES:
 		_fires.pop_front()
 	_fires.append({"pos": at, "t": 0.0, "life": life})
@@ -193,7 +193,7 @@ func _tick_proj(delta: float) -> void:
 		if kind == "lob":
 			p["spin"] = float(p["spin"]) + delta * 12.0
 			if randf() < 0.7:
-				burst(p["pos"], Color(1.0, 0.6 + randf() * 0.3, 0.15), 1, 0.6, 0.2, 0.3, 1.0, -2.0)
+				burst(p["pos"], Color(1.0, 0.6 + randf() * 0.3, 0.15), 2, 0.8, 0.38, 0.35, 1.0, -2.0)
 			if ln < MAX_LOB:
 				_lob_mm.set_instance_transform(ln, Transform3D(Basis(Vector3.RIGHT, float(p["spin"])), p["pos"]))
 				ln += 1
@@ -208,7 +208,7 @@ func _tick_proj(delta: float) -> void:
 			if kind == "rocket" and randf() < 0.8:
 				burst(p["pos"], Color(0.75, 0.75, 0.78), 1, 0.5, 0.26, 0.45, 0.6, -1.0)
 			var sc: Vector3 = BULLET_SCALE.get(kind, Vector3(0.8, 0.8, 0.8))
-			_bullet_mm.set_instance_transform(bn, Transform3D(basis.scaled(sc), p["pos"]))
+			_bullet_mm.set_instance_transform(bn, Transform3D(basis.scaled_local(sc), p["pos"]))
 			bn += 1
 		i += 1
 	_knife_mm.visible_instance_count = kn
@@ -230,7 +230,7 @@ func _tick_fires(delta: float) -> void:
 		var k := 1.0 - float(f["t"]) / float(f["life"])
 		# Flames lick upwards (negative gravity) from a spread-out puddle.
 		var at := p + Vector3(randf_range(-1.1, 1.1), 0.15, randf_range(-0.8, 0.8))
-		burst(at, Color(1.0, 0.45 + randf() * 0.4, 0.1), 1, 0.6, 0.34 * k + 0.1, 0.45, 2.5, -4.0)
+		burst(at, Color(1.0, 0.45 + randf() * 0.4, 0.1), 1, 0.6, 0.5 * k + 0.15, 0.45, 2.5, -4.0)
 		if randf() < 0.3:
 			burst(at + Vector3(0, 0.8, 0), Color(0.25, 0.22, 0.22), 1, 0.4, 0.4, 0.8, 1.5, -2.0)
 		i += 1
@@ -319,9 +319,9 @@ func _knife_mesh(blade := Color(0.92, 0.95, 1.0)) -> Mesh:
 func _bottle_mesh() -> Mesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	_cube(st, Vector3(0, -0.05, 0), Vector3(0.26, 0.4, 0.26), Color(0.2, 0.5, 0.25))
-	_cube(st, Vector3(0, 0.22, 0), Vector3(0.1, 0.16, 0.1), Color(0.2, 0.5, 0.25))
-	_cube(st, Vector3(0, 0.36, 0), Vector3(0.14, 0.14, 0.14), Color(1.0, 0.75, 0.3))
+	_cube(st, Vector3(0, -0.1, 0), Vector3(0.5, 0.75, 0.5), Color(0.2, 0.55, 0.28))
+	_cube(st, Vector3(0, 0.42, 0), Vector3(0.2, 0.3, 0.2), Color(0.2, 0.55, 0.28))
+	_cube(st, Vector3(0, 0.68, 0), Vector3(0.28, 0.26, 0.28), Color(1.0, 0.75, 0.3))
 	st.generate_normals()
 	return st.commit()
 

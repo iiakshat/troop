@@ -652,7 +652,9 @@ func _on_firebomb_throw(e: Dictionary) -> void:
 		var offs: Array = hv["offs"]
 		if not offs.is_empty():
 			from = _fig_pos(hv, offs[randi() % mini(offs.size(), 6)]) + Vector3(0, 1.9, 0.3)
-	fx.lob(from, land, float(e["t"]), 4.5)
+	fx.lob(from, land, float(e["t"]), 2.5)
+	if _log_events:
+		print("  lob ", from, " -> ", land, " t=", e["t"])
 	_mark_lane(lane, float(e["t"]))
 	Sfx.play("swoosh", -5.0, 0.7)
 
@@ -711,7 +713,7 @@ func _on_boss_hit(e: Dictionary) -> void:
 	var hv: Dictionary = _hordes.get(e["horde"], {})
 	var hp := int(e["hp"])
 	if not hv.is_empty():
-		hv["hit_flash"] = 1.0
+		hv["hit_flash"] = 0.75
 		var p := _horde_front(hv) + Vector3(randf_range(-0.7, 0.7), CHAR_H * BOSS_SCALE * randf_range(0.4, 0.75), 0.9)
 		fx.burst(p, Color(1.0, 0.93, 0.55), 5, 6.0, 0.12, 0.25, 2.0)
 		if hp <= 0:
@@ -826,7 +828,7 @@ func _update_telegraphs(d: float) -> void:
 			if length < 0.1:
 				continue
 			var mi := _lasers[used]
-			mi.transform = Transform3D(Basis.looking_at(dir / length, Vector3.UP).scaled(Vector3(1, 1, length)), (from + to) * 0.5)
+			mi.transform = Transform3D(Basis.looking_at(dir / length, Vector3.UP).scaled_local(Vector3(1, 1, length)), (from + to) * 0.5)
 			mi.visible = true
 			used += 1
 		i += 1
@@ -892,7 +894,8 @@ func _update_boss_bar(hv: Dictionary, d: float) -> void:
 	if cam:
 		bar.basis = cam.global_transform.basis
 		size = clampf(cam.global_position.distance_to(front) / 16.0, 1.0, 3.2)
-	bar.position = Vector3(front.x, CHAR_H * k + 0.5 + 0.4 * size, front.z)
+	# Pulled towards the middle of the road so a boss in an outer lane never clips it.
+	bar.position = Vector3(clampf(front.x, -1.3, 1.3), CHAR_H * k + 0.5 + 0.4 * size, front.z)
 	var hp := LevelSim.boss_hp(h)
 	var mx := maxf(float(h.get("max_hp", h["hp"])), 1.0)
 	var fill: MeshInstance3D = hv["bar_fill"]
@@ -903,7 +906,7 @@ func _update_boss_bar(hv: Dictionary, d: float) -> void:
 		fill.scale.x = maxf(frac, 0.001)
 		fill.position.x = -1.65 * (1.0 - frac)
 	var fl := float(hv.get("hit_flash", 0.0))
-	hv["hit_flash"] = maxf(fl - d * 8.0, 0.0)
+	hv["hit_flash"] = maxf(fl - d * 14.0, 0.0)
 	(fill.material_override as StandardMaterial3D).albedo_color = Color("e0484f").lerp(Color.WHITE, fl * 0.8)
 	bar.scale = Vector3.ONE * size * (1.0 + 0.08 * fl)
 
@@ -1294,7 +1297,7 @@ func _spawn_obstacle(ob: Dictionary) -> void:
 	var od := {"ob": ob, "node": n, "label": null, "cracks": [], "hp_shown": -1, "chip_t": 0.0}
 	match kind:
 		"pothole":
-			_build_pothole(n, ob)
+			_build_pothole(n, od)
 		"barrel":
 			n.add_child(_part(Vector3(1.0, 1.3, 1.0), Color("c8352b"), Vector3(0, 0.65, 0)))
 			n.add_child(_part(Vector3(1.06, 0.18, 1.06), Color("f2c14e"), Vector3(0, 0.95, 0)))
@@ -1319,7 +1322,8 @@ func _spawn_obstacle(ob: Dictionary) -> void:
 
 
 ## Pothole: a black hole with a broken orange rim and loose chunks, plus the troops it costs.
-func _build_pothole(n: Node3D, ob: Dictionary) -> void:
+func _build_pothole(n: Node3D, od: Dictionary) -> void:
+	var ob: Dictionary = od["ob"]
 	var rim := MeshInstance3D.new()
 	rim.mesh = _cyl_mesh("pothole_rim", 1.3)
 	rim.material_override = _mat(Color("e8742a"))
@@ -1342,6 +1346,7 @@ func _build_pothole(n: Node3D, ob: Dictionary) -> void:
 	lab.position = Vector3(0, 0.55, 1.5)
 	lab.text = ("-%d%%" % int(ob["fall_pct"])) if ob.has("fall_pct") else ("-%d" % int(ob.get("fall", 0)))
 	n.add_child(lab)
+	od["tag"] = lab
 
 
 ## Barricade: two posts, wooden planks and a red/white hazard board; cracks show damage.
@@ -1404,6 +1409,8 @@ func _free_obstacle(id: int, ride := false) -> void:
 		return
 	if ride:
 		_riding.append(od["node"])
+		if od.has("tag"):
+			(od["tag"] as Node3D).visible = false  # the real loss floats up instead
 	else:
 		(od["node"] as Node).queue_free()
 	_obstacles.erase(id)
