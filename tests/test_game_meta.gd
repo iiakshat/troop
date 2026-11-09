@@ -73,15 +73,16 @@ func test_station_gated_by_district() -> void:
 	g.save["coins"] = 100000
 	check(g.buy_room("armory"), "lv 1")
 	check(g.buy_room("armory"), "lv 2")
-	eq(g.room_cost("armory"), -1, "lv 3 locked")
+	check(g.buy_room("armory"), "lv 3 (v1.1: open in district 1)")
+	eq(g.room_cost("armory"), -1, "lv 4 locked")
 	var st: Dictionary = g.room_state("armory")
 	eq(int(st["locked"]), 1, "needs district 1")
 	check(int(st["cost"]) > 0 and not bool(st["can_buy"]), "price shown, cannot buy")
 	check(not g.buy_room("armory"), "refused")
 	g.save["stars"]["10"] = 1
 	check(g.buy_room("armory"), "open after the boss")
-	eq(g.room_level("armory"), 3, "lv 3")
-	eq(int(g.save["stats"]["upgrade"]), 3, "upgrades counted for missions")
+	eq(g.room_level("armory"), 4, "lv 4")
+	eq(int(g.save["stats"]["upgrade"]), 4, "upgrades counted for missions")
 	g.free()
 
 

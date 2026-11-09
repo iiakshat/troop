@@ -139,7 +139,7 @@ static func level(save: Dictionary, id: String, now: int = -1) -> int:
 
 
 ## locked (district not reached) | ruin | building | built (can upgrade) | upgrade_locked
-## (district not liberated yet) | maxed
+## (the next level needs the district liberated: city.pre_liberation_max_level) | maxed
 static func status(save: Dictionary, id: String, now: int, economy: Dictionary = {}) -> String:
 	var b := building(id, economy)
 	if b.is_empty() or not district_reached(save, int(b["district"]), economy):
@@ -151,9 +151,18 @@ static func status(save: Dictionary, id: String, now: int, economy: Dictionary =
 		return "building"
 	if lv >= max_level(economy):
 		return "maxed"
-	if bool(cfg(economy).get("upgrade_needs_liberation", true)) and not district_liberated(save, int(b["district"]), economy):
+	if lv >= pre_liberation_max(economy) and not district_liberated(save, int(b["district"]), economy):
 		return "upgrade_locked"
 	return "built"
+
+
+## Highest building level a district allows before its boss is beaten (v1.1: the current
+## district's buildings can be rebuilt and upgraded a little while you fight there).
+static func pre_liberation_max(economy: Dictionary = {}) -> int:
+	var c := cfg(economy)
+	if not bool(c.get("upgrade_needs_liberation", true)):
+		return max_level(economy)
+	return clampi(int(c.get("pre_liberation_max_level", 1)), 1, max_level(economy))
 
 
 ## Price of the next level, or -1 when maxed.

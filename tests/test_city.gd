@@ -61,13 +61,15 @@ func test_build_flow_and_status() -> void:
 	check(not City.is_ready(s, "cafe", T0 + 29), "not ready at 29 s")
 	check(City.is_ready(s, "cafe", T0 + 30), "ready at 30 s")
 	eq(City.level(s, "cafe", T0 + 30), 1, "lv 1 when done")
-	eq(City.status(s, "cafe", T0 + 30, eco), "upgrade_locked", "upgrades need the district liberated")
-	check(not City.start_build(s, "cafe", T0 + 30, eco), "no upgrade before liberation")
+	var pre := City.pre_liberation_max(eco)
+	s["city"]["cafe"] = {"lv": pre, "built_at": T0, "ready_at": T0 + 30}
+	eq(City.status(s, "cafe", T0 + 30, eco), "upgrade_locked", "upgrades past pre_liberation_max_level need the district liberated")
+	check(not City.start_build(s, "cafe", T0 + 30, eco), "no upgrade past the cap before liberation")
 	s["stars"] = {"10": 1}
 	eq(City.status(s, "cafe", T0 + 30, eco), "built", "upgradable after the boss")
 	check(City.start_build(s, "cafe", T0 + 30, eco), "upgrade starts")
-	eq(City.level(s, "cafe", T0 + 31), 1, "keeps earning at lv 1 while upgrading")
-	eq(City.newly_finished(s, T0 + 31, T0 + 31 + City.build_time("cafe", 2, eco)), ["cafe"], "finish detected")
+	eq(City.level(s, "cafe", T0 + 31), pre, "keeps earning at its old level while upgrading")
+	eq(City.newly_finished(s, T0 + 31, T0 + 31 + City.build_time("cafe", pre + 1, eco)), ["cafe"], "finish detected")
 	s["city"]["cafe"] = {"lv": 4, "built_at": T0, "ready_at": T0}
 	eq(City.status(s, "cafe", T0 + 1, eco), "maxed", "maxed")
 	eq(City.next_cost(s, "cafe", eco), -1, "no next cost")

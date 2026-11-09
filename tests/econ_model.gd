@@ -40,17 +40,24 @@ static func run(eco: Dictionary, finale: Dictionary, units: Dictionary, opts: Di
 	var per_day := int(o["levels_per_session"]) * int(o["sessions_per_day"])
 	var daily_i := 0
 	for L in range(1, Config.LEVEL_COUNT + 1):
-		var row := {"level": L, "income": 0, "extra": 0}
-		# Start of a day: daily calendar and the free spin.
-		if day_level == 0:
-			var scale := Economy.reward_scale(L, eco)
-			var day: Dictionary = eco["daily"]["days"][daily_i % 7]
-			var extra := float(day.get("coins", 0))
-			if day.has("chest"):
-				extra += _chest_coins(eco, String(day["chest"]))
-			extra += _spin_value(eco)
-			row["extra"] = int(row["extra"]) + int(round(extra * scale))
-			daily_i += 1
+		var row := {"level": L, "income": 0, "extra": 0, "boot": 0, "boot_buys": 0}
+		# Start of a session (boot): the welcome-back city coins, and on a new day the daily
+		# calendar and the free spin. The player spends them on the map before playing, so they
+		# are counted in "boot", not in this win's buys.
+		if day_level % int(o["levels_per_session"]) == 0:
+			var boot := City.collect(save, t, eco)
+			if day_level == 0:
+				var scale := Economy.reward_scale(L, eco)
+				var day: Dictionary = eco["daily"]["days"][daily_i % 7]
+				var extra := float(day.get("coins", 0))
+				if day.has("chest"):
+					extra += _chest_coins(eco, String(day["chest"]))
+				extra += _spin_value(eco)
+				boot += int(round(extra * scale))
+				daily_i += 1
+			save["coins"] = int(save["coins"]) + boot
+			row["boot"] = boot
+			row["boot_buys"] = _spend(save, t, eco, units, o).size()
 		t += int(o["level_seconds"])
 		# The win.
 		var fx: Dictionary = SaveData.effects(eco, save["station"])
@@ -89,21 +96,9 @@ static func run(eco: Dictionary, finale: Dictionary, units: Dictionary, opts: Di
 		row["affordable"] = aff.size()
 		row["affordable_progress"] = aff.filter(func(p): return p["kind"] != "cosmetic").size()
 		row["cheapest"] = _cheapest(Economy.purchases(save, t, eco, units))
-		# Spend: what the pointer suggests, until nothing useful is affordable.
-		var bought := []
-		while true:
-			var best := Economy.best_purchase(save, t, eco, units)
-			if best.is_empty():
-				break
-			_buy(save, best, t, eco)
-			bought.append("%s:%s" % [String(best["kind"]).left(1), best["id"]])
-		if bought.is_empty() and bool(o["buy_cosmetics"]):
-			for p in Economy.affordable(save, t, eco, units):
-				if p["kind"] == "cosmetic":
-					_buy(save, p, t, eco)
-					bought.append("c:" + String(p["id"]))
-					break
+		var bought := _spend(save, t, eco, units, o)
 		row["bought"] = bought
+		row["buys"] = bought.filter(func(b): return not String(b).begins_with("c:")).size()
 		row["left"] = int(save["coins"])
 		row["power"] = Economy.station_power(save["station"], units, eco)
 		row["rec"] = Economy.recommended_power(L + 1, eco)
@@ -117,6 +112,25 @@ static func run(eco: Dictionary, finale: Dictionary, units: Dictionary, opts: Di
 			else:
 				t += int(float(o["session_gap_hours"]) * 3600.0)
 	return rows
+
+
+## Spends like the map's pointer suggests until nothing useful is affordable (one cosmetic
+## when nothing else was). Returns what was bought ("r:armory", "b:cafe", "c:fire").
+static func _spend(save: Dictionary, t: int, eco: Dictionary, units: Dictionary, o: Dictionary) -> Array:
+	var bought := []
+	while true:
+		var best := Economy.best_purchase(save, t, eco, units)
+		if best.is_empty():
+			break
+		_buy(save, best, t, eco)
+		bought.append("%s:%s" % [String(best["kind"]).left(1), best["id"]])
+	if bought.is_empty() and bool(o["buy_cosmetics"]):
+		for p in Economy.affordable(save, t, eco, units):
+			if p["kind"] == "cosmetic":
+				_buy(save, p, t, eco)
+				bought.append("c:" + String(p["id"]))
+				break
+	return bought
 
 
 static func _buy(save: Dictionary, p: Dictionary, t: int, eco: Dictionary) -> void:
@@ -159,14 +173,15 @@ static func _spin_value(eco: Dictionary) -> float:
 	return v / maxf(total, 1.0)
 
 
-## Share of wins after which 1-3 progress items (rooms, buildings) were affordable, and the
-## wins with none. {in_band, none: [levels], over: [levels]}.
+## Share of wins after which the coins bought 1-3 progress items (rooms, buildings; the
+## pointer's picks, cheapest-first ties), and the wins with none or more than 3.
+## {in_band, none: [levels], over: [levels]}.
 static func summary(rows: Array) -> Dictionary:
 	var ok := 0
 	var none := []
 	var over := []
 	for r in rows:
-		var n := int(r["affordable_progress"])
+		var n := int(r["buys"])
 		if n == 0:
 			none.append(r["level"])
 		elif n > 3:
