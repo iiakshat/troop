@@ -6,6 +6,7 @@ extends SceneTree
 ##   godot --headless --path . --script res://tests/tune.gd -- [levels=A-B | level=N]
 ##       [list=1,5,9] [routes=100] [beam=6] [upgrades=k,s,q] [out=path.json] [calibrate=1] [verbose=1]
 ##       [k=0.5 kf=2 (evaluate with every gang scaled, the last wave kf times more)]
+##       [ratio=0 (calibrate the win rate only; keep the last wave's current scale)]
 ##
 ## calibrate=1 searches, per level, the scale for every gang's size (bosses: hp) that makes
 ## the sampled win rate match the level's `target_win`, while the best route still wins
@@ -24,6 +25,7 @@ var upgrades := {}
 var n_routes := 100
 var beam := 6
 var verbose := false
+var fit_ratio := true
 
 
 func _initialize() -> void:
@@ -58,6 +60,8 @@ func _initialize() -> void:
 			calibrate = true
 		elif a == "verbose=1":
 			verbose = true
+		elif a == "ratio=0":
+			fit_ratio = false
 		elif a.begins_with("k="):
 			k_eval = float(a.substr(2))
 		elif a.begins_with("kf="):
@@ -128,7 +132,7 @@ static func _ratio(r: Dictionary) -> float:
 ## powers too for levels 1-10).
 func calibrate_level(n: int, base: Dictionary) -> Dictionary:
 	var target := float(base.get("target_win", 0.5))
-	var ratio_target := float(base.get("target_ratio", -1.0))
+	var ratio_target := float(base.get("target_ratio", -1.0)) if fit_ratio else -1.0
 	var rows := Autopilot.gate_row_count(base)
 	var routes := sample_routes(n, rows, 48)
 	var kf := 1.0
