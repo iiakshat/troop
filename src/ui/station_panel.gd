@@ -160,7 +160,8 @@ func refresh() -> void:
 			UiKit.button_row(buy, ["star_icon"], "", 40)
 		elif locked > 0:
 			buy.disabled = true
-			UiKit.button_row(buy, ["district_lock"], str(locked), 40)
+			# Boss crown + the boss level to beat (10/20/30...), as on the map's boss nodes.
+			UiKit.button_row(buy, ["boss_crown"], str(locked * Economy.district_levels(Game.economy)), 40)
 		else:
 			buy.disabled = int(Game.save["coins"]) < cost
 			UiKit.button_row(buy, ["coin"], UiKit.fmt_coins(cost), 40)

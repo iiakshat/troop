@@ -15,7 +15,13 @@ var _movers: Array[Node3D] = []   # buildings and props that recycle
 var _shake := 0.0
 var _cam_base := Transform3D()
 var _cam_override: Variant = null
-var _base_fov := 56.0
+var _base_fov := 42.0
+## Set by LevelView each frame: camera sideways follow (metres) and the boss beat (0..1, the
+## camera leans down the street and zooms a little while a district boss walks in).
+var follow_x := 0.0
+var beat := 0.0
+const BEAT_FOV := 35.0
+const BEAT_LOOK := Vector3(0, 0.5, -21.0)
 var _lens_attr: CameraAttributesPractical
 var _rng := RandomNumberGenerator.new()
 const BASE_NEAR := 0.5
@@ -44,12 +50,12 @@ const THEMES := {
 	4: {"sky_top": "2e3570", "sky_hor": "ff8a4a", "ground_hor": "e07a4c", "ground_bot": "4a3040", "sky_energy": 1.0,
 		"sun_pitch": -9.0, "sun_yaw": 162.0, "sun_color": "ff7a3a", "sun_energy": 1.0, "sun_size": 10.0,
 		"fill_color": "8e86ff", "fill_energy": 0.38, "ambient": "8d7592", "ambient_energy": 0.72,
-		"fog": "d9805a", "fog_density": 0.011, "exposure": 1.06, "glow": 0.45, "saturation": 1.18,
+		"fog": "d9805a", "fog_density": 0.0075, "exposure": 1.06, "glow": 0.45, "saturation": 1.18,
 		"tint": "e9c6b8", "walk": "e6c4b8", "windows": 0.55, "lamps": 0.7, "neon": 0.35, "wet": 0.0},
 	5: {"sky_top": "060a1f", "sky_hor": "262a63", "ground_hor": "1d2150", "ground_bot": "06070f", "sky_energy": 1.0,
 		"sun_pitch": -52.0, "sun_yaw": 140.0, "sun_color": "9fb0ff", "sun_energy": 0.42, "sun_size": 3.0,
 		"fill_color": "b06cff", "fill_energy": 0.28, "ambient": "5c66a8", "ambient_energy": 0.95,
-		"fog": "1b2350", "fog_density": 0.012, "exposure": 1.2, "glow": 0.65, "saturation": 1.15,
+		"fog": "1b2350", "fog_density": 0.0085, "exposure": 1.2, "glow": 0.65, "saturation": 1.15,
 		"tint": "a3a9d4", "walk": "8e93b8", "windows": 1.0, "lamps": 1.0, "neon": 1.0, "wet": 1.0},
 }
 const NEON_COLORS := ["ff3fa8", "38f0ff", "b25cff", "ffd23f", "48ff8a"]
@@ -133,6 +139,12 @@ func set_camera_override(xf: Variant) -> void:
 
 func _process(delta: float) -> void:
 	var base: Transform3D = _cam_override if _cam_override != null else _cam_base
+	if _cam_override == null:
+		if beat > 0.001:
+			var lean := base.looking_at(BEAT_LOOK, Vector3.UP)
+			base = base.interpolate_with(lean, beat)
+		base.origin.x += follow_x
+		camera.fov = lerpf(_base_fov, BEAT_FOV, beat)
 	if _shake > 0.001:
 		_shake = move_toward(_shake, 0.0, delta * 2.5)
 		var o := Vector3(_rng.randf_range(-1, 1), _rng.randf_range(-1, 1), 0) * _shake * 0.35
@@ -206,12 +218,14 @@ func _environment() -> void:
 func _camera() -> void:
 	camera = Camera3D.new()
 	camera.keep_aspect = Camera3D.KEEP_WIDTH
-	camera.fov = 56.0
+	# A longer lens from further back: the squad stays the same size at the bottom while the
+	# fights 20-45 m up the street are drawn about 25% bigger.
+	camera.fov = _base_fov
 	camera.near = 0.5
 	camera.far = 220.0
-	camera.position = Vector3(0, 7.0, 7.4)
+	camera.position = Vector3(0, 9.0, 12.0)
 	add_child(camera)
-	camera.look_at(Vector3(0, 0.5, -9.0), Vector3.UP)
+	camera.look_at(Vector3(0, 0.5, -14.0), Vector3.UP)
 	_cam_base = camera.transform
 	camera.current = true
 

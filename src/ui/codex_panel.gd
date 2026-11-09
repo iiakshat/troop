@@ -232,13 +232,13 @@ func _stat(where: HBoxContainer, icon_name: String, text: String) -> void:
 	where.add_child(c)
 
 
-## Lock + district + level that unlocks it.
+## Lock + the level that unlocks it (no district number: on the Station, lock + N means
+## "liberate district N", a different condition).
 func _lock_row(lv: int) -> HBoxContainer:
 	var r := HBoxContainer.new()
 	r.add_theme_constant_override("separation", 8)
 	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	r.add_child(icon_safe(first_icon(["district_lock", "lock"]), 48))
-	r.add_child(UiKit.label(str(Economy.district_of(lv, Game.economy)), 36, Color.WHITE, 8))
+	r.add_child(icon_safe("lock", 48))
 	r.add_child(icon_safe(first_icon(["map_pin", "lock"]), 44))
 	r.add_child(UiKit.label(str(lv), 36, Color.WHITE, 8))
 	return r

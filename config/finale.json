@@ -4,8 +4,8 @@
   "knife_speed": 14.0,
   "wall_z": -5.8,
   "hit_radius": 0.24,
-  "per_troop": 2,
-  "clear_bonus": 40,
+  "per_troop": 0.5,
+  "clear_bonus": 20,
   "bonus_per_bottle": 0.5,
   "gold_mult": 2.0,
   "layouts": {

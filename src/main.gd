@@ -55,7 +55,13 @@ func _ready() -> void:
 		var path := String(_args["save"])
 		Game.boot(Config.load_json(path) if FileAccess.file_exists(path) else {})
 		Game.set_meta("debug_save", true)
-	if _args.has("reset"):
+	elif _debug_run() and not _args.has("write"):
+		# Debug and review runs (autoplay, level=, coins=, reset=, screenshots...) play on a
+		# throwaway copy of the save and never write the player's real save.json.
+		# write=1 persists on purpose; real_reset=1 wipes the real save.
+		Game.save_path = ""
+		Game.set_meta("debug_save", true)
+	if _args.has("reset") or _args.has("real_reset"):
 		Game.reset_progress()
 	if _args.has("coins"):
 		Game.save["coins"] = int(_args["coins"])
@@ -87,6 +93,14 @@ func _ready() -> void:
 		_start_level(1)  # brand-new player: straight into the action, no menu
 	else:
 		_show_lobby()
+
+
+## True for runs started with a debug arg that would otherwise change the real save.
+func _debug_run() -> bool:
+	for k in ["autoplay", "level", "coins", "reset", "stop_at", "frames", "shots", "screenshot", "chain", "boosters", "district"]:
+		if _args.has(k):
+			return true
+	return false
 
 
 func _autoplay() -> bool:
@@ -186,7 +200,7 @@ func _welcome_back_step(next: Callable) -> void:
 
 
 func _daily_step(next: Callable) -> void:
-	if bool(Game.daily_state().get("can_claim", false)) and _daily_shown != Game.today():
+	if bool(Game.daily_state().get("can_claim", false)) and _daily_shown != Game.today() and not Game.first_build_pending():
 		_daily_shown = Game.today()
 		_panel_step(DailyPanel.new(), next)
 	else:
@@ -545,6 +559,8 @@ func _notification(what: int) -> void:
 
 
 func _process(_delta: float) -> void:
+	if is_instance_valid(hud) and is_instance_valid(view):
+		hud.set_progress(view.sim.progress())  # goal gradient: the bar fills towards the Gang HQ
 	if _pilot and view and view.sim.state == "run":
 		_pilot.drive(view.sim)
 	if _args.has("strike") and view and view.finale and view.finale._state == "aim" and _frame % 40 == 0:

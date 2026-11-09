@@ -44,7 +44,7 @@ func _ready() -> void:
 	_progress.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_progress.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var bg := StyleBoxFlat.new()
-	bg.bg_color = Color(0.05, 0.12, 0.3, 0.6)
+	bg.bg_color = Color(0.05, 0.12, 0.3, 0.95)  # opaque: stays visible against a night sky
 	bg.set_corner_radius_all(15)
 	bg.set_border_width_all(4)
 	bg.border_color = UiKit.INK
@@ -56,8 +56,18 @@ func _ready() -> void:
 	_progress.add_theme_stylebox_override("background", bg)
 	_progress.add_theme_stylebox_override("fill", fill)
 	_progress.max_value = 1.0
+	_progress.step = 0.0
 	_progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top.add_child(_progress)
+	# The finish: the Gang HQ (hood) icon sits on the bar's right end.
+	var goal := UiKit.icon("hood", 44)
+	goal.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	goal.set_anchors_and_offsets_preset(Control.PRESET_CENTER_RIGHT)
+	goal.offset_left = -30
+	goal.offset_right = 14
+	goal.offset_top = -22
+	goal.offset_bottom = 22
+	_progress.add_child(goal)
 	_troops = UiKit.pill("person", "1", Color("8fd0ff"))
 	# Troop counter with the squad's capacity bar under it.
 	var tcol := VBoxContainer.new()

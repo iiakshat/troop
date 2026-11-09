@@ -41,6 +41,7 @@ func setup(r: Dictionary, font: Font, lane_x: Array) -> GateRowView:
 		var pad_mat := StandardMaterial3D.new()
 		pad_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		pad_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		pad_mat.disable_fog = true
 		pad.material_override = pad_mat
 		root.add_child(pad)
 
@@ -55,6 +56,7 @@ func setup(r: Dictionary, font: Font, lane_x: Array) -> GateRowView:
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mat.disable_fog = true  # the offer's colour reads through dusk haze and night
 		panel.material_override = mat
 		sign.add_child(panel)
 		var label := _label(font, 150, 0.011)
@@ -184,8 +186,14 @@ func passed(picked_lane: int) -> void:
 
 
 func _process(delta: float) -> void:
+	# Far signs are drawn a little bigger (never wider than their lane) so the offer reads
+	# earlier.
+	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
 	for lane in _panels:
 		var p: Dictionary = _panels[lane]
+		var ds := 1.0
+		if cam and _fade < 0.0:
+			ds = clampf(cam.global_position.distance_to((p["root"] as Node3D).global_position) / 24.0, 1.0, 1.2)
 		if float(p["flash"]) > 0.0 or float(p["pop"]) > 0.0:
 			p["flash"] = maxf(float(p["flash"]) - delta * 6.0, 0.0)
 			p["pop"] = maxf(float(p["pop"]) - delta * 5.0, 0.0)
@@ -193,10 +201,10 @@ func _process(delta: float) -> void:
 			var base: Color = GREY if is_blocked(p["gate"]) else info["color"]
 			var c: Color = base.lerp(Color.WHITE, float(p["flash"]))
 			(p["mat"] as StandardMaterial3D).albedo_color = Color(c, 0.85 + 0.15 * float(p["flash"]))
-			var s := Vector3.ONE * (1.0 + 0.3 * float(p["pop"]))
-			(p["sign"] as Node3D).scale = s
-			(p["tag"] as Label3D).scale = s
-			(p["tag_icon"] as Sprite3D).scale = s
+		var s := Vector3.ONE * (1.0 + 0.3 * float(p["pop"])) * ds
+		(p["sign"] as Node3D).scale = s
+		(p["tag"] as Label3D).scale = s
+		(p["tag_icon"] as Sprite3D).scale = s
 	if _fade >= 0.0:
 		_fade += delta
 		for lane in _panels:
@@ -238,7 +246,7 @@ static func _label(font: Font, size: int, px: float) -> Label3D:
 	l.font = font
 	l.font_size = size
 	l.pixel_size = px
-	l.outline_size = int(size * 0.18)
+	l.outline_size = int(size * 0.24)
 	l.outline_modulate = Color(0.05, 0.05, 0.08)
 	l.modulate = Color.WHITE
 	l.render_priority = 2

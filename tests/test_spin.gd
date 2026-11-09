@@ -44,3 +44,11 @@ func test_daily_limits() -> void:
 	eq(Spin.ad_left(s, d, eco), 0, "none left")
 	check(Spin.can_spin_free(s, "2026-11-09", eco), "new day, new free spin")
 	eq(Spin.ad_left(s, "2026-11-09", eco), int(eco["spin"]["ad_per_day"]), "ad spins reset")
+
+
+func test_clock_going_back_grants_nothing() -> void:
+	var s := SaveData.migrate({}, eco)
+	check(Spin.use(s, "2026-11-09", "free", eco), "today's free spin")
+	check(not Spin.can_spin_free(s, "2026-11-08", eco), "a day back: no new free spin")
+	eq(Spin.ad_left(s, "2026-11-08", eco), int(eco["spin"]["ad_per_day"]), "ad spins not doubled by the date either")
+	check(not Spin.can_spin_free(s, "2026-11-09", eco), "and back to today: still used")

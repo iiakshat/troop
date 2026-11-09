@@ -30,10 +30,11 @@ func test_moving_bottles_are_hit_where_they_are_on_arrival() -> void:
 
 func test_reward_multiplier() -> void:
 	var b := BottleLogic.new(cfg, 1)
-	eq(b.coins(10), 60, "no bottles: 40 + 10x2")
+	var base := float(cfg["clear_bonus"]) + 10 * float(cfg["per_troop"])
+	eq(b.coins(10), int(round(base)), "no bottles: clear bonus + troops x per_troop")
 	b.throw(b.position(0, 0.0), 0.0)
 	b.throw(b.position(1, 0.0), 0.0)
 	eq(b.multiplier(), 2.0, "two bottles = x2")
 	b.throw(b.position(3, 0.0), 0.0)  # gold
 	eq(b.multiplier(), 4.0, "gold doubles")
-	eq(b.coins(10, 0.1), 264, "station +10%")
+	eq(b.coins(10, 0.1), int(round(base * 4.0 * 1.1)), "station +10%")

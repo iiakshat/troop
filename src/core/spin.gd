@@ -42,7 +42,9 @@ static func pick(rng: RandomNumberGenerator, economy: Dictionary = {}) -> int:
 
 static func _today_state(save: Dictionary, today: String) -> Dictionary:
 	var sp: Dictionary = save.get("spin", {})
-	if String(sp.get("date", "")) != today:
+	# Only a later date resets the counters ("YYYY-MM-DD" compares as a string): moving the
+	# clock back keeps today's used spins, so toggling the date grants nothing.
+	if today > String(sp.get("date", "")):
 		return {"date": today, "free_used": 0, "ad_used": 0}
 	return sp
 

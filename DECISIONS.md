@@ -113,6 +113,22 @@ Unity wasn't installed, would need about 15 GB plus a licence sign-in, and is he
 
 **Music:** a level always starts on the level loop; LevelView switches to the boss loop when the Kingpin walks in and back when he dies; a revive resumes whichever is right.
 
+## v1.0 review fixes (2026-11-09)
+
+**The clock only moves forward for rewards.** Daily, free spins and missions reset only on a later date than the stored one; moving the phone date back grants nothing (matches the city's "clock moved back = no income").
+
+**Debug runs never write the real save.** Any run with autoplay, level, coins, reset, stop_at, frames, shots, screenshot, chain, boosters or district plays on a throwaway copy (`write=1` persists, `real_reset=1` wipes). Saves are atomic (`.tmp` then rename) with `save.json.bak` as a fallback when `save.json` is broken.
+
+**Fights read bigger.** Longer lens from further back (camera (0, 9, 12) looking at z = -14, FOV 42): the squad keeps its size, fights 20-45 m away are drawn about 25% bigger. Gang members are drawn 1.3x and their counts grow with distance. A district boss inside 35 m leans the camera down the street (FOV 35); his death plays 0.5 s of slow motion, a big burst and the HP bar shatters. Escort counts sit above the boss bar. The camera follows the squad sideways by half, and a big squad packs narrower. The sim's fire range (45 m) is unchanged, so gangs still die far up the street; bringing fights closer needs a shorter range plus re-calibration (owner call).
+
+**Ranks read from behind** (they were dark hair and navy from the camera's view): inspector purple cap and khaki suit, sergeant gold hat, SWAT grey helmet, sniper olive helmet, commando tan helmet. Placeholder colours; the owner can change them in `config/characters.json` and re-bake.
+
+**Tracers are thinned visually** past about 36 shooters (one in k drawn, thinner, 60% alpha). Damage is unchanged.
+
+**Level coins cut** (finale `per_troop` 2 -> 0.5, `clear_bonus` 40 -> 20): a full L1 win paid about 1,700, enough for every district-1 sink after 1-2 levels, so the x2 ad, spin and daily coins meant nothing. A typical L1 win (2 bottles) now pays about 190, about one district-1 building.
+
+**First build is pointed at, wordlessly.** After L1, a hand taps the cheapest affordable ruin, then the Build button; the gift and wheel badges and the daily popup wait until the first build starts.
+
 **Good play stays powerful** (owner, 2026-11-09). Planned routes finish at 85-100% of their peak squad (the spec had aimed for 30-60%); the owner chose to keep it that way. Difficulty comes from sloppy routes losing, not from punishing good ones.
 
 **Troops smaller than the hero, a step behind him** (owner, 2026-11-09). Troops draw at 0.85 of the hero's size (0.68 in big crowds) and form up about 1 m further back, so the hero reads as the leader.
