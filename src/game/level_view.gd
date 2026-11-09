@@ -89,8 +89,8 @@ var _marks: Array = []         # per lane {node, mat, t, dur}: firebomb landing 
 var _shown_count: Dictionary = {}  # ally kind -> figures drawn (updated on squad changes)
 var _boss_music := false
 var _anim_t := 0.0             # animation clock (seconds)
-static var _meshes: Dictionary = {}     # size -> BoxMesh / name -> Mesh, shared by every level
-static var _mats: Dictionary = {}       # Color -> StandardMaterial3D
+var _meshes: Dictionary = {}            # size -> BoxMesh / name -> Mesh, shared by this level's obstacles
+var _mats: Dictionary = {}              # colour -> StandardMaterial3D
 ## Debug arg `events=1`: print each sim event with its frame (to aim screenshots).
 static var _log_events := OS.get_cmdline_user_args().has("events=1")
 
@@ -1425,7 +1425,7 @@ func _part(size: Vector3, color: Color, pos: Vector3) -> MeshInstance3D:
 	return mi
 
 
-static func _box_mesh(size: Vector3) -> BoxMesh:
+func _box_mesh(size: Vector3) -> BoxMesh:
 	if not _meshes.has(size):
 		var bm := BoxMesh.new()
 		bm.size = size
@@ -1433,7 +1433,7 @@ static func _box_mesh(size: Vector3) -> BoxMesh:
 	return _meshes[size]
 
 
-static func _cyl_mesh(key: String, radius: float) -> CylinderMesh:
+func _cyl_mesh(key: String, radius: float) -> CylinderMesh:
 	if not _meshes.has(key):
 		var cm := CylinderMesh.new()
 		cm.top_radius = radius
@@ -1445,7 +1445,7 @@ static func _cyl_mesh(key: String, radius: float) -> CylinderMesh:
 	return _meshes[key]
 
 
-static func _mat(color: Color, unshaded := false) -> StandardMaterial3D:
+func _mat(color: Color, unshaded := false) -> StandardMaterial3D:
 	var key := color.to_html() + ("u" if unshaded else "l")
 	if not _mats.has(key):
 		var m := StandardMaterial3D.new()

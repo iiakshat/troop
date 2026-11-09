@@ -15,8 +15,8 @@ const BLUE := Color(0.25, 0.52, 0.95)
 const GOLD := Color(0.95, 0.72, 0.2)
 const GREY := Color(0.42, 0.42, 0.45)
 
-static var _plank_mesh: BoxMesh
-static var _plank_mat: StandardMaterial3D
+var _plank_mesh: BoxMesh
+var _plank_mat: StandardMaterial3D
 
 var row: Dictionary
 var _panels: Dictionary = {}   # lane -> {gate, root, sign, mat, label, tag, pad_mat, flash, pop}
@@ -144,7 +144,7 @@ func refresh(gate: Dictionary, ticked := false) -> void:
 		p["pop"] = 1.0
 
 
-## Crossed planks nailed over a blocked gate (mesh and material shared by every row).
+## Crossed planks nailed over a blocked gate (rare: built only when a gate gets blocked).
 func _board_up(p: Dictionary) -> void:
 	if p["boards"] != null:
 		return
