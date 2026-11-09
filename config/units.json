@@ -53,10 +53,10 @@
     "headstart": 5
   },
   "revive": {
-    "_note": "Once per level after a loss (rewarded ad): squad back to pct % of its peak, gangs within push metres are shoved back to push, and a short shield (s) covers the restart.",
+    "_note": "Once per level after a loss (rewarded ad): squad back to pct % of its peak, gangs within push metres are shoved back to push, and a shield (s) covers the restart; it outlasts one molotov throw cycle (throw_every + flight) so a firebomb already on its way cannot undo the revive.",
     "pct": 50,
     "push": 14.0,
-    "shield": 2.0
+    "shield": 4.0
   },
   "stars": {
     "_note": "Fallback star thresholds (percent of peak squad left at the finish) when a level has none.",
