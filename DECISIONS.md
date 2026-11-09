@@ -64,3 +64,35 @@ Unity wasn't installed, would need about 15 GB plus a licence sign-in, and is he
 **Station without the front desk** (owner: "upgrades do not make sense"). Every room is open; each row shows the real value now ▸ next.
 
 **Local APK builds, minimal toolchain** (owner: "setup locally… only install what's needed", 2026-11-08). Godot's non-Gradle export only needs adb, apksigner and a Java runtime, so `tools/setup_android.py` installs platform-tools, build-tools 36 and a Temurin 17 JRE (not the JDK), and pulls just the Android templates out of Godot's 1 GB pack with HTTP range requests. About 500 MB total; no Android Studio. The build runs at below-normal CPU priority. After a green local build, `main` is fast-forwarded to `dev` by hand (replacing the CI promote job while Actions is locked). The debug APK is about 70 MB because it carries the engine for both 32- and 64-bit phones; Play's per-device split will make a store download much smaller.
+
+## v1.0 (2026-11-08/09, owner round 4: "an end-to-end game, very addictive, high revenue")
+
+**Meta: rebuild the city** (owner's pick). 5 districts × 10 levels; each district boss liberates its district. 25 buildings start ruined, are rebuilt with coins behind a short build timer (30 s for the first, up to about 2 h), and earn coins per hour into a storage that caps at 3 h (+1 h per City Hall level). The cap and timers bring players back; income uses real time and a clock moved backwards earns nothing. A district's ruins can be rebuilt once the player reaches it; upgrades need it liberated. The map is the lobby, so progress is always in view (goal gradient).
+
+**Coin curve** (owner: "why would someone watch an ad"). Win coins = finale coins × mult(L), mult = 1 + 0.03 × (L-1), ×1.5 on boss levels, ×0.5 on replays. Everything bought grows 12-20% per step, so coins get scarcer relative to costs as you go deeper, which gives the x2 rewarded ad its value without starving early players. Daily, mission, spin and chest coins scale with the player's level so they stay worth having.
+
+**Station gates read "ceil(k/2)" as district reached.** Room level k needs district ceil(k/2) *reached* (ceil(k/2)-1 districts liberated): levels 1-2 are buyable at once, 9-10 need district 5. The literal reading ("liberated") would lock the whole station until level 10 and break "generous early game". Owner had maxed everything in a few matches before, which the gates now prevent.
+
+**Gate rarity** (owner). Offers appear in 1-2 lanes of a row; the other lanes hold obstacles (pothole, barricade, red gate, car, barrel). A row with offers in all three lanes is a rare "lucky row" (at most one every 3 levels). Choosing a lane is now a real decision every row.
+
+**Ranks.** Allies unlock by level (Sergeant 4, Inspector 7, SWAT 13, Sniper 21, Commando 31). Each is shown as "= N constables", computed from config DPS, never hard-coded. The first time a rank ever joins, a small corner card shows its stats (RankToast) once.
+
+**Stars from the share of the peak squad left** (1 = win, 2 ≥ 30%, 3 ≥ 55%, in units.json). It rewards planning a route, not just surviving, and feeds the star chests (every 15 stars).
+
+**Ads are stubs with a visible placeholder** (owner, 2026-11-08: wants to see where ads go). Every placement opens a blank near-black popup with a countdown number and ring, no words. Rewarded: 5 s, reward only at 0, close X visible from the start (closing early = no reward). Interstitial: 3 s, then a close X. Autoplay and headless skip it. Placements: x2 coins, revive, x2 offline coins, extra spins, one per booster per level, build speed-up.
+
+**Interstitial rules.** Only between levels (after a win, on the way from the result to the map), from level 6, at most one per 2 completed levels, at least 45 s apart, never right after a rewarded ad or a revive offer, always closable. Never during play, never on a loss screen. Numbers in `economy.json` `ads.interstitial`.
+
+**Flow order after a win: result → star chest → interstitial → map.** The chest comes first because it's a reward; the interstitial sits at the natural break before the map, and the map then shows the pin hopping to the new level (a small progress win right after the ad). "Next" also opens the next level's boosters on the map; "Home" just shows the map.
+
+**Boot order: welcome back → daily → map.** Offline coins first (the biggest "you were missed" reward), then the calendar once a day if it can be claimed. A brand-new player skips both and lands in level 1 (fastest first win); the popups start when they first reach the map.
+
+**Revive: once per level, for a rewarded ad**, back to 50% of the peak squad, gangs in melee pushed back, 2 s shield. No countdown on the offer and the X simply gives up: a near miss is a moment of high want, but pressure tactics are out.
+
+**Engagement without deception** (Google Play policy, India's 2023 dark-pattern guidelines). Wanted: variable rewards, daily streaks, goal-gradient bars, storage caps, build timers, star chests, near-miss revives, opt-in rewarded ads at moments of high want. Forbidden: fake countdowns, disguised ads, ads that can't be closed, confirm-shaming, wheels whose slice sizes lie about odds (slice size = true probability), hidden costs, bait-and-switch rewards. A missed daily day resets the calendar and says so honestly.
+
+**Liberation celebration.** Beating a district boss shows a LiberationPanel (crown, district number, its 5 buildings popping in with a hammer badge), then the map scrolls to that district so the next step (build) is obvious.
+
+**Mission stats are counted at the end of a run** from the sim (kills per enemy kind via `LevelSim.kills_by`, bottles, powers used by watching charges drop), so a quit mid-level doesn't count partial progress twice and revives add up correctly.
+
+**World themes are visual-only tables in world.gd**, not config: sky, sun, fog and tint per district have no gameplay meaning. Night extras are fake glows (additive quads, emissive neon), not real lights, for phone performance; window masks use the MULTIPLY emission operator; glass shards are unshaded because lit transparent emission rendered black on the Mobile renderer.

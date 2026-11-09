@@ -1,71 +1,65 @@
 # CLAUDE.md: TROOP (working title)
 
-> Live file. Keep it current in the same session as any decision or status change. Shared basics are in `../COMMON.md`; the business background is in `../CLAUDE.md`. The owner's live instructions win over both. Design psychology brief: `PSYCH.md` (read it fully before design work). Reasons for every choice: `DECISIONS.md`.
+> Live file. Keep it current in the same session as any decision or status change. Shared basics are in `../COMMON.md`; the business background is in `../CLAUDE.md`. The owner's live instructions win over both. Design psychology brief: `PSYCH.md` (read it fully before design work). Reasons for every choice: `DECISIONS.md`. The v1 contract: `docs/superpowers/specs/2026-11-08-troop-v1-design.md`; what each v1 builder did: `docs/v1_builder_reports.md`.
 
-Last updated: 2026-11-08
+Last updated: 2026-11-09
 
 ## What this is
 
-A 2.5D arithmetic army game for Android (portrait, offline). The squad stays put at the bottom of a city street and slides between 3 lanes. Pickups, gangs and red gates come towards it. The squad fires all the time: one bullet or knife per troop.
+A 2.5D arithmetic army game for Android (portrait, offline). The squad stays put at the bottom of a city street and slides between 3 lanes. Pickups, gangs, obstacles and red gates come towards it. The squad fires all the time: one bullet or knife per troop. Between levels the player rebuilds a ruined city.
 
 - **Hero:** an ordinary guy in casual clothes who always throws knives. A PISTOL pickup gives him a gun for that level.
-- **Allies (ranks):** Constable (pistol, 1 damage), Inspector (revolver, 3 damage, pierces armour). More ranks and weapons later.
-- **Enemies:** Thugs (crowd), Knifers (fast), Gunmen (stop and shoot; SHIELD blocks them), Brutes (armour 1: pistols and knives do nothing).
-- **Pickups:** +N troops (drawn as the people waiting), ×k, -N and -% (red; shoot them up, and past zero they become troops), GANG ÷k and NO ARMOUR (apply to the next gang), PISTOL, +BOMB.
-- **Powers:** SHIELD (4 s, blocks all hits) and BOMB (kills 50% of the nearest gang, minimum 10).
-- **End of level:** a needle swings over a ×1/×2/×3/×5 bar. Tap to stop it; coins = 40 + troops × multiplier. Then the Gang HQ explodes.
-- **Lobby:** coins buy Knife Power, Throw Speed and Starting Squad (capped). No merging (owner).
-- **Money:** ads only (interstitials plus rewarded). **Not in the build yet**; Google ads get connected at the end (owner).
+- **Allies (ranks, unlock by level):** Constable (pistol), Sergeant (shotgun, L4), Inspector (revolver, pierces armour, L7), SWAT (rifle burst, L13), Sniper (L21), Commando (launcher splash, L31). Numbers in `config/units.json`; the Codex shows each as "= N constables".
+- **Enemies:** Thugs, Knifers, Gunmen, Brutes (armour halves damage), riot, biker, Molotov (firebombs a lane), sniper_foe (laser, then a kill), Grenadier, and a boss per district (walks in shooting, big HP bar).
+- **Gate rows:** offers (+N, ×k, recruits, weapons, powers, foe mods) in 1-2 lanes only; the others hold obstacles (pothole, barricade, red gate, car, barrel). A rare "lucky row" has offers in all 3.
+- **Powers:** SHIELD and BOMB charges; boosters (head start, +shield, +bomb) are taken in before a level.
+- **End of level:** Bottle Shot finale (knife throws at bottles, multiplier), then 1-3 stars from the share of the peak squad still standing.
+- **Meta (v1):** a city map of 5 districts × 10 levels. Each district boss (L10/20/30/40/50) liberates it. 25 buildings are rebuilt with coins (build timers) and earn coins per hour into capped storage. Police Station upgrades (10 levels per room, gated by district). Daily 7-day calendar, 3 daily missions, lucky spin, star chests, Codex.
+- **Money:** ads only, as **stubs**: every ad opens a blank placeholder popup with a countdown (rewarded 5 s, interstitial 3 s). Google ads get connected at the end (owner).
 
 ## Status
 
-- **2026-11-08, v0.3 (round-3 feedback, on `dev`, APK built locally):**
-  - Fixes: camera stuck in the finale view after level 1; armour now halves damage instead of blocking it (level 5's Kingpin could not die); notch-safe HUD; drag-to-steer; one knife per bottle; single knife whoosh.
-  - Look: Vulkan Mobile renderer with shadows, glow and ACES; Gemini-painted facades and ground; toon-shaded, outlined crowds (sRGB fix); glossy Gemini icons, and road signs use icons, never words.
-  - Feel: no sideways body twist; bodies topple, lie, then dissolve; big crowds shrink a little; squad cap 150 with a HUD bar.
-  - Bottle Shot: refractive glass, layout-fitted telephoto lens, lit plank gallery, shards and splash.
-  - Station: before ▸ after rows, Barracks (squad cap), "!" badges, reachable from the result screen.
-  - Sound: recorded gunshots.
-  - **Waiting on the owner: Mixamo characters and animations** in `art_src/mixamo/{characters,anims}` (list in chat, 2026-11-08). The bake tool needs a Mixamo path (textures, UVs) when they arrive.
-
-- **2026-11-08, v0.2 (in progress, on `dev`):** owner's round-2 feedback is done:
-  - Honest row-by-row melee, 45 m lane-first bullet streams.
-  - New SWAT, riot, biker, boss, turncoat, SMG, barrels, cars.
-  - 5 tuned levels.
-  - Quaternius characters as VAT crowds, Kenney/KayKit city.
-  - Bottle Shot finale.
-  - Police station (6 rooms) and cosmetics (5 outfits, 5 knife skins).
-  - Bright-cartoon icon UI, recorded CC0 SFX and music.
-  - One-time icon hints.
-  - 28 tests pass; every level plays end to end headless (autoplay + finale).
-- **APKs are built locally** (owner's choice, 2026-11-08): GitHub Actions is refused for the whole account ("locked due to a billing issue"), so `build_apk.bat` builds on the laptop. The CI workflow stays in the repo for when billing is fixed (each push currently fails there, which is harmless).
-- **Not done:** analytics, ads, store listing, real-device performance check on low-end phones, package ID, name check. Gunshots are still synthesised (CC0 firearm library is 194 MB, not pulled).
-- **v0.1 (earlier):** first playable, 3 levels, procedural box characters.
+- **2026-11-09, v1.0 (integration, branch `v1-integrate` + builder worktrees):** the full loop is wired in `src/main.gd`:
+  - Boot → welcome back (offline city coins) → daily calendar (once a day, if claimable) → city map. A brand-new player goes straight into level 1, then result → map.
+  - Map Play → BoosterPanel → level (boosters applied) → finale → `Game.win_level` (coin curve, stars, unlocks, mission stats) → result (x2 rewarded ad) → star chest if one is ready → interstitial (Ads rules) → map, where the pin hops to the new level; Next also opens that level's boosters. After a district boss: LiberationPanel, then the map scrolls to the district.
+  - Loss → RevivePanel once per level (rewarded ad, +50% of the peak squad) → "so close" result.
+  - Mission stats: kills per enemy kind, bottles, gold bottles, wins, 3 stars, bombs and shields used; city coins, builds and upgrades are recorded by Game itself.
+  - Placeholder ad popup at every placement in normal play; autoplay and headless skip it.
+- **Known open items:** the level winnability test fails until SIM-FINISH re-tunes the 50 levels; LevelView has no crowds yet for the new ranks/enemies (script errors at sergeant/molotov recruit gates); revive can be undone by the next molotov firebomb (2 s shield, 2.5 s throws); no real SFX recordings yet for many spec ids (synth fallbacks).
+- **Not done:** real ads and analytics SDKs, store listing, real-device performance check on low-end phones, package ID, name check.
+- **2026-11-08, v0.3:** Vulkan Mobile look, Gemini-painted facades, toon crowds, Bottle Shot with refractive glass, station redesign, recorded gunshots.
+- **APKs are built locally** (owner's choice, 2026-11-08): GitHub Actions is refused for the whole account ("locked due to a billing issue"), so `build_apk.bat` builds on the laptop. The CI workflow stays in the repo for when billing is fixed.
 
 ## Commands
 
-- Play on PC: double-click `play.bat` (arrows or A/D or swipe to change lane, S = shield, B = bomb). `play.bat -- lobby=1` opens the menu; `-- coins=2000` unlocks everything for testing.
-- Android APK: `build_apk.bat` runs the tests, exports `build/troop-debug.apk` at low CPU priority, and installs it on a USB-connected phone if there is one (`build_apk.bat noinstall` skips that). One-time setup: `python -I tools/setup_android.py` installs only adb, apksigner (build-tools 36), a Java 17 runtime into `../_tools` (~280 MB), the Godot Android templates (only those files, ~220 MB) and a debug keystore, and points Godot's editor settings at them. No Android Studio, NDK or Gradle.
-- Art with Gemini (shared key, keep requests few, many assets per sheet): `python -I tools/gemini_image.py <out.png> <aspect> <prompt.txt>`; sheets live in `art_src/gen/`, then `tools/slice_env.py` / `tools/slice_icons.py`.
+- Play on PC: double-click `play.bat` (arrows or A/D or swipe to change lane, S = shield, B = bomb). `play.bat -- lobby=1` opens the map; `-- coins=2000` unlocks everything for testing.
+- Android APK: `build_apk.bat` runs the tests, exports `build/troop-debug.apk` at low CPU priority, and installs it on a USB-connected phone if there is one (`build_apk.bat noinstall` skips that). One-time setup: `python -I tools/setup_android.py` (adb, apksigner, a Java 17 runtime into `../_tools`, the Godot Android templates and a debug keystore).
+- Art with Gemini (shared key, keep requests few, many assets per sheet): `python -I tools/gemini_image.py <out.png> <aspect> <prompt.txt> [--ref img]`; sheets live in `art_src/gen/`, then `tools/slice_env.py` / `tools/slice_icons.py` / `tools/slice_city.py`.
+- Levels: `python -I tools/gen_levels.py` regenerates `config/levels/level_1..50.json`.
 - Re-bake characters after editing `config/characters.json`: `$G --headless --path . --script res://tools/bake_vat.gd [-- only=hero]`; preview: `$G --path . res://tools/preview_chars.tscn -- clip=run`.
+- Previews: `tools/preview_ui.gd` (any retention panel), `tools/preview_world.tscn` (district themes), `tools/preview_finale.tscn` (Bottle Shot).
 - Godot: `../_tools/godot/Godot_v4.7.2-stable_win64_console.exe` (call it `$G`).
-- Import: `$G --headless --path . --import`
+- Import: `$G --headless --path . --import` (also after adding a new `class_name` file).
 - Tests: `$G --headless --path . --script res://tests/run_tests.gd`
-- Tuning report (every lane combination of every level): `$G --headless --path . --script res://tests/tune.gd -- [level=N] [upgrades=k,s,q]`
-- Debug args after `--`: `level=N autoplay=1 lanes=2,1,1 strike=1 (autoplay the bottle throws) report=1 frames=N screenshot=path shots=100,200 out=prefix lobby=1 reset=1 coins=N panel=station|style|settings`. For screenshots add `--always-on-top --fixed-fps 60 --resolution 540x960` (a covered window stops rendering). Autoplay ignores mouse and touch.
+- Tuning report: `$G --headless --path . --script res://tests/tune.gd -- [level=N] [upgrades=k,s,q]`
+- Debug args after `--` (see the top of `src/main.gd`): `level=N autoplay=1 lanes=2,1,1 strike=1 boosters=headstart,bomb report=1 revive=1|auto stop_at=win|loss|revive frames=N screenshot=path shots=100,200 out=prefix lobby=1 reset=1 coins=N save=path.json ads=1 panel=station|style|settings|daily|missions|spin|codex|booster|chest|welcome|revive|liberation|map|ad|interstitial`. `save=` plays on a copy of a JSON save and never writes; autoplay/save runs log analytics to `user://events_debug.log`. For screenshots add `--always-on-top --position 0,0 --fixed-fps 60 --resolution 540x960`. Autoplay ignores mouse and touch and skips boosters, revive and ads.
 - Delete `%APPDATA%\Godot\app_userdata\Troop\save.json` to test as a new player (a new player skips the menu).
 
 ## Code layout
 
-- `src/core/`: pure logic, no nodes, tested. `squad.gd` (army maths), `level_sim.gd` (the whole battle), `autopilot.gd` (bot and headless runner), `config.gd`, `save_data.gd`.
-- `src/game/`: visuals. `level_view.gd` (binds the sim to the visuals, handles input), `humanoid.gd` and `crowd.gd`/`.gdshader` (box people on a MultiMesh, animated on the GPU), `world.gd` (street), `gate_row_view.gd` (pickups), `fx.gd` (projectiles, particles).
-- `src/ui/`: `hud.gd`, `lobby.gd`, `result_panel.gd`, `ui_kit.gd`. `src/autoload/`: `game.gd` (configs and save), `sfx.gd` (synth audio).
-- `config/`: `units.json` (all combat numbers), `economy.json` (coins, upgrades, strike bar), `levels/level_N.json` (events; each `at` = the distance at which it reaches the squad).
+- `src/main.gd`: the app flow (boot popups, map, boosters, level, revive, result, chest, interstitial, liberation) and debug args.
+- `src/core/`: pure logic, no nodes, tested. `squad.gd` (army maths), `level_sim.gd` (the whole battle), `autopilot.gd` (bot and headless runner), `bottle_logic.gd`, `config.gd`, `save_data.gd` (v3 + migration), `economy_math.gd` (coin curve, station costs and gates, chests), `city.gd`, `daily.gd`, `missions.gd`, `spin.gd`, `rewards.gd`.
+- `src/autoload/`: `game.gd` (configs, save and the meta API, see its header), `ads.gd` + `ad_placeholder.gd` (stub ads and the popup), `analytics.gd` (JSON lines in `user://events.log`), `sfx.gd` (sounds and music modes).
+- `src/game/`: visuals. `level_view.gd` (binds the sim to the visuals, handles input), `crowd.gd`/shaders (VAT crowds on MultiMesh), `world.gd` (street and district themes), `gate_row_view.gd`, `fx.gd`.
+- `src/finale/`: Bottle Shot (cameras, glass, shatter).
+- `src/ui/`: `lobby.gd` + `city_map.gd` + `building_panel.gd` (the map lobby), `station_panel.gd`, `style_panel.gd`, `settings_panel.gd` (credits), `hud.gd`, `result_panel.gd`, `retention_panel.gd` (shared base) with `daily, missions, spin, booster, revive, codex, star_chest, welcome_back, liberation` panels and `rank_toast.gd`, `ui_kit.gd`.
+- `config/`: `units.json` (combat numbers, stars, revive), `economy.json` (coins, curve, station, city, daily, missions, spin, chests, boosters, ads), `finale.json`, `levels/level_N.json`.
 
 ## Rules for this game
 
 - Every number lives in `config/`. After changing a level, run `tune.gd` and keep `test_levels_are_winnable_and_reward_planning` passing.
 - The arithmetic must stay exact (see DECISIONS.md). Never fake an outcome.
-- No floating words on game objects (owner). Numbers on pickups and gangs only.
-- Original assets only; log anything new in `ASSETS.md`.
+- No words on buttons or game objects (owner). Icons and numbers only; exceptions are listed in the spec §0.
+- Engagement without deception: no fake countdowns, disguised or unclosable ads, confirm-shaming, or misleading odds (spec §0).
+- Original assets only; log anything new in `ASSETS.md`; CC BY items also go into `SettingsPanel.CREDITS`.
 - Git: local config is iiakshat / jakshat569@gmail.com. Remote `iiakshat/troop` (public). Work on `dev` only; after a green local `build_apk.bat`, fast-forward `main` to `dev` and push both. Push with the token in `.env` via a per-command auth header.

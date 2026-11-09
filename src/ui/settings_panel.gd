@@ -1,6 +1,8 @@
 class_name SettingsPanel
 extends Control
-## Sound, music and vibration toggles (icons) plus the credits that CC-BY assets require.
+## Sound, music and vibration toggles (icons) plus the credits that CC-BY assets require
+## (every CC BY row in ASSETS.md: game-icons.net icons and the app icon, Vincent Sevedge's
+## gunshots).
 
 const CREDITS := """3D characters: Quaternius (CC0)
 City, cars, food, UI: Kenney (CC0)
@@ -9,7 +11,8 @@ Icons: game-icons.net by Lorc, Delapouite, Skoll,
 Sbed, Andy Meneely, Guard13007 (CC BY 3.0)
 Sounds: Kenney, rubberduck (CC0)
 Gunshots: Vincent Sevedge (CC BY 3.0)
-Music: XCVG (CC0)
+Music: made with Google Lyria; XCVG (CC0)
+Painted art: made with Google Gemini
 Fonts: Luckiest Guy (Apache 2.0), Lilita One (OFL)"""
 
 

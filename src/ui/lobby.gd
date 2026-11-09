@@ -297,8 +297,8 @@ func _arg(key: String) -> String:
 ## save=path: play on a copy of that save (JSON) and never write the real one.
 func _debug_save() -> void:
 	var path := _arg("save")
-	if path == "" or not FileAccess.file_exists(path):
-		return
+	if path == "" or not FileAccess.file_exists(path) or Game.has_meta("debug_save"):
+		return  # main.gd already loaded it at boot (loading again would undo this session)
 	Game.save_path = ""
 	Game.boot(Config.load_json(path))
 
