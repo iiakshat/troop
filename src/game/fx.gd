@@ -193,9 +193,9 @@ func _tick_proj(delta: float) -> void:
 		if kind == "lob":
 			p["spin"] = float(p["spin"]) + delta * 12.0
 			if randf() < 0.7:
-				burst(p["pos"], Color(1.0, 0.6 + randf() * 0.3, 0.15), 2, 0.8, 0.38, 0.35, 1.0, -2.0)
+				burst(p["pos"], Color(1.0, 0.5 + randf() * 0.3, 0.1), 2, 0.8, 0.55, 0.45, 1.0, -2.0)
 			if ln < MAX_LOB:
-				_lob_mm.set_instance_transform(ln, Transform3D(Basis(Vector3.RIGHT, float(p["spin"])), p["pos"]))
+				_lob_mm.set_instance_transform(ln, Transform3D(Basis(Vector3.RIGHT, float(p["spin"])).scaled(Vector3.ONE * 1.8), p["pos"]))
 				ln += 1
 		elif kind == "knife":
 			p["spin"] = float(p["spin"]) + delta * 28.0
