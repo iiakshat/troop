@@ -55,11 +55,14 @@ const PITCH_SPREAD := {
 	"build_done": 0.0, "chest_open": 0.0, "collect": 0.0, "recruit": 0.0, "tap": 0.0,
 	"error": 0.0, "flip": 0.0, "tick": 0.0, "spin_tick": 0.02, "boss_roar": 0.0,
 }
-## Mix trim per id in dB, added to the caller's volume. Files are levelled to the same
-## loudness, so this is where the mix gets balanced without touching call sites.
+## Mix trim per id in dB, added to the caller's volume. tools/make_sfx.py levels every file
+## it builds (loudest 50 ms: big hits -11..-13, weapons and bodies -12..-16, rewards -13..-16,
+## ticks -20). The older Kenney / rubberduck files below were louder than that, so they are
+## trimmed onto the same plan here: UI and rewards never sit above the gameplay hits.
 const TRIM_DB := {
-	"hit": -6.0, "die": -5.0, "punch": -3.0, "knife": -2.0, "tick": -4.0, "spin_tick": -5.0,
-	"glass_tinkle": -3.0, "tap": -3.0, "boss_roar": 1.0, "boom": 1.0,
+	"upgrade": -6.5, "win": -3.5, "lose": -6.0, "banner": -4.5, "error": -3.5,
+	"recruit": -3.0, "gate_good": -4.0, "flip": -4.5, "tick": -4.0, "clink": -3.5,
+	"blast": -1.5, "tap": -8.0, "swoosh": -3.0,
 }
 const _PITCH_STEPS := [0.0, 0.6, -0.6, 1.0, -1.0, 0.3, -0.3]
 
