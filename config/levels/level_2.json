@@ -18,17 +18,17 @@
     {"at": 103, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 5},
     {"at": 130, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 12}, {"lane": 2, "op": "mul", "k": 3}]},
     {"at": 130, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 8},
-    {"at": 167, "type": "wave", "groups": [{"enemy": "thug", "n": 20}, {"enemy": "knifer", "n": 15, "gap": 8}]},
+    {"at": 167, "type": "wave", "groups": [{"enemy": "thug", "n": 20}, {"enemy": "knifer", "n": 14, "gap": 8}]},
     {"at": 203, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 20}, {"lane": 2, "op": "mul", "k": 2}]},
     {"at": 203, "type": "obstacle", "kind": "pothole", "lane": 0, "fall": 12},
-    {"at": 240, "type": "wave", "groups": [{"enemy": "knifer", "n": 35}]},
+    {"at": 240, "type": "wave", "groups": [{"enemy": "knifer", "n": 34}]},
     {"at": 275, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "num", "v": -14, "step": 3, "max": 20, "inc": 2}, {"lane": 2, "op": "num", "v": 30}]},
-    {"at": 312, "type": "wave", "groups": [{"enemy": "thug", "n": 41}, {"enemy": "knifer", "n": 20, "gap": 8}]},
+    {"at": 312, "type": "wave", "groups": [{"enemy": "thug", "n": 40}, {"enemy": "knifer", "n": 20, "gap": 8}]},
     {"at": 347, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 30}, {"lane": 2, "op": "mul", "k": 2}]},
     {"at": 347, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 20},
-    {"at": 386, "type": "wave", "groups": [{"enemy": "knifer", "n": 58}]},
+    {"at": 386, "type": "wave", "groups": [{"enemy": "knifer", "n": 57}]},
     {"at": 420, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -20, "step": 4, "max": 30, "inc": 2}, {"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "num", "v": 40}]},
-    {"at": 463, "type": "wave", "label": "RUSH", "groups": [{"enemy": "thug", "n": 46}, {"enemy": "knifer", "n": 46, "gap": 8}]},
+    {"at": 463, "type": "wave", "label": "RUSH", "groups": [{"enemy": "thug", "n": 45}, {"enemy": "knifer", "n": 45, "gap": 8}]},
     {"at": 496, "type": "finish"}
   ]
 }

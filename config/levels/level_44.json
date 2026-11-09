@@ -29,12 +29,12 @@
     {"at": 370, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 160, "block_reach": 12, "dmg_pct": 15},
     {"at": 378, "type": "gates", "gates": [{"lane": 1, "op": "recruit", "unit": "commando", "n": 3}, {"lane": 2, "op": "num", "v": 55}]},
     {"at": 378, "type": "obstacle", "kind": "car", "lane": 0, "hp": 320, "dmg_pct": 25},
-    {"at": 412, "type": "wave", "groups": [{"enemy": "biker", "n": 115}]},
+    {"at": 412, "type": "wave", "groups": [{"enemy": "biker", "n": 114}]},
     {"at": 442, "type": "gates", "gates": [{"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "num", "v": 95}]},
     {"at": 442, "type": "obstacle", "kind": "car", "lane": 0, "hp": 580, "dmg_pct": 30},
-    {"at": 476, "type": "wave", "groups": [{"enemy": "thug", "n": 172}, {"enemy": "grenadier", "n": 57, "gap": 10}]},
+    {"at": 476, "type": "wave", "groups": [{"enemy": "thug", "n": 171}, {"enemy": "grenadier", "n": 57, "gap": 10}]},
     {"at": 507, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "commando", "n": 11}, {"lane": 1, "op": "recruit", "unit": "inspector", "n": 20}, {"lane": 2, "op": "pct", "v": -50, "inc": 10, "step": 111.1, "max": 20}]},
-    {"at": 541, "type": "wave", "groups": [{"enemy": "riot", "n": 58}, {"enemy": "brute", "n": 41, "gap": 8}, {"enemy": "gunman", "n": 49, "gap": 16}], "label": "AMBUSH"},
+    {"at": 541, "type": "wave", "groups": [{"enemy": "riot", "n": 87}, {"enemy": "brute", "n": 61, "gap": 8}, {"enemy": "gunman", "n": 74, "gap": 16}], "label": "AMBUSH"},
     {"at": 579, "type": "finish"}
   ]
 }

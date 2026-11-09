@@ -117,3 +117,48 @@ func test_new_ranks_are_lost_before_the_hero() -> void:
 	eq(s.count("sniper"), 0, "then snipers")
 	eq(s.count("commando"), 2, "commandos outrank snipers")
 	eq(s.count("hero"), 1, "hero last")
+
+
+# ---------------------------------------------------------------- formation (v1.1 spatial hits)
+
+func test_slot_troops_sum_to_the_squad() -> void:
+	for total in [1, 2, 7, 72, 73, 150]:
+		var n := Squad.figures(total, 72)
+		eq(n, mini(total, 72), "figures for %d" % total)
+		var sum := 0
+		for i in n:
+			var t := Squad.slot_troops(i, n, total)
+			check(t >= 1, "every slot carries someone (%d of %d)" % [i, total])
+			sum += t
+		eq(sum, total, "slots carry exactly %d" % total)
+
+
+func test_formation_never_wider_than_the_cap() -> void:
+	for n in [2, 5, 20, 40, 72]:
+		for i in n:
+			check(absf(Squad.slot_offset(i, n, 1.25).x) <= 1.25 + 1e-4, "slot %d of %d inside 1.25 m" % [i, n])
+	eq(Squad.slot_offset(0, 30, 1.25), Vector2(0.0, -0.5), "the hero leads from the centre")
+
+
+func test_footprint_hits_only_the_overlap_up_to_capacity() -> void:
+	# A 40-strong squad centred on a 2.6 m obstacle: many overlap, the capacity caps the loss.
+	var full := Squad.footprint_hits(40, 72, 0.0, 0.0, 1.3, 0.2, 100, 1.25)
+	eq(int(full["overlap"]), 40, "centred on a wide footprint: everyone overlaps")
+	eq(int(full["lost"]), 40, "capacity 100 takes them all")
+	var capped := Squad.footprint_hits(40, 72, 0.0, 0.0, 1.3, 0.2, 6, 1.25)
+	eq(int(capped["lost"]), 6, "capacity 6 takes exactly 6")
+	eq((capped["slots"] as Array).size(), 6, "six figures fall")
+	# Squad in the next lane: an obstacle 2.8 m away never touches it.
+	var clear := Squad.footprint_hits(40, 72, 2.8, 0.0, 1.3, 0.2, 100, 1.25)
+	eq(int(clear["lost"]), 0, "centred in the next lane: untouched")
+	# Half past the obstacle: about half the squad, never all of it.
+	var half := Squad.footprint_hits(40, 72, 1.4, 0.0, 1.3, 0.2, 100, 1.25)
+	check(int(half["lost"]) > 5 and int(half["lost"]) < 35, "half past: part of the squad (%d)" % int(half["lost"]))
+	# Big squads: slots carry several troops each, still exact.
+	var big := Squad.footprint_hits(150, 72, 0.0, 0.0, 0.6, 0.2, 1000, 1.25)
+	check(int(big["lost"]) == int(big["overlap"]), "uncapped: the loss is the overlap")
+	check(int(big["lost"]) < 150 and int(big["lost"]) > 0, "a narrow barrel hits part of 150 (%d)" % int(big["lost"]))
+	# Nearest first: the slots that die are the ones closest to the footprint's centre.
+	var near := Squad.footprint_hits(40, 72, 1.0, 0.0, 1.3, 0.2, 3, 1.25)
+	for i in (near["slots"] as Array):
+		check(Squad.slot_offset(int(i), 40, 1.25).x + 1.0 <= 1.0, "hit slots sit on the obstacle's side")

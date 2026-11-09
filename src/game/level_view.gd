@@ -74,6 +74,15 @@ var _hq: Node3D
 var _hq_fill: MeshInstance3D
 var finale: BottleShot = null
 var _hero_throw_t := -1.0
+var _hero_knife_t := 9.0         # seconds since the hero's last in-level knife throw
+var _spotlight := 0.0            # seconds of new-rank spotlight left (real time)
+var _spot_kind := ""             # the rank in the spotlight
+var _spot_ring: MeshInstance3D = null
+var _danger_ring: MeshInstance3D = null
+var _danger_t := 0.0             # seconds the death-cause marker stays up
+var _danger_at := Vector3.ZERO
+var _was_standoff := false
+var _boss_step := 0.0            # boss footfall clock (camera thump, dust)
 var _touching := false
 var _drag_from_x := 0.0          # finger x when the drag (re)started
 var _steer_from := 0.0           # squad target x at that moment
@@ -251,6 +260,10 @@ func _process(delta: float) -> void:
 			var d := delta * _time_scale
 			_acc += d
 			var steps := 0
+			# The sim hits obstacles where the squad really is (between lanes while steering).
+			# Autoplay keeps lane centres so its runs match the headless routes.
+			if input_enabled:
+				sim.set_squad_x(_squad_x)
 			while _acc >= DT and steps < 8:
 				sim.step(DT)
 				_acc -= DT
@@ -261,6 +274,12 @@ func _process(delta: float) -> void:
 			world.scroll(sim.traveled - _last_traveled)
 			_last_traveled = sim.traveled
 			fx.scroll_speed = sim.S * _time_scale
+			var stand := sim.standoff()
+			if stand and not _was_standoff:
+				# Standoff: the street stops and the squad plants its feet.
+				fx.burst(Vector3(_squad_x, 0.1, 1.2), Color(0.75, 0.7, 0.62), 18, 3.0, 0.4, 0.6, 1.0, 2.0)
+				Sfx.play("thunk", -6.0, 0.7)
+			_was_standoff = stand
 			_update_visuals(d)
 		"finale", "done_win":
 			fx.scroll_speed = 0.0
@@ -285,6 +304,13 @@ func _update_time_scale(delta: float) -> void:
 		# Boss death: half a second of slow motion (the sim stays exact, just slower).
 		_slowmo -= delta
 		_time_scale = 0.3
+		return
+	if _spotlight > 0.0:
+		# A new rank's first arrival: one second at 0.3 speed with a ring under them.
+		_spotlight -= delta
+		_time_scale = 0.3
+		if _spotlight <= 0.0 and _spot_ring:
+			_spot_ring.visible = false
 		return
 	for id in _rows:
 		var row: Dictionary = (_rows[id] as GateRowView).row
@@ -379,6 +405,7 @@ func _handle_events(events: Array) -> void:
 				_end_t = 0.0
 				Sfx.play("lose")
 				Game.vibrate(200)
+				_mark_cause(e)
 			"obstacle_spawn":
 				_spawn_obstacle(e["ob"])
 			"obstacle_broken":
@@ -387,9 +414,11 @@ func _handle_events(events: Array) -> void:
 				world.shake(0.5)
 				Sfx.play("hurt")
 				var hit_ob: Dictionary = e["ob"]
+				var hole := String(hit_ob.get("kind", "")) == "pothole"
+				# Exactly the figures that stood on its footprint fall; the rest close ranks.
+				_kill_overlap(e, hole)
 				# A pothole stays in the road and rides away; anything solid was smashed.
-				_free_obstacle(int(hit_ob["id"]), String(hit_ob.get("kind", "")) == "pothole")
-				_sync_allies(Vector3(_squad_x, 0, 0))
+				_free_obstacle(int(hit_ob["id"]), hole)
 			"obstacle_pass":
 				_free_obstacle(int(e["ob"]["id"]), true)
 			"pothole_pass":
@@ -612,11 +641,8 @@ func _on_pothole(e: Dictionary) -> void:
 	if lost > 0:
 		fx.float_text("-%d" % lost, hole + Vector3(0, 2.6, 0), Color("ff5a5f"), 0.9)
 		Game.vibrate(70)
-	# The troops the hole took drop into it instead of toppling over.
-	_death_style = "fall"
+	# The troops the hole took drop into it (obstacle_hit picks exactly which ones).
 	_death_at = hole
-	_sync_allies(Vector3(_squad_x, 0, 0))
-	_death_style = ""
 
 
 func _on_barricade_hit(e: Dictionary) -> void:
@@ -764,6 +790,17 @@ func _on_rank_join(e: Dictionary) -> void:
 	if first:
 		fx.ring(Vector3(_squad_x, 0.4, 0.4), GateRowView.GOLD, 32, 8.0)
 		_sfx("rank_up", "recruit", -2.0)
+		# Spotlight: one second at 0.3 speed with a gold ring under the newcomers.
+		if not demo:
+			_spotlight = 1.0
+		_spot_kind = String(e["unit"])
+		if _spot_ring == null:
+			_spot_ring = _ground_ring(GateRowView.GOLD)
+		_spot_ring.visible = true
+
+
+func _throw_clip() -> String:
+	return "throw" if Crowd.clips.has("throw") else "punch"
 
 
 func _on_revive(_e: Dictionary) -> void:
@@ -1001,45 +1038,142 @@ func _sync_allies(source: Vector3) -> void:
 					_dying.append({"kind": kind, "pos": a["pos"], "t": 0.0, "basis": Basis()})
 					fx.puff(a["pos"])
 		_shown_count[kind] = int(want[kind])
-	# Slots: hero in front, the heavy hitters next, constables behind.
-	_allies.sort_custom(func(a, b): return int(ALLY_ORDER.get(a["kind"], 9)) < int(ALLY_ORDER.get(b["kind"], 9)))
+	_assign_slots()
+
+
+## Slots: hero in front, the heavy hitters next, constables behind. Stable (a figure keeps
+## its place relative to its rank-mates), so survivors close ranks instead of swapping.
+func _assign_slots() -> void:
+	_allies.sort_custom(func(a, b):
+		var oa := int(ALLY_ORDER.get(a["kind"], 9))
+		var ob := int(ALLY_ORDER.get(b["kind"], 9))
+		return oa < ob or (oa == ob and int(a["slot"]) < int(b["slot"])))
 	for i in _allies.size():
 		_allies[i]["slot"] = i
+
+
+## An obstacle hit (spatial): kill exactly the figures standing on its footprint, nearest its
+## centre first, as many as the sim's loss is worth in shown figures (the shown-figure cap
+## makes one figure stand for several troops). Survivors keep their places and close ranks.
+func _kill_overlap(e: Dictionary, hole: bool) -> void:
+	var lost := int(e["lost"])
+	if lost <= 0 or _allies.is_empty():
+		return
+	var after := sim.squad.total()
+	var before := after + lost
+	var n := _allies.size()
+	var k := clampi(int(round(lost * float(n) / maxf(before, 1.0))), 1, n)
+	if sim.squad.hero_alive():
+		k = mini(k, n - 1)
+	var ob_x: float = LANE_X[int(e["ob"]["lane"])]
+	var at_x := float(e.get("x", _squad_x))
+	var order: Array = []
+	for a in _allies:
+		if a["kind"] == "hero" and sim.squad.hero_alive():
+			continue
+		var sx := at_x + Squad.slot_offset(int(a["slot"]), n, sim.form_half).x
+		order.append([absf(sx - ob_x), int(a["slot"]), a])
+	order.sort_custom(func(x, y): return x[0] < y[0] or (x[0] == y[0] and x[1] < y[1]))
+	for i in mini(k, order.size()):
+		var a: Dictionary = order[i][2]
+		_allies.erase(a)
+		if hole:
+			_falling.append({"kind": a["kind"], "pos": a["pos"], "t": randf() * -0.15, "spin": randf_range(-3.0, 3.0)})
+		else:
+			_dying.append({"kind": a["kind"], "pos": a["pos"], "t": 0.0, "basis": Basis()})
+			fx.puff(a["pos"])
+	# Ranks: the sim loses the lowest ranks first, so relabel survivors to match it (the
+	# outermost of a surplus rank takes a missing rank's look), then settle any rounding.
+	var want := _desired_allies()
+	var have := {}
+	for a in _allies:
+		have[a["kind"]] = int(have.get(a["kind"], 0)) + 1
+	var short: Array = []
+	for kind in ALLY_KINDS:
+		for j in maxi(int(want[kind]) - int(have.get(kind, 0)), 0):
+			short.append(kind)
+	if not short.is_empty():
+		var spare: Array = _allies.filter(func(a): return a["kind"] != "hero")
+		spare.sort_custom(func(x, y): return int(x["slot"]) > int(y["slot"]))
+		for a in spare:
+			if short.is_empty():
+				break
+			var kind := String(a["kind"])
+			if int(have.get(kind, 0)) > int(want[kind]):
+				have[kind] = int(have[kind]) - 1
+				a["kind"] = short.pop_back()
+				a["flash"] = 0.4
+	_sync_allies(Vector3(_squad_x, 0, 0))
+
+
+## The squad lost: a red ring marks what did it (the gang, the obstacle) so the cause reads.
+func _mark_cause(e: Dictionary) -> void:
+	var src := int(e.get("source", 0))
+	var at = null
+	if _hordes.has(src):
+		var hv: Dictionary = _hordes[src]
+		at = _horde_front(hv) if not (hv["offs"] as Array).is_empty() else Vector3(_squad_x, 0, -1.5)
+		hv["hit_flash"] = 1.0
+	elif _obstacles.has(src):
+		at = _obstacle_pos(_obstacles[src]["ob"])
+	elif String(e.get("cause", "")) == "molotov":
+		at = Vector3(LANE_X[sim.lane], 0, 0)
+	if at == null:
+		return
+	if _danger_ring == null:
+		_danger_ring = _ground_ring(Color("ff3b3b"))
+	_danger_at = at
+	_danger_t = 2.5
+	fx.ring((at as Vector3) + Vector3(0, 0.4, 0), Color("ff3b3b"), 36, 7.0, 0.24)
+
+
+## A flat glowing ring on the road (new-rank spotlight, death cause).
+func _ground_ring(color: Color) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = 0.95
+	tm.outer_radius = 1.15
+	tm.rings = 32
+	tm.ring_segments = 6
+	mi.mesh = tm
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.albedo_color = color
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mi.material_override = m
+	mi.scale = Vector3(1, 0.15, 1)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+	return mi
 
 
 ## Figure scale for a crowd of n shown figures: full size up to 20, down to 78% at 80+,
 ## so a huge army reads as a dense mob instead of a pile-up.
 ## Owner: troops a bit smaller than the hero (0.85), shrinking to 0.68 in big crowds.
 static func crowd_scale(n: int) -> float:
-	return lerpf(0.85, 0.68, clampf((n - 20) / 60.0, 0.0, 1.0))
+	return Squad.crowd_scale(n)
 
 
 func _slot_pos(slot: int, n: int) -> Vector3:
 	var lift := -7.0 if demo else 0.0  # lobby: squad further up the street, above the menu
-	if slot == 0:
-		return Vector3(_squad_x, 0, -0.5 + lift)
-	var i := slot - 1
-	var k := crowd_scale(n)
-	var r := 0.4 * k * sqrt(i + 0.7)
-	var a := i * 2.39996
-	var radius := 0.4 * k * sqrt(maxf(n, 1))
-	# A big squad packs narrower and deeper, so it stays on screen in an outer lane.
-	var wide := lerpf(1.35, 0.95, clampf((n - 30) / 40.0, 0.0, 1.0))
-	var deep := lerpf(0.5, 0.62, clampf((n - 30) / 40.0, 0.0, 1.0))
-	# The force forms up a little behind the hero (owner: "a bit far, but not very").
-	return Vector3(_squad_x + cos(a) * r * wide, 0, 1.1 + radius * 0.45 + sin(a) * r * deep + lift)
+	# The same formation the sim hits obstacles with (Squad.slot_offset), around _squad_x.
+	var o := Squad.slot_offset(slot, n, sim.form_half if sim else 0.0)
+	return Vector3(_squad_x + o.x, 0, o.y + lift)
 
 
 # ---------------------------------------------------------------- visuals
 
 func _update_visuals(d: float) -> void:
 	var lane_target: float = _steer_x if _touching else LANE_X[sim.lane]
+	var x_before := _squad_x
 	if demo:
 		_squad_x = move_toward(_squad_x, lane_target, 1.0)
 	else:
 		_squad_x = lerpf(_squad_x, lane_target, 1.0 - exp(-d * STEER_EASE))
+	var shift := _squad_x - x_before
 	var target_pos = _target_point()
 	_anim_t += d
+	_hero_knife_t += d
 	var moving := demo or _state == "play" or _state == "done"
 
 	for k in _crowds:
@@ -1051,7 +1185,10 @@ func _update_visuals(d: float) -> void:
 	for a in _allies:
 		var target := _slot_pos(int(a["slot"]), n)
 		var pos: Vector3 = a["pos"]
-		pos = pos.move_toward(target, d * 14.0)
+		# Steering carries the whole formation at once; gaps close smoothly (survivors ease
+		# into the free slots instead of snapping).
+		pos.x += shift
+		pos = pos.move_toward(target, d * (14.0 if pos.distance_to(target) > 1.8 else 3.0 + 6.0 * pos.distance_to(target)))
 		a["pos"] = pos
 		a["flash"] = maxf(float(a["flash"]) - d * 3.0, 0.0)
 		var aim := 0.0
@@ -1074,8 +1211,15 @@ func _update_visuals(d: float) -> void:
 				_hero_throw_t += d
 				if _hero_throw_t > 0.75:
 					_hero_throw_t = -1.0
-			var clip := "punch" if _hero_throw_t >= 0.0 else "idle"
-			(_crowds["hero"] as Crowd).push(Transform3D(basis, pos), clip, maxf(_hero_throw_t, 0.0) if clip == "punch" else _anim_t)
+			var throw := _throw_clip()
+			var clip := throw if _hero_throw_t >= 0.0 else "idle"
+			(_crowds["hero"] as Crowd).push(Transform3D(basis, pos), clip, maxf(_hero_throw_t, 0.0) if clip == throw else _anim_t)
+		elif aim > 0.0 and a["kind"] == "hero" and sim.squad.hero_weapon == "":
+			# Knives: a real overhand throw per knife, the clip sped up to fit the throw rate.
+			var throw := _throw_clip()
+			var per := 1.0 / maxf(float(sim.stats["hero"]["rate"]), 0.5)
+			var speed := maxf(Crowd.clip_length(throw) / per, 1.0)
+			(_crowds["hero"] as Crowd).push(Transform3D(basis, pos), throw, minf(_hero_knife_t * speed, Crowd.clip_length(throw)), float(a["flash"]))
 		elif aim > 0.0:
 			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis.scaled(Vector3.ONE * (1.0 if a["kind"] == "hero" else troop_k)), pos), "shoot", _anim_t + ph, float(a["flash"]))
 		elif moving:
@@ -1109,6 +1253,17 @@ func _update_visuals(d: float) -> void:
 		var crowd: Crowd = _crowds[hv["kind"]]
 		var clip := "shoot" if h["stopped"] else "run"
 		var speed := 1.0 if h["stopped"] else RUN_SPEED * clampf(float(h["vrel"]) / 10.0, 0.8, 1.6)
+		if hv["kind"] == "boss" and not h["melee"]:
+			# A boss walks in at his real pace during the standoff: a slow, heavy stride whose
+			# footfalls thump the camera and kick up dust.
+			speed = clampf(float(h["vrel"]) / 3.0, 0.4, RUN_SPEED)
+			if _state == "play" and sim.S < 0.5 and float(h["z"]) > -sim.boss_halt:
+				_boss_step += d * speed * 2.0 / Crowd.clip_length("run")
+				if _boss_step >= 1.0:
+					_boss_step -= 1.0
+					var foot := _fig_pos(hv, offs[0]) if not offs.is_empty() else Vector3(0, 0, float(h["z"]))
+					fx.burst(foot + Vector3(0, 0.1, 0), Color(0.7, 0.65, 0.58), 8, 2.5, 0.35, 0.5, 0.8, 2.0)
+					world.shake(0.12)
 		var flash := float(hv["shoot_flash"])
 		hv["shoot_flash"] = maxf(flash - d, 0.0)
 		flash = maxf(flash * 2.0, float(hv["hit_flash"]))
@@ -1137,8 +1292,15 @@ func _update_visuals(d: float) -> void:
 		if int(h["count"]) != int(hv["shown"]):
 			hv["shown"] = int(h["count"])
 			lab.text = str(int(h["count"]))
-		if int(h["armour"]) == 0:
-			lab.modulate = Color("ff6b6b")
+		# Closing in while the squad's fire goes elsewhere (a red gate, an obstacle): the count
+		# pulses so the threat behind the gate is visible before it arrives.
+		var ignored: bool = _state == "play" and sim.target_ref != h and LevelSim.front_z(h) > -18.0 and not h["melee"]
+		if ignored:
+			var p := 0.5 + 0.5 * sin(_anim_t * 16.0)
+			lab.modulate = Color("ff6b6b").lerp(Color(1, 1, 1), p) if int(h["armour"]) == 0 else Color("b8c7d9").lerp(Color("ff3b3b"), p)
+			lab.scale = Vector3.ONE * ls * (1.0 + 0.15 * p)
+		else:
+			lab.modulate = Color("ff6b6b") if int(h["armour"]) == 0 else Color("b8c7d9")
 
 	# People waiting at troop pickups, facing the squad.
 	for id in _rows:
@@ -1240,6 +1402,29 @@ func _update_visuals(d: float) -> void:
 			continue
 		i += 1
 
+	# New-rank spotlight ring under the newcomers; death-cause ring.
+	if _spot_ring and _spot_ring.visible:
+		var c := Vector3.ZERO
+		var cnt := 0
+		for a in _allies:
+			if a["kind"] == _spot_kind:
+				c += a["pos"]
+				cnt += 1
+		if cnt == 0 or _spotlight <= 0.0:
+			_spot_ring.visible = false
+		else:
+			c /= cnt
+			var pulse := 1.0 + 0.12 * sin(_anim_t * 18.0)
+			_spot_ring.position = Vector3(c.x, 0.06, c.z)
+			_spot_ring.scale = Vector3(pulse, 0.15, pulse)
+	if _danger_ring:
+		_danger_t = maxf(_danger_t - d, 0.0)
+		_danger_ring.visible = _danger_t > 0.0
+		if _danger_ring.visible:
+			var pulse2 := 1.4 + 0.25 * sin(_anim_t * 14.0)
+			_danger_ring.position = _danger_at + Vector3(0, 0.06, 0)
+			_danger_ring.scale = Vector3(pulse2, 0.15, pulse2)
+
 	# Squad label and shield.
 	_label_pop = maxf(_label_pop - d * 4.0, 0.0)
 	_squad_label.text = str(sim.squad.total())
@@ -1323,6 +1508,7 @@ func _fire(a: Dictionary, target: Vector3) -> void:
 		_:
 			fx.shoot(proj, from, target + spread, 55.0)
 	if kind == "hero":
+		_hero_knife_t = 0.0
 		Sfx.play("knife", -6.0)
 		if sim.squad.hero_weapon != "":
 			fx.shoot("bullet", from + Vector3(0.2, 0, 0), target + spread * 0.5, 55.0)
@@ -1381,6 +1567,16 @@ func _spawn_obstacle(ob: Dictionary) -> void:
 		lab.modulate = Color("ffe08a")
 		n.add_child(lab)
 		od["label"] = lab
+	if kind != "pothole":
+		# Its cost before you reach it: the most troops it takes if you hit it (red, on the
+		# near lip; the yellow number above is the hits it still takes).
+		var tag := GateRowView._label(font, 100, 0.011)
+		tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		tag.modulate = Color("ff5a5f")
+		tag.position = Vector3(0, 0.5, 0.9 if kind == "barrel" else 1.5)
+		tag.text = ("-%d%%" % int(ob["dmg_pct"])) if ob.has("dmg_pct") else ("-%d" % int(ob.get("dmg", 0)))
+		n.add_child(tag)
+		od["tag"] = tag
 	add_child(n)
 	n.position = _obstacle_pos(ob)
 	_obstacles[int(ob["id"])] = od
@@ -1447,6 +1643,8 @@ func _update_obstacle(od: Dictionary, d: float) -> void:
 	var armed := bool(ob.get("armed", false))
 	if armed:
 		on.scale = Vector3.ONE * (1.0 + 0.12 * absf(sin(_anim_t * 16.0)))
+		if od.has("tag"):
+			(od["tag"] as Node3D).visible = false  # an armed barrel no longer hurts the squad
 	od["chip_t"] = float(od["chip_t"]) - d
 	var lab = od["label"]
 	if lab == null:

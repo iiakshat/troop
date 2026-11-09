@@ -1,5 +1,5 @@
 {
-  "_note": "All combat numbers. dmg = damage per hit, rate = hits per second. Armour halves every hit per point unless the attacker pierces. multi = enemies hit per shot (only vs one-hit kills); splash = enemies each shot hits (never more than the gang holds). target toughest = shoots the toughest gang in range (bosses first) instead of the nearest; one_per_shot = a shot never kills more than the one enemy it hits (damage capped at that enemy's hp). unlock = first level where the rank/enemy appears (tools/gen_levels.py reads it). shield = riot-shield hp per unit, soaked before any kill (piercing fire passes). cols/row_gap = gang formation. stop_at = holds that distance and attacks (first_shot s after stopping, then every shoot_every / throw_every s); shoot_range = attacks while still walking (bosses). Gunfire: every shoot_every s each living shooter kills shot_dmg troops. Molotov: every throw_every s the group lobs a firebomb into the lane the squad is in; it lands flight s later and burns `burn` troops per living thrower if the squad is still in that lane. Sniper foe: every shoot_every s, after an `aim` s laser, each living sniper kills shot_dmg. SHIELD blocks all ranged hits and melee.",
+  "_note": "All combat numbers. dmg = damage per hit, rate = hits per second. Armour halves every hit per point unless the attacker pierces. multi = enemies hit per shot (only vs one-hit kills); splash = enemies each shot hits (never more than the gang holds). target toughest = shoots the toughest gang in range (bosses first) instead of the nearest; one_per_shot = a shot never kills more than the one enemy it hits (damage capped at that enemy's hp). unlock = first level where the rank/enemy appears (tools/gen_levels.py reads it). shield = riot-shield hp per unit, soaked before any kill (piercing fire passes). cols/row_gap = gang formation. stop_at = holds that distance and attacks (first_shot s after stopping, then every shoot_every / throw_every s); shoot_range = attacks while still walking (bosses). Gunfire: every shoot_every s each living shooter kills shot_dmg troops. Molotov: every throw_every s the group lobs a firebomb into the lane the squad is in; it lands flight s later and burns `burn` troops per living thrower if the squad is still in that lane. Sniper foe: every shoot_every s, after an `aim` s laser, each living sniper kills shot_dmg. SHIELD blocks all ranged hits and melee. world: lane_width = metres between lane centres; formation_half_width caps how wide the squad's formation gets (so a squad in the middle of its lane never brushes the next lane's obstacle); formation_figures = most figures a formation has (each carries total/figures troops); figure_radius for obstacle overlap; red_gate_clear_s = a red gate's tick never needs more than this many seconds of the squad's fire to reach 0.",
   "world": {
     "scroll_speed": 8.0,
     "scroll_accel": 12.0,
@@ -10,7 +10,12 @@
     "max_squad": 150,
     "boss_halt": 40.0,
     "finish_hold": 14.0,
-    "boss_hit_every": 0.1
+    "boss_hit_every": 0.1,
+    "lane_width": 2.8,
+    "formation_half_width": 1.25,
+    "formation_figures": 72,
+    "figure_radius": 0.2,
+    "red_gate_clear_s": 2.5
   },
   "allies": {
     "hero":      { "name": "Hero",      "unlock": 1,  "dmg": 1,  "rate": 3.0,  "pierce": false, "proj": "knife" },
@@ -38,11 +43,11 @@
     "grenadier":  { "name": "Grenadiers","unlock": 27, "hp": 3, "armour": 0, "speed": 2.5,  "power": 1, "cols": 6, "row_gap": 1.1, "stop_at": 26.0, "shoot_every": 2.0, "first_shot": 0.6, "shot_dmg": 3 }
   },
   "obstacles": {
-    "_note": "Defaults; a level event may override any key. pothole: unshootable, falling in costs `fall` troops (or `fall_pct` % of the squad); the hero always hops over, so it never ends the level. barricade: shoot its hp away or crash into it (dmg troops, or dmg_pct % of the squad) and lose the next gate in that lane. car: shoot it away or crash (dmg or dmg_pct). barrel: shoot it to arm it; it blows up when the next gang's front reaches it, killing up to `kill` gang members in total (nearest gang first).",
-    "pothole":   { "fall": 4 },
-    "barricade": { "hp": 12, "dmg": 6, "block_reach": 45.0 },
-    "car":       { "hp": 40, "dmg": 8 },
-    "barrel":    { "hp": 10, "dmg": 4, "radius": 8, "kill": 40 }
+    "_note": "Defaults; a level event may override any key. width = footprint across the road (m): an obstacle only hits the troops whose formation slots overlap it, up to its number (fall/dmg or the % forms), so steering half past it saves half the squad. pothole: unshootable, falling in costs `fall` troops (or `fall_pct` % of the squad); the hero always hops over, so it never ends the level. barricade: shoot its hp away or crash into it (dmg troops, or dmg_pct % of the squad) and lose the next gate in that lane. car: shoot it away or crash (dmg or dmg_pct). barrel: shoot it to arm it; it blows up when the next gang's front reaches it, killing up to `kill` gang members in total (nearest gang first).",
+    "pothole":   { "fall": 4, "width": 2.4 },
+    "barricade": { "hp": 12, "dmg": 6, "block_reach": 45.0, "width": 2.6 },
+    "car":       { "hp": 40, "dmg": 8, "width": 2.6 },
+    "barrel":    { "hp": 10, "dmg": 4, "radius": 8, "kill": 40, "width": 1.2 }
   },
   "powers": {
     "shield": { "duration": 4.0 },
