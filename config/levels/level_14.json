@@ -20,18 +20,18 @@
     {"at": 165, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 16}, {"lane": 1, "op": "pct", "v": -40, "inc": 10, "step": 7.7, "max": 40}, {"lane": 2, "op": "mul", "k": 2}]},
     {"at": 191, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": -12, "step": 5.4, "max": 12, "inc": 1}, {"lane": 2, "op": "recruit", "unit": "swat", "n": 3}]},
     {"at": 191, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 120, "dmg_pct": 15},
-    {"at": 225, "type": "wave", "groups": [{"enemy": "thug", "n": 20}]},
+    {"at": 225, "type": "wave", "groups": [{"enemy": "thug", "n": 18}]},
     {"at": 257, "type": "gates", "gates": [{"lane": 1, "op": "recruit", "unit": "swat", "n": 3}, {"lane": 2, "op": "mul", "k": 2}]},
     {"at": 257, "type": "obstacle", "kind": "pothole", "lane": 0, "fall_pct": 30},
-    {"at": 291, "type": "wave", "groups": [{"enemy": "knifer", "n": 6}, {"enemy": "biker", "n": 7, "gap": 8}, {"enemy": "molotov", "n": 4, "gap": 16}]},
+    {"at": 291, "type": "wave", "groups": [{"enemy": "knifer", "n": 5}, {"enemy": "biker", "n": 6, "gap": 8}, {"enemy": "molotov", "n": 4, "gap": 16}]},
     {"at": 318, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -20, "step": 14.7, "max": 20, "inc": 2}, {"lane": 1, "op": "recruit", "unit": "inspector", "n": 7}, {"lane": 2, "op": "foe_div", "k": 2}]},
-    {"at": 352, "type": "wave", "groups": [{"enemy": "thug", "n": 7}, {"enemy": "gunman", "n": 14, "gap": 10}]},
+    {"at": 352, "type": "wave", "groups": [{"enemy": "thug", "n": 7}, {"enemy": "gunman", "n": 12, "gap": 10}]},
     {"at": 384, "type": "gates", "gates": [{"lane": 1, "op": "pct", "v": -50, "inc": 10, "step": 42.5, "max": 40}, {"lane": 2, "op": "num", "v": 36}]},
     {"at": 384, "type": "obstacle", "kind": "car", "lane": 0, "hp": 405, "dmg_pct": 30},
-    {"at": 418, "type": "wave", "groups": [{"enemy": "thug", "n": 10}, {"enemy": "molotov", "n": 4, "gap": 10}]},
+    {"at": 418, "type": "wave", "groups": [{"enemy": "thug", "n": 9}, {"enemy": "molotov", "n": 4, "gap": 10}]},
     {"at": 446, "type": "gates", "gates": [{"lane": 1, "op": "recruit", "unit": "swat", "n": 9}, {"lane": 2, "op": "mul", "k": 2}]},
     {"at": 446, "type": "obstacle", "kind": "car", "lane": 0, "hp": 610, "dmg_pct": 30},
-    {"at": 480, "type": "wave", "groups": [{"enemy": "thug", "n": 25}, {"enemy": "molotov", "n": 6, "gap": 10}], "label": "LAST STAND"},
+    {"at": 480, "type": "wave", "groups": [{"enemy": "thug", "n": 33}, {"enemy": "molotov", "n": 8, "gap": 10}], "label": "LAST STAND"},
     {"at": 512, "type": "finish"}
   ]
 }
