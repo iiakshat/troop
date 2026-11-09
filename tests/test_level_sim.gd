@@ -572,3 +572,120 @@ func test_generated_levels_follow_the_rules() -> void:
 		check(secs >= 58.0 and secs <= 92.0, "L%d track %.0f s" % [n, secs])
 	for i in range(1, lucky_levels.size()):
 		check(int(lucky_levels[i]) - int(lucky_levels[i - 1]) >= 3, "lucky rows at most 1 per 3 levels (%s)" % str(lucky_levels))
+
+
+# ---------------------------------------------------------------- v1.1 round
+
+func _obstacle_row(x: float, cost := 100) -> LevelSim:
+	var lvl := {"events": [
+		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 39}]},
+		{"at": 40, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 1000000, "dmg": cost},
+		{"at": 80, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	sim.set_squad_x(x)
+	return sim
+
+
+func test_obstacle_hits_spatially() -> void:
+	# 40 troops; the barricade could take 100 but only the overlapping troops die.
+	var centred := _obstacle_row(0.0)
+	var seen := _step_until(centred, func(): return centred.state != "run")
+	var hit := _events_of(seen, "obstacle_hit")
+	eq(hit.size(), 1, "one hit")
+	eq(centred.state, "lost", "centred on a 100-cost barricade: all 40 overlap, the hero too")
+	var half := _obstacle_row(1.4)
+	seen = _step_until(half, func(): return half.state != "run")
+	hit = _events_of(seen, "obstacle_hit")
+	eq(hit.size(), 1, "half past: still a hit")
+	var lost := int(hit[0]["lost"]) if hit.size() == 1 else -1
+	check(lost > 5 and lost < 35, "half past saves about half the squad (lost %d)" % lost)
+	eq(half.state, "strike", "and the level goes on")
+	eq(half.squad.total(), 40 - lost, "exact")
+	eq((hit[0]["slots"] as Array).size() > 0, true, "the event names the slots that fell")
+	var away := _obstacle_row(2.8)
+	seen = _step_until(away, func(): return away.state != "run")
+	eq(_events_of(seen, "obstacle_hit").size(), 0, "steered fully into the next lane: missed")
+	eq(away.squad.total(), 40, "nobody lost")
+	# Capacity: centred on a cost-6 barricade loses exactly 6.
+	var six := _obstacle_row(0.0, 6)
+	_step_until(six, func(): return six.state != "run")
+	eq(six.squad.total(), 34, "a missed obstacle costs exactly its number")
+
+
+func test_autopilot_stands_at_lane_centres() -> void:
+	var sim := LevelSim.new(_gate_level([]), units)
+	sim.set_lane(2)
+	eq(sim.squad_x, 2.8, "lane 2 centre")
+	sim.set_lane(0)
+	eq(sim.squad_x, -2.8, "lane 0 centre")
+	sim.set_squad_x(1.1)
+	sim.set_lane(1)
+	eq(sim.squad_x, 1.1, "the view's steering wins once it drives x")
+
+
+func test_red_percent_gate_at_zero_is_harmless_and_ticks_fast() -> void:
+	# A -40% gate with a huge authored step: a weak squad still shoots it to 0 in ~2.5 s.
+	var lvl := {"events": [
+		{"at": 5, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 9}]},
+		{"at": 70, "type": "gates", "gates": [{"lane": 1, "op": "pct", "v": -40, "inc": 10, "step": 500.0, "max": 40}]},
+		{"at": 140, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	var first := -1.0
+	var zero := -1.0
+	var ticks := 0
+	for i in 6000:
+		sim.step(1.0 / 30.0)
+		for e in sim.drain():
+			if e["type"] == "gate_tick":
+				ticks += 1
+				if first < 0.0:
+					first = sim.time
+				if int(e["to"]) >= 0 and zero < 0.0:
+					zero = sim.time
+		if sim.state != "run":
+			break
+	eq(sim.state, "strike", "survived")
+	check(ticks >= 4, "the gate visibly ticks (%d)" % ticks)
+	var since := zero - (first - sim.gate_clear_s / 4.0)
+	check(zero > 0.0 and since <= sim.gate_clear_s + 0.2, "reached 0 within ~2.5 s of fire (%.2f s)" % since)
+	# 0% exactly: no change at all.
+	var z := {"events": [
+		{"at": 5, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 9}]},
+		{"at": 30, "type": "gates", "gates": [{"lane": 1, "op": "pct", "v": 0}]},
+		{"at": 60, "type": "finish"}]}
+	var r := _run(z, [1, 1])
+	eq(r["state"], "strike", "0% is harmless")
+	eq(r["troops"], 10, "0% = no change")
+
+
+func test_standoff_stops_the_street() -> void:
+	var lvl := {"events": [
+		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 30}]},
+		{"at": 90, "type": "wave", "groups": [{"enemy": "gunman", "n": 6, "hp": 30, "shot_dmg": 0}]},
+		{"at": 160, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	var stood := 0
+	var slid := 0.0
+	var resumed := false
+	var was := false
+	for i in 9000:
+		var before := sim.traveled
+		sim.step(1.0 / 30.0)
+		sim.drain()
+		var standing := sim.standoff()
+		if standing and was:
+			slid += sim.traveled - before
+		if standing:
+			stood += 1
+		if was and not standing:
+			resumed = true
+		was = standing
+		if sim.state != "run":
+			break
+	check(stood > 10, "the gunmen stopped and a standoff happened (%d frames)" % stood)
+	check(slid < 1.5, "traveled stops during a standoff (only the brake: %.2f m)" % slid)
+	check(resumed, "the street rolls again once they fall")
+	eq(sim.state, "strike", "won")

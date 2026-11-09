@@ -11,9 +11,17 @@ extends RefCounted
 ## so they spawn earlier to arrive on time.
 ##
 ## The scroll speed `S` is not constant: the squad stops running and stands its ground
-## (`halted`) while a boss is within `boss_halt` metres, and it stops `finish_hold` metres
-## short of the Gang HQ while any gang is still alive or yet to come. So bosses really walk
-## in (slowly, shooting) instead of holding a distance, and the HQ never scrolls past a fight.
+## (`halted`, a standoff) while a boss is within `boss_halt` metres or while any gang that
+## stops to shoot has stopped, and it stops `finish_hold` metres short of the Gang HQ while
+## any gang is still alive or yet to come. So bosses really walk in (slowly, shooting), a
+## gunman line is a real standoff (the street does not scroll past it), and the HQ never
+## scrolls past a fight. `traveled` does not advance while halted.
+##
+## Obstacles hit spatially: the squad is a formation of slots (Squad.slot_offset) around its
+## real sideways position `squad_x` (set_squad_x, called by the view every frame; without it
+## the squad stands at its lane centre). An obstacle has a footprint `width` and a capacity
+## (its shown number); only the troops whose slots overlap the footprint die, up to the
+## capacity. Steering half past an obstacle saves half the squad.
 ##
 ## Shooting rule (easy to explain to players): bullets stream down your lane and hit the
 ## first thing they meet: a gang (gangs fill the whole road), a red gate, a barricade, a
@@ -35,6 +43,11 @@ var melee_tick: float
 var boss_halt: float
 var finish_hold: float
 var boss_hit_every: float
+var lane_w := 2.8          # metres between lane centres
+var form_half := 1.25      # widest a formation gets either side of its centre
+var fig_cap := 72          # figures a formation is drawn with (each carries total/figures troops)
+var fig_r := 0.2           # figure radius for footprint overlap
+var gate_clear_s := 2.5    # a committed squad shoots a red gate up to 0 within this many seconds
 
 var stats: Dictionary   # effective ally stats after upgrades
 var weapons: Dictionary
@@ -46,6 +59,8 @@ var star_cfg: Dictionary
 
 var squad := Squad.new()
 var lane := 1
+var squad_x := 0.0          # the squad's real sideways position (metres, 0 = middle lane)
+var _x_driven := false      # true once the view feeds set_squad_x (else lane centres)
 var traveled := 0.0
 var time := 0.0
 var state := "run"      # run | strike | lost
@@ -93,6 +108,11 @@ func _init(level: Dictionary = {}, units_cfg: Dictionary = {}, upgrades: Diction
 	boss_halt = float(w.get("boss_halt", 40.0))
 	finish_hold = float(w.get("finish_hold", 14.0))
 	boss_hit_every = float(w.get("boss_hit_every", 0.1))
+	lane_w = float(w.get("lane_width", lane_w))
+	form_half = float(w.get("formation_half_width", form_half))
+	fig_cap = int(w.get("formation_figures", fig_cap))
+	fig_r = float(w.get("figure_radius", fig_r))
+	gate_clear_s = float(w.get("red_gate_clear_s", gate_clear_s))
 	stats = units_cfg["allies"].duplicate(true)
 	weapons = units_cfg["hero_weapons"]
 	enemy_defs = units_cfg["enemies"]
@@ -169,6 +189,28 @@ func _build_spawns(events: Array) -> void:
 
 func set_lane(l: int) -> void:
 	lane = clampi(l, 0, 2)
+	if not _x_driven:
+		squad_x = lane_x(lane)
+
+
+## The squad's real sideways position (the view's steering, every frame). Obstacles hit the
+## troops whose formation slots overlap them at this x.
+func set_squad_x(x: float) -> void:
+	_x_driven = true
+	squad_x = clampf(x, lane_x(0), lane_x(2))
+
+
+func lane_x(l: int) -> float:
+	return (l - 1) * lane_w
+
+
+## Which troops an obstacle in its lane would hit right now: Squad.footprint_hits for this
+## squad at squad_x, with the obstacle's footprint and capacity (`n` troops).
+func obstacle_hits(ob: Dictionary, n: int, keep_hero := false) -> Dictionary:
+	var total := squad.total()
+	var cap := mini(n, total - 1) if keep_hero else n
+	return Squad.footprint_hits(total, fig_cap, squad_x, lane_x(int(ob["lane"])),
+		float(ob.get("width", 2.4)) * 0.5, fig_r, maxi(cap, 0), form_half)
 
 
 func use_power(id: String) -> bool:
@@ -285,14 +327,23 @@ func step(dt: float) -> void:
 		out.append({"type": "finish"})
 
 
-## Running speed: stop for a boss in range, and stop short of the HQ while gangs live.
+## True while the squad must plant its feet and fight: a boss within boss_halt metres, or a
+## gang that stops to shoot has stopped (the street does not scroll past a standoff).
+func standoff() -> bool:
+	for h in hordes:
+		if int(h["count"]) <= 0:
+			continue
+		if h["boss"] and front_z(h) >= -boss_halt:
+			return true
+		if h["stopped"]:
+			return true
+	return false
+
+
+## Running speed: stop for a standoff, and stop short of the HQ while gangs live.
 func _update_speed(dt: float) -> void:
 	var target := S_base
-	var boss := false
-	for h in hordes:
-		if h["boss"] and front_z(h) >= -boss_halt:
-			boss = true
-			break
+	var boss := standoff()
 	if boss:
 		target = 0.0
 	var hold := false
@@ -522,7 +573,9 @@ func _shoot_lane(t: Dictionary, dt: float, which: int) -> void:
 	if t.has("op"):  # a gate
 		target_kind = "gate"
 		t["progress"] = float(t["progress"]) + dmg
-		var step_hp := float(t["step"])
+		if not t.has("step_eff"):
+			t["step_eff"] = gate_step(t, dmg / dt)
+		var step_hp := float(t["step_eff"])
 		var inc := int(t.get("inc", 1))
 		while float(t["progress"]) >= step_hp and int(t["v"]) < int(t["max"]):
 			t["progress"] = float(t["progress"]) - step_hp
@@ -542,6 +595,19 @@ func _shoot_lane(t: Dictionary, dt: float, which: int) -> void:
 			else:
 				obstacles.erase(t)
 				out.append({"type": "obstacle_broken", "ob": t})
+
+
+## Hits per tick of a red gate, fixed when the squad first shoots it: the level's `step`,
+## but never so big that this squad (firing `dps`) needs more than gate_clear_s seconds to
+## shoot it up to 0. A small squad still sees it tick every few hits.
+func gate_step(g: Dictionary, dps: float) -> float:
+	var step_hp := float(g.get("step", 1.0))
+	var v := int(g.get("v", 0))
+	if v >= 0 or dps <= 0.0:
+		return step_hp
+	var inc := maxi(int(g.get("inc", 1)), 1)
+	var ticks := int(ceil(-v / float(inc)))
+	return minf(step_hp, maxf(dps * gate_clear_s / ticks, 0.01))
 
 
 func _check_barrels() -> void:
@@ -861,33 +927,39 @@ func _pass_obstacles() -> void:
 			continue
 		obstacles.erase(ob)
 		var kind := String(ob.get("kind", "barricade"))
-		var in_lane := int(ob["lane"]) == lane
-		if kind == "pothole":
-			if in_lane:
-				var n := int(ob.get("fall", 0))
-				if ob.has("fall_pct"):
-					n = int(floor(squad.total() * int(ob["fall_pct"]) / 100.0))
-				# The hero always hops over: a pothole costs troops but never ends the level.
-				n = mini(n, squad.total() - 1)
-				var lost := _hurt(n, "pothole", ob["id"], false)
-				out.append({"type": "pothole_pass", "id": ob["id"], "lane": ob["lane"], "lost": lost, "ob": ob})
-				out.append({"type": "obstacle_hit", "ob": ob, "lost": lost})
-			else:
-				out.append({"type": "obstacle_pass", "ob": ob})
-		elif in_lane and float(ob["hp"]) > 0.0 and not ob.get("armed", false):
-			var n := int(ob.get("dmg", 5))
-			if ob.has("dmg_pct"):
-				n = int(floor(squad.total() * int(ob["dmg_pct"]) / 100.0))
-			var lost := _hurt(n, kind, ob["id"], false)
-			if kind == "barricade":
-				var g = _block_next_gate(int(ob["lane"]), float(ob.get("block_reach", 12.0)))
-				out.append({"type": "barricade_hit", "id": ob["id"], "lane": ob["lane"], "lost": lost,
-					"ob": ob, "blocked_gate": g})
-			out.append({"type": "obstacle_hit", "ob": ob, "lost": lost})
-		else:
+		var solid: bool = kind == "pothole" or (float(ob["hp"]) > 0.0 and not ob.get("armed", false))
+		var hit := {}
+		if solid:
+			# Spatial: only the troops standing on its footprint, up to its number. The hero
+			# always hops a pothole, so a pothole never ends the level.
+			hit = obstacle_hits(ob, obstacle_cost(ob), kind == "pothole")
+		if hit.is_empty() or int(hit["lost"]) <= 0:
 			out.append({"type": "obstacle_pass", "ob": ob})
+			continue
+		var lost := _hurt(int(hit["lost"]), kind, ob["id"], false)
+		var ev := {"type": "obstacle_hit", "ob": ob, "lost": lost, "slots": hit["slots"],
+			"figures": hit["figures"], "x": squad_x}
+		if kind == "pothole":
+			out.append({"type": "pothole_pass", "id": ob["id"], "lane": ob["lane"], "lost": lost, "ob": ob})
+		elif kind == "barricade":
+			var g = _block_next_gate(int(ob["lane"]), float(ob.get("block_reach", 12.0)))
+			out.append({"type": "barricade_hit", "id": ob["id"], "lane": ob["lane"], "lost": lost,
+				"ob": ob, "blocked_gate": g})
+		out.append(ev)
 		if state != "run":
 			return
+
+
+## The most troops an obstacle can take (the number shown on it): `fall`/`dmg`, or
+## `fall_pct`/`dmg_pct` % of the squad right now.
+func obstacle_cost(ob: Dictionary) -> int:
+	if String(ob.get("kind", "")) == "pothole":
+		if ob.has("fall_pct"):
+			return int(floor(squad.total() * int(ob["fall_pct"]) / 100.0))
+		return int(ob.get("fall", 0))
+	if ob.has("dmg_pct"):
+		return int(floor(squad.total() * int(ob["dmg_pct"]) / 100.0))
+	return int(ob.get("dmg", 5))
 
 
 ## A barricade you crash through wrecks the gate right behind it in that lane (within reach).
@@ -930,7 +1002,8 @@ func clone() -> LevelSim:
 	var c := LevelSim.new()
 	for p in ["S", "S_base", "accel", "fire_range", "spawn_dist", "contact_z", "melee_tick",
 			"boss_halt", "finish_hold", "boss_hit_every", "weapons", "enemy_defs", "obstacle_defs",
-			"powers", "revive_cfg", "star_cfg", "lane", "traveled", "time", "state", "lose_cause",
+			"powers", "revive_cfg", "star_cfg", "lane", "squad_x", "_x_driven", "lane_w", "form_half",
+			"fig_cap", "fig_r", "gate_clear_s", "traveled", "time", "state", "lose_cause",
 			"finish_at", "halted", "peak_squad", "revived", "shield_t", "kills", "rows_passed",
 			"_spawns", "_next_spawn", "_pending_hordes", "_wave_ats", "_next_id", "_armour_note_t"]:
 		c.set(p, get(p))

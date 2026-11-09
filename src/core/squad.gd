@@ -182,6 +182,76 @@ static func value_vs_constable(stats: Dictionary, rank: String, hp := 0.0, armou
 	return hit_value(stats[rank], armour, h, enemies, nominal) / base
 
 
+# ---------------------------------------------------------------- formation
+# The squad's shape on the road, shared by the sim (which troops an obstacle hits) and the
+# view (where each figure stands). Slot 0 is the hero in front; the others spiral out behind
+# him (sunflower pattern). A squad of `total` troops is drawn as `figures(total, cap)` slots,
+# each carrying `slot_troops()` troops, so a 150-strong army is 72 figures wide, not 150.
+
+## Figure scale for a crowd of n figures: troops a bit smaller than the hero (0.85),
+## shrinking to 0.68 at 80+ so a huge army reads as a dense mob instead of a pile-up.
+static func crowd_scale(n: int) -> float:
+	return lerpf(0.85, 0.68, clampf((n - 20) / 60.0, 0.0, 1.0))
+
+
+## Offset of slot `i` of `n` from the squad centre: x sideways, y = z (positive = behind).
+## `max_half` (metres, 0 = none) caps how wide the formation gets, so a squad standing in the
+## middle of its lane never brushes an obstacle in the next lane.
+static func slot_offset(i: int, n: int, max_half := 0.0) -> Vector2:
+	if i <= 0:
+		return Vector2(0.0, -0.5)
+	var j := i - 1
+	var k := crowd_scale(n)
+	var r := 0.4 * k * sqrt(j + 0.7)
+	var a := j * 2.39996
+	var radius := 0.4 * k * sqrt(maxf(n, 1))
+	# A big squad packs narrower and deeper, so it stays on screen in an outer lane.
+	var wide := lerpf(1.35, 0.95, clampf((n - 30) / 40.0, 0.0, 1.0))
+	var deep := lerpf(0.5, 0.62, clampf((n - 30) / 40.0, 0.0, 1.0))
+	if max_half > 0.0:
+		var r_out := 0.4 * k * sqrt(maxf(n - 2, 0) + 0.7)
+		wide = minf(wide, max_half / maxf(r_out, 0.001))
+	return Vector2(cos(a) * r * wide, 1.1 + radius * 0.45 + sin(a) * r * deep)
+
+
+## How many figures stand for `total` troops (at most `cap`, 0 = no limit).
+static func figures(total: int, cap: int) -> int:
+	return mini(total, cap) if cap > 0 else total
+
+
+## Troops carried by slot `i` when `total` troops stand in `n` slots (exact: they sum to total).
+static func slot_troops(i: int, n: int, total: int) -> int:
+	if n <= 0:
+		return 0
+	return int((i + 1) * total / n) - int(i * total / n)
+
+
+## Spatial hit: the slots whose figures overlap a footprint `half_w` metres either side of
+## `ob_x` (figure radius `fig_r` included) when the squad stands at `squad_x`, nearest to the
+## footprint's centre first, taking whole slots until `capacity` troops are lost.
+## Returns {lost, slots (the slot indices hit), figures (n), overlap (troops inside)}.
+static func footprint_hits(total: int, fig_cap: int, squad_x: float, ob_x: float, half_w: float,
+		fig_r: float, capacity: int, max_half := 0.0) -> Dictionary:
+	var n := figures(total, fig_cap)
+	var inside: Array = []
+	for i in n:
+		var x := squad_x + slot_offset(i, n, max_half).x
+		if absf(x - ob_x) <= half_w + fig_r:
+			inside.append([absf(x - ob_x), i])
+	inside.sort_custom(func(a, b): return a[0] < b[0] or (a[0] == b[0] and a[1] < b[1]))
+	var overlap := 0
+	for e in inside:
+		overlap += slot_troops(int(e[1]), n, total)
+	var lost := 0
+	var slots: Array = []
+	for e in inside:
+		if lost >= capacity:
+			break
+		lost += mini(slot_troops(int(e[1]), n, total), capacity - lost)
+		slots.append(int(e[1]))
+	return {"lost": lost, "slots": slots, "figures": n, "overlap": overlap}
+
+
 func duplicate_squad() -> Squad:
 	var s := Squad.new()
 	s.counts = counts.duplicate()
