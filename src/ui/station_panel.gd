@@ -15,10 +15,11 @@ signal closed
 var _rows: Dictionary = {}
 var _coins: HBoxContainer
 var _power: HBoxContainer
+var focus_room := ""          ## set before adding: that row flashes (the loss tip's room)
 
 ## The in-game thing each effect changes (shown before its numbers and in the mini-preview).
 const EFFECT_ICONS := {
-	"knife": ["knife_power", "knife"], "speed": ["speed"], "squad": ["rank_constable", "badge"],
+	"knife": ["knife_power", "knife"], "speed": ["fire_rate", "speed"], "squad": ["rank_constable", "badge"],
 	"capacity": ["person", "badge"], "coins": ["coin"], "charges": ["shield", "police_car"],
 }
 
@@ -60,6 +61,11 @@ func _ready() -> void:
 		col.add_child(_row(String(room)))
 	refresh()
 	UiKit.pop(p, 0.7)
+	if _rows.has(focus_room):
+		var card: Control = _rows[focus_room]["card"]
+		var tw := card.create_tween().set_loops(4)
+		tw.tween_property(card, "modulate", Color(1.5, 1.5, 0.8), 0.25)
+		tw.tween_property(card, "modulate", Color.WHITE, 0.25)
 
 
 func _row(room: String) -> Control:

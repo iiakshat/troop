@@ -68,7 +68,7 @@ func test_codex_value_lines() -> void:
 	eq(CodexPanel.value_text(stats, "commando"), "= 6", "splash counts")
 	eq(CodexPanel.value_text(stats, "odd"), "= 1.5", "fractions keep one decimal")
 	eq(CodexPanel.value_text(stats, "hero"), "", "hero has no value line")
-	eq(CodexPanel.specials({"pierce": true, "target": "toughest"}), ["aim", "armour_break"], "sniper specials")
+	eq(CodexPanel.specials({"pierce": true, "target": "toughest"}), ["aim", "armour_pierce"], "sniper specials")
 	eq(CodexPanel.unlock_level({"unlock": 21}), 21, "unlock level from config")
 	eq(CodexPanel.unlock_level({}), 1, "default unlock")
 	# Every ally in the real config gets a positive value.
@@ -192,4 +192,8 @@ func test_map_power_hint() -> void:
 	eq(CityMap.power_hint("beaten", 3, 5, 200, 100), {"show": false, "warn": false}, "beaten: nothing")
 	eq(CityMap.power_hint("current", 5, 5, 200, 100), {"show": true, "warn": true}, "current, under: warns")
 	eq(CityMap.power_hint("locked", 7, 5, 90, 100), {"show": true, "warn": false}, "ahead, strong enough")
+	eq(CityMap.power_hint("locked", 7, 5, 200, 100)["warn"], false, "two ahead never warns")
+	eq(CityMap.power_hint("locked", 6, 5, 110, 100)["warn"], false, "a small gap does not warn")
+	eq(CityMap.power_hint("locked", 6, 5, 120, 100)["warn"], true, "the next node warns on a real gap")
+	eq(CityMap.power_hint("current", 5, 5, 200, 100, true)["warn"], false, "no warning under the first-build pointer")
 	eq(CityMap.power_hint("locked", 5 + CityMap.POWER_AHEAD + 1, 5, 90, 100)["show"], false, "not too far ahead")

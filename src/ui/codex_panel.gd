@@ -17,6 +17,29 @@ const RANK_ICONS := {
 	"sniper": ["rank_sniper", "sniper"], "commando": ["rank_commando", "commando"],
 }
 const ENEMY_ICONS := {"knifer": ["knife"], "gunman": ["pistol"], "biker": ["speed"]}
+## The weapon each rank carries (what makes it different; shown on the rank card and Codex).
+const RANK_WEAPONS := {
+	"hero": "knife", "constable": "pistol", "sergeant": "weapon_shotgun", "inspector": "weapon_revolver",
+	"swat": "smg", "sniper": "sniper", "commando": "weapon_launcher",
+}
+const RATE_ICON := "fire_rate"     ## shots per second (the sneaker stays for enemy speed)
+const PIERCE_ICON := "armour_pierce"
+
+
+static func weapon_icon(id: String) -> String:
+	return String(RANK_WEAPONS.get(id, ""))
+
+
+## "= N constables": a plain figure plus a pistol, so it never reads as the rank's own cap.
+static func constable_ref(px: int) -> Control:
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", -int(px * 0.3))
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(icon_safe("person", px, Color("1d2b55")))
+	var g := icon_safe("pistol", int(px * 0.7))
+	g.size_flags_vertical = Control.SIZE_SHRINK_END
+	h.add_child(g)
+	return h
 
 var start_tab := "ranks"
 var _tab := ""
@@ -132,7 +155,7 @@ static func specials(u: Dictionary) -> Array:
 	if String(u.get("target", "")) == "toughest":
 		out.append("aim")
 	if bool(u.get("pierce", false)):
-		out.append("armour_break")
+		out.append(PIERCE_ICON)
 	if float(u.get("multi", 1)) > 1.0:
 		out.append("gang_split")
 	if float(u.get("splash", 1)) > 1.0:
@@ -203,7 +226,9 @@ func _rank_card(id: String, u: Dictionary) -> Control:
 	stats.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	mid.add_child(stats)
 	_stat(stats, "knife_power" if id == "hero" else "fist", number(float(u.get("dmg", 1))))
-	_stat(stats, "speed", number(float(u.get("rate", 1.0))))
+	_stat(stats, RATE_ICON, number(float(u.get("rate", 1.0))))
+	if weapon_icon(id) != "":
+		stats.add_child(icon_safe(weapon_icon(id), 46))
 	for s in specials(u):
 		stats.add_child(icon_safe(s, 46))
 	var v := value_text(Game.units.get("allies", {}), id)
@@ -215,7 +240,7 @@ func _rank_card(id: String, u: Dictionary) -> Control:
 		vr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		vb.add_child(vr)
 		vr.add_child(UiKit.label(v, 40, Color.WHITE, 9))
-		vr.add_child(icon_safe(rank_icon("constable"), 40))
+		vr.add_child(constable_ref(40))
 		row.add_child(vb)
 	return parts[0]
 

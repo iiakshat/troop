@@ -38,6 +38,7 @@ var _x2: Button
 var _ad_busy := false
 var _doubled := false
 var _station: Button
+var tip_room := ""             ## the loss tip's room; the Station opens on it
 
 
 func _ready() -> void:
@@ -200,8 +201,12 @@ func show_loss(level: int, cause: String, progress := -1.0, peak := 0) -> void:
 	# v1.1: the single upgrade that would have helped most (Game.best_upgrade_after_loss), as
 	# room icon + its in-game number before > after; a hand bobs on the Station when affordable.
 	var tip: Dictionary = Game.best_upgrade_after_loss()
+	tip_room = ""
+	var tip_card: Control = null
 	if not tip.is_empty():
-		col.add_child(_upgrade_tip(tip))
+		tip_room = String(tip["room"])
+		tip_card = _upgrade_tip(tip)
+		col.add_child(tip_card)
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 20)
@@ -214,8 +219,8 @@ func show_loss(level: int, cause: String, progress := -1.0, peak := 0) -> void:
 	row.add_child(station)
 	_station = station
 	UiKit.set_alert(station, _station_alert())
-	if bool(tip.get("affordable", false)):
-		_hand_on(station)
+	if tip_card != null and bool(tip.get("affordable", false)):
+		_hand_on(tip_card, Vector2(0.78, 0.35))
 	var retry := UiKit.icon_button("retry", "green", 140)
 	retry.custom_minimum_size.x = 220
 	retry.pressed.connect(func(): retry_pressed.emit())
@@ -230,7 +235,14 @@ func _upgrade_tip(tip: Dictionary) -> Control:
 	var room := String(tip["room"])
 	var r: Dictionary = Game.economy["station"].get(room, {})
 	var lv := Game.room_level(room)
+	# A real button (v1.1 fix): tapping it opens the Station on this room.
 	var card := RetentionPanel.card_box(Color("2e8b3e"), 10, 22, 5)
+	card.mouse_filter = Control.MOUSE_FILTER_STOP
+	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	card.gui_input.connect(func(ev: InputEvent):
+		if (ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT) 				or (ev is InputEventScreenTouch and ev.pressed):
+			Sfx.play("tap")
+			station_pressed.emit())
 	var h := HBoxContainer.new()
 	h.alignment = BoxContainer.ALIGNMENT_CENTER
 	h.add_theme_constant_override("separation", 10)
@@ -250,17 +262,31 @@ func _upgrade_tip(tip: Dictionary) -> Control:
 	return card
 
 
-## A hand bobbing on a button (fingertip on its upper half), freed with it.
-func _hand_on(b: Control) -> void:
+## A hand bobbing on a control, freed with it. `at` = where the hand's top-left sits, as a
+## fraction of the control's size (default: fingertip on a button's upper half).
+func _hand_on(b: Control, at := Vector2.ZERO) -> void:
 	var hand := RetentionPanel.icon_safe("hand", 96)
 	hand.size = Vector2(96, 96)
 	hand.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hand.z_index = 5
-	b.add_child(hand)
-	hand.position = Vector2(-4, -44)
+	var p0 := Vector2(-4, -44)
+	if at != Vector2.ZERO:
+		# A zero-size pin anchored at that fraction of the control carries the hand.
+		var pin := Control.new()
+		pin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pin.anchor_left = at.x
+		pin.anchor_right = at.x
+		pin.anchor_top = at.y
+		pin.anchor_bottom = at.y
+		b.add_child(pin)
+		pin.add_child(hand)
+		p0 = -Vector2(0.92, 0.80) * 96.0  # the icon's fingertip (Tutorial.TIP) on the pin
+	else:
+		b.add_child(hand)
+	hand.position = p0
 	var tw := hand.create_tween().set_loops()
-	tw.tween_property(hand, "position", Vector2(-20, -60), 0.35).set_trans(Tween.TRANS_SINE)
-	tw.tween_property(hand, "position", Vector2(-4, -44), 0.35).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(hand, "position", p0 + Vector2(-16, -16), 0.35).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(hand, "position", p0, 0.35).set_trans(Tween.TRANS_SINE)
 
 
 ## Road bar: how far the squad got, flag at the finish, percent above the marker.

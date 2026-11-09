@@ -119,12 +119,12 @@ static func pistol() -> Node3D:
 	for k in 3:
 		box(hand, Vector3(0.036, 0.016, 0.02), Vector3(-0.012, -0.095 - k * 0.022, -0.235 - k * 0.006), g)
 	box(hand, Vector3(0.014, 0.014, 0.05), Vector3(-0.022, -0.05, -0.28), g)   # thumb along the frame
-	var wrist := box(hand, Vector3(0.045, 0.045, 0.2), Vector3(0.03, -0.19, -0.09), sk)
-	wrist.rotation = Vector3(deg_to_rad(34), deg_to_rad(12), 0)
-	var support := box(hand, Vector3(0.05, 0.075, 0.08), Vector3(-0.03, -0.11, -0.215), g)
+	# Only the gloved hands show: the forearms stay below the frame (at this narrow field of view
+	# any sleeve read as a big flat slab filling the lower screen).
+	var support := box(hand, Vector3(0.042, 0.06, 0.07), Vector3(-0.026, -0.115, -0.215), g)
 	support.rotation.z = deg_to_rad(-12)
-	var arm2 := box(hand, Vector3(0.045, 0.045, 0.22), Vector3(-0.08, -0.2, -0.1), sk)
-	arm2.rotation = Vector3(deg_to_rad(34), deg_to_rad(-22), 0)
+	var cuff := box(hand, Vector3(0.05, 0.03, 0.05), Vector3(0.0, -0.165, -0.185), sk)
+	cuff.rotation.x = deg_to_rad(-16)
 	return root
 
 
@@ -222,7 +222,7 @@ static func bow() -> Node3D:
 			var y: float = s * (0.08 + (BOW_TIP_Y - 0.08) * f)
 			var z: float = -0.09 * sin(f * PI * 0.85) + (BOW_TIP_Z + 0.02) * f * f
 			var p := Vector3(0, y, z)
-			var seg := box(root, Vector3(0.03 - f * 0.014, 1.0, 0.012), (prev + p) * 0.5, wood)
+			var seg := box(root, Vector3(0.02 - f * 0.009, 1.0, 0.01), (prev + p) * 0.5, wood)
 			seg.scale.y = prev.distance_to(p) + 0.004
 			seg.basis = Basis(Vector3.RIGHT, atan2(p.z - prev.z, p.y - prev.y) * -1.0) * Basis.from_scale(Vector3(1, prev.distance_to(p) + 0.004, 1))
 			prev = p
@@ -247,9 +247,8 @@ static func bow() -> Node3D:
 	string.material_override = sm2
 	root.add_child(string)
 	var g := glove()
-	box(root, Vector3(0.06, 0.09, 0.07), Vector3(0.005, -0.005, 0.01), g)
-	var arm := box(root, Vector3(0.055, 0.055, 0.32), Vector3(-0.05, -0.1, 0.17), sleeve())
-	arm.rotation = Vector3(deg_to_rad(22), deg_to_rad(-28), 0)
+	box(root, Vector3(0.042, 0.075, 0.05), Vector3(0.004, -0.005, 0.01), g)
+	# No forearm: it filled the left third of the view. The riser, string and arrow are enough.
 	return root
 
 

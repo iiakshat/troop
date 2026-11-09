@@ -45,18 +45,24 @@ func _ready() -> void:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 22)
 	col.add_child(row)
-	row.add_child(_toggle("sound", "sound", "sound_off"))
-	row.add_child(_toggle("music", "music", "music_off"))
-	row.add_child(_toggle("vibration", "vibrate", "vibrate"))
-	var credits := UiKit.label(CREDITS, 26, UiKit.INK, 0, true)
+	row.add_child(toggle_button("sound", "sound", "sound_off"))
+	row.add_child(toggle_button("music", "music", "music_off"))
+	row.add_child(toggle_button("vibration", "vibrate", "vibrate_off"))
+	# Credits scroll inside the panel, so the panel always fits the screen.
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(580, 400)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	col.add_child(scroll)
+	var credits := UiKit.label(CREDITS, 24, UiKit.INK, 0, true)
 	credits.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	credits.custom_minimum_size = Vector2(560, 0)
-	col.add_child(credits)
+	scroll.add_child(credits)
 	UiKit.pop(p, 0.7)
 
 
-func _toggle(key: String, on_icon: String, off_icon: String) -> Button:
-	var b := UiKit.icon_button(on_icon, "green", 150)
+## A sound / music / vibration toggle (also used by the in-level pause panel).
+static func toggle_button(key: String, on_icon: String, off_icon: String, px := 150) -> Button:
+	var b := UiKit.icon_button(on_icon, "green", px)
 	_paint(b, bool(Game.save.get(key, true)), on_icon, off_icon)
 	b.pressed.connect(func():
 		var now := Game.toggle(key)
@@ -76,7 +82,7 @@ func _toggle(key: String, on_icon: String, off_icon: String) -> Button:
 static func _paint(b: Button, on: bool, on_icon: String, off_icon: String) -> void:
 	var ic: TextureRect = b.get_meta("icon")
 	ic.texture = UiKit.icon_texture(on_icon if on else off_icon)
-	ic.modulate = Color.WHITE if on else Color(1, 1, 1, 0.85)
+	ic.modulate = Color.WHITE if on else Color(0.25, 0.25, 0.3, 1.0)
 	var colr := "green" if on else "grey"
 	for st in ["normal", "hover", "focus"]:
 		b.add_theme_stylebox_override(st, UiKit._tex_box(colr, "square"))

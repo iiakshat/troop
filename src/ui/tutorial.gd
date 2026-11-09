@@ -5,7 +5,8 @@ extends CanvasLayer
 ## (LevelView.hold) until the player does the thing being taught:
 ##   swipe     drag to steer (held until the player drags)
 ##   gate_pick the first gate choice: the best lane is lit (held until the squad is in it)
-##   red_gate  the squad lines up with a red gate: bullets fly into it, it ticks up (tap)
+##   red_gate  the squad lines up with a red gate in fire range: the street runs in slow motion
+##             while bullets fly into it and it ticks up (no hold; ends after RED_TICKS ticks)
 ##   shield / bomb  the first gang arrives while a charge is ready: the button is lit (tap)
 ## In Bottle Shot a ghost hand loops each weapon's gesture (once per weapon, the first time
 ## its district's finale opens) until the first touch; the first shot waits for the player.
@@ -17,7 +18,9 @@ const AUTO_S := 1.6
 const HAND := 130.0
 const TIP := Vector2(0.92, 0.80)    # fingertip in the hand icon (share of its size)
 const GATE_Z := -22.0               # a gate row this close (m) opens the gate tutorials
-const RED_Z := -48.0                # ... and a red gate this close (just before fire range) opens its own
+const RED_Z := -28.0                # ... and a red gate this close (in fire range, number readable) opens its own
+const RED_TICKS := 2                # the red-gate lesson ends after the gate ticked this many times
+const RED_MAX_S := 4.0              # ... or after this many seconds of slow motion
 const GANG_Z := -44.0               # a gang this close (in fire range) opens the power tutorial
 const SPOT_SHADER := """
 shader_type canvas_item;
@@ -57,6 +60,7 @@ var _spot_r := Vector2.ONE
 var _dim := 0.0
 var _dim_to := 0.0
 var _dots := false        # ghost bullets from _a to _ring (red gate)
+var _red_v0 := 0          # the red gate's value when its lesson opened
 var _tip := Vector2.ZERO
 var _pressed := false
 var _release_t := -1.0    # gesture phase of the last release (burst ring)
@@ -174,7 +178,10 @@ func _look() -> void:
 			if int(r["id"]) != _row_id and z > RED_Z and z < -6.0 and not _red_in_lane(r, sim.lane).is_empty() and _gang_clear_before(z):
 				_row_id = int(r["id"])
 				_lane = sim.lane
-				_begin("red_gate", true)
+				_red_v0 = int(_red_in_lane(r, sim.lane).get("v", 0))
+				_begin("red_gate", false)
+				view.slow = true
+				_dim_to = 0.35
 				return
 	for id in ["shield", "bomb"]:
 		if int(sim.charges.get(id, 0)) > 0 and not _seen(id) and _gang_near():
@@ -222,6 +229,7 @@ func _end() -> void:
 		print("TUT %d end %s lane=%d charges=%s" % [Engine.get_process_frames(), _step, view.sim.lane, view.sim.charges])
 	_step = ""
 	view.hold = false
+	view.slow = false
 	_dim_to = 0.0
 	_hand.visible = false
 	_icon.visible = false
@@ -287,7 +295,11 @@ func _run_step() -> void:
 			_a = _squad_screen()
 			_gesture = ""
 			_hand.visible = false
-			if (_t > 0.8 and (_touched or _drag_px > 30.0)) or acting:
+			# Ends once the number has visibly ticked up (or it flipped, or time ran out).
+			var g := _red_in_lane(row, _lane)
+			var inc := maxi(int(g.get("inc", 1)), 1)
+			var ticked := g.is_empty() or int(g["v"]) >= mini(_red_v0 + RED_TICKS * inc, 0)
+			if (_t > 0.8 and ticked) or _t > RED_MAX_S or float(row["z"]) > -6.0:
 				_end()
 		"shield", "bomb":
 			var b: Control = hud._power_buttons.get(_power, null)

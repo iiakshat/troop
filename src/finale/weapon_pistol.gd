@@ -10,7 +10,8 @@ extends FinaleWeapon
 const MUZZLE := Vector3(0, -0.026, -0.385)
 const PORT := Vector3(0.0145, -0.018, -0.25)
 const GRIP := Vector3(0, -0.1, -0.2)
-const HOLD := Vector3(0, 0, -0.34)       # arms out: the rear sight ~0.55 m from the eye
+const HOLD := Vector3(0, 0, -0.52)       # arms fully out: the rear sight ~0.72 m from the eye, so
+                                          # the slide stays small under the shelf it aims at
 
 var _gun: Node3D
 var _slide: Node3D

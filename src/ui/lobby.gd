@@ -84,6 +84,25 @@ func _ready() -> void:
 
 
 func _build_top() -> void:
+	# A dark fade behind the top bar, so map pills scrolling under it never mix with its numbers.
+	var fade := TextureRect.new()
+	var gt := GradientTexture2D.new()
+	gt.fill_from = Vector2(0, 0)
+	gt.fill_to = Vector2(0, 1)
+	gt.width = 4
+	gt.height = 64
+	var gr := Gradient.new()
+	gr.set_color(0, Color(0.02, 0.04, 0.1, 0.92))
+	gr.set_color(1, Color(0.02, 0.04, 0.1, 0.0))
+	gr.add_point(0.6, Color(0.02, 0.04, 0.1, 0.8))
+	gt.gradient = gr
+	fade.texture = gt
+	fade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	fade.stretch_mode = TextureRect.STRETCH_SCALE
+	fade.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	fade.offset_bottom = 150
+	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_chrome.add_child(fade)
 	var top := HBoxContainer.new()
 	top.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	top.offset_left = 20
@@ -200,6 +219,16 @@ func _build_bottom() -> void:
 	_hand = UiKit.icon("hand", 104)
 	_hand.size = Vector2(104, 104)
 	_hand.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Mirrored (fingertip lower left, hand body over the map) with a dark drop shadow, so it
+	# reads on the light bottom bar and stays on screen over the leftmost button.
+	_hand.flip_h = true
+	var shade := UiKit.icon("hand", 104, Color(0.05, 0.05, 0.1, 0.7))
+	shade.size = Vector2(104, 104)
+	shade.flip_h = true
+	shade.position = Vector2(5, 6)
+	shade.show_behind_parent = true
+	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hand.add_child(shade)
 	_hand.visible = false
 	_chrome.add_child(_hand)
 
@@ -332,13 +361,13 @@ func _point_station() -> void:
 		_hand_tw.kill()
 		_hand_tw = null
 	if show:
-		# Fingertip (the icon's lower right) on the Station button's upper half.
+		# Fingertip (the mirrored icon's lower left) on the Station button's upper right.
 		var r := _station.get_global_rect()
-		var tip := r.position + Vector2(r.size.x * 0.62, r.size.y * 0.42)
-		_hand.global_position = tip - Vector2(92, 92)
+		var tip := r.position + Vector2(r.size.x * 0.7, r.size.y * 0.25)
+		_hand.global_position = tip - Vector2(12, 92)
 		var p := _hand.position
 		_hand_tw = _hand.create_tween().set_loops()
-		_hand_tw.tween_property(_hand, "position", p - Vector2(18, 18), 0.35).set_trans(Tween.TRANS_SINE)
+		_hand_tw.tween_property(_hand, "position", p + Vector2(18, -18), 0.35).set_trans(Tween.TRANS_SINE)
 		_hand_tw.tween_property(_hand, "position", p, 0.35).set_trans(Tween.TRANS_SINE)
 
 

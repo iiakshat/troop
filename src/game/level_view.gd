@@ -51,6 +51,7 @@ var demo := false
 var paused := false
 var input_enabled := true      # false under --autoplay so stray clicks can't interfere
 var hold := false              # a first-run tutorial (Tutorial) freezes the street until the player acts
+var slow := false              # ... or runs it at 0.3 speed while it shows something (red gate)
 
 var _crowds: Dictionary = {}
 var _allies: Array = []        # {kind, pos, slot, phase, flash, fire_t}
@@ -303,6 +304,9 @@ func _update_time_scale(delta: float) -> void:
 	var target := 1.0
 	if hold:
 		_time_scale = 0.0
+		return
+	if slow:
+		_time_scale = 0.3
 		return
 	if _slowmo > 0.0:
 		# Boss death: half a second of slow motion (the sim stays exact, just slower).
@@ -1210,6 +1214,8 @@ func _update_visuals(d: float) -> void:
 				basis = Basis.looking_at(dir.normalized(), Vector3.UP)
 		var ph := float(a["phase"]) * 3.0
 		if a["kind"] == "hero" and _state == "finale":
+			if finale != null and is_instance_valid(finale) and finale.camera_in_head():
+				continue  # first person: the view model is his hands, his body is behind the eye
 			basis = Basis()
 			if _hero_throw_t >= 0.0:
 				_hero_throw_t += d
@@ -1298,7 +1304,7 @@ func _update_visuals(d: float) -> void:
 			lab.text = str(int(h["count"]))
 		# Closing in while the squad's fire goes elsewhere (a red gate, an obstacle): the count
 		# pulses so the threat behind the gate is visible before it arrives.
-		var ignored: bool = _state == "play" and sim.target_ref != h and LevelSim.front_z(h) > -18.0 and not h["melee"]
+		var ignored: bool = _state == "play" and not is_same(sim.target_ref, h) and LevelSim.front_z(h) > -18.0 and not h["melee"]
 		if ignored:
 			var p := 0.5 + 0.5 * sin(_anim_t * 16.0)
 			lab.modulate = Color("ff6b6b").lerp(Color(1, 1, 1), p) if int(h["armour"]) == 0 else Color("b8c7d9").lerp(Color("ff3b3b"), p)

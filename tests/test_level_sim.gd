@@ -660,6 +660,35 @@ func test_red_percent_gate_at_zero_is_harmless_and_ticks_fast() -> void:
 	eq(r["troops"], 10, "0% = no change")
 
 
+func test_red_gate_climb_past_zero_keeps_the_level_step() -> void:
+	# The dps-scaled step only speeds the climb to 0; the troop offer above 0 still costs
+	# the level's step per tick, so a weak squad cannot max out any red gate in seconds.
+	var lvl := {"events": [
+		{"at": 5, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 2}]},
+		{"at": 70, "type": "gates", "gates": [{"lane": 1, "op": "pct", "v": -36, "inc": 3, "step": 13.5, "max": 40}]},
+		{"at": 140, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	var zero := -1.0
+	var top := 0
+	for i in 6000:
+		sim.step(1.0 / 30.0)
+		for e in sim.drain():
+			if e["type"] == "gate_tick":
+				if int(e["to"]) >= 0 and zero < 0.0:
+					zero = sim.time
+				top = maxi(top, int(e["to"]))
+		if sim.state != "run":
+			break
+	check(zero > 0.0, "a 3-troop squad still shoots it up to 0")
+	check(top < 40, "but cannot climb it to +40 in the time it is in range (got %d)" % top)
+	var g := {"op": "pct", "v": 0, "inc": 3, "step": 13.5, "max": 40, "progress": 0.0, "step_eff": 0.5}
+	var s2 := LevelSim.new(lvl, units)
+	s2._shoot_lane(g, 3.0, Squad.Fire.ALL)
+	var d := s2.squad.dps(s2.stats, s2.weapons, 0, 1000.0, 1, Squad.Fire.ALL) * 3.0
+	eq(int(g["v"]), 3 * int(floor(d / 13.5)), "ticks above 0 use the level step")
+
+
 func test_standoff_stops_the_street() -> void:
 	var lvl := {"events": [
 		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 30}]},

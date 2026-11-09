@@ -215,3 +215,17 @@ func test_weapon_configs_have_their_keys() -> void:
 			check(w.has(k), "%s has %s" % [wname, k])
 	for d in range(1, 6):
 		check(cfg["district_stash"].has(str(d)), "district %d has a stash set" % d)
+
+
+func test_stash_signs_never_block_a_bottle() -> void:
+	check(FinaleStash.segment_hits_box(Vector3(0, 0, 0), Vector3(0, 0, -10), Vector3(-1, -1, -6), Vector3(1, 1, -5)), "a line through a box hits it")
+	check(not FinaleStash.segment_hits_box(Vector3(0, 0, 0), Vector3(0, 0, -4), Vector3(-1, -1, -6), Vector3(1, 1, -5)), "a line that stops short does not")
+	check(not FinaleStash.segment_hits_box(Vector3(0, 3, 0), Vector3(0, 3, -10), Vector3(-1, -1, -6), Vector3(1, 1, -5)), "a line above it does not")
+	var root := Node3D.new()
+	var sign := FinaleStash.neon_bottle(root, Vector3(0, 0.5, -9.0), 1.0, Color.MAGENTA, false)
+	var eye := Vector3(0, 1.6, 0)
+	var bottle := Vector3(0, 1.2, -10.0)
+	eq(FinaleStash.clear_sightlines(root, eye, [bottle], 0.15), 1, "a sign in front of a bottle is lifted")
+	check(not FinaleStash.segment_hits_box(eye, bottle, sign.position + Vector3(-0.42, -0.05, -0.08), sign.position + Vector3(0.42, 1.17, 0.08)), "and the line is clear")
+	eq(FinaleStash.clear_sightlines(root, eye, [bottle], 0.15), 0, "a clean set is left alone")
+	root.free()

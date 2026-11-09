@@ -51,6 +51,7 @@ static func seg(parent: Node3D, a: Vector3, b: Vector3, thick: float, m: Materia
 static func neon_bottle(parent: Node3D, pos: Vector3, h: float, color: Color, light := true) -> Node3D:
 	var root := Node3D.new()
 	root.position = pos
+	root.set_meta("sign_h", h)  # clear_sightlines() keeps it out of every bottle's line of sight
 	parent.add_child(root)
 	var m := WeaponModels.mat(color, 0.0, 0.4, 2.2)
 	var prof := [Vector2(0.0, 0.0), Vector2(0.3, 0.0), Vector2(0.34, 0.06), Vector2(0.34, 0.56),
@@ -100,8 +101,9 @@ static func shelf(theme: String, width: float, depth := 0.5) -> Node3D:
 	var n := Node3D.new()
 	match theme:
 		"carnival":
-			box(n, Vector3(width, 0.08, depth), Vector3(0, -0.04, 0), Color("b8262e"))
-			stripes(n, Vector3(0, -0.2, depth * 0.5), Vector2(width, 0.24), int(width / 0.3), Color("fff1d6"), Color("d8283a"), 0.02)
+			# Plain dark boards (no stripes): the bottles must stand out from the striped booth.
+			box(n, Vector3(width, 0.08, depth), Vector3(0, -0.04, 0), Color("5a1a20"))
+			box(n, Vector3(width, 0.2, 0.04), Vector3(0, -0.14, depth * 0.5), Color("3a1216"))
 		"docks":
 			# A row of crates: the bottles stand on their lids.
 			var k := maxi(int(round(width / 0.9)), 1)
@@ -211,7 +213,10 @@ static func _docks(shot: BottleShot, c: Vector3) -> void:
 		var cont := box(shot, Vector3(2.5, 2.6, 6.0), c + Vector3(-2.6 + 2.6 * k, 1.3, -3.1), col)
 		for r in 8:
 			box(cont, Vector3(0.06, 2.4, 0.02), Vector3(-1.05 + r * 0.3, 0, 3.01), col.darkened(0.25))
-	box(shot, Vector3(2.5, 2.6, 6.0), c + Vector3(-1.3, 3.9, -3.1), Color("c78a2a"))
+	var top := box(shot, Vector3(2.5, 2.6, 6.0), c + Vector3(-1.3, 3.9, -3.1), Color("c78a2a"))
+	for r in 8:  # corrugation, like the containers below it (an untextured block read as a floating cube)
+		box(top, Vector3(0.06, 2.4, 0.02), Vector3(-1.05 + r * 0.3, 0, 3.01), Color("c78a2a").darkened(0.25))
+	box(top, Vector3(2.5, 0.08, 0.04), Vector3(0, -1.26, 3.02), Color("3a2a14"))
 	for side in [-1, 1]:
 		for h in 3:
 			box(shot, Vector3(1.0, 0.9, 1.0), c + Vector3(side * (3.0 + 0.1 * h), 0.45 + 0.9 * h, 0.4), Color("8a6236").darkened(0.1 * h))
@@ -252,8 +257,10 @@ static func _rooftop(shot: BottleShot, c: Vector3) -> void:
 	box(shot, Vector3(16.4, 0.5, 0.4), c + Vector3(0, 0.25, 3.0), Color("17141f"))
 	# Lounge: back wall with neon, bar counter, string lights, a parasol.
 	box(shot, Vector3(8.0, 3.4, 0.3), c + Vector3(0, 1.7, -0.2), Color("2e2440"))
-	neon_bottle(shot, c + Vector3(-2.9, 1.0, 0.0), 1.6, NEON["rooftop"])
-	neon_bottle(shot, c + Vector3(2.9, 1.0, 0.0), 1.6, Color("3fe0ff"))
+	# The neon signs hang on the wall above the shelves (they used to stand at the ends of the
+	# bottle rows and covered the outer bottles in the scope).
+	neon_bottle(shot, c + Vector3(-2.9, 2.2, -0.04), 1.0, NEON["rooftop"])
+	neon_bottle(shot, c + Vector3(2.9, 2.2, -0.04), 1.0, Color("3fe0ff"))
 	bulbs(shot, c + Vector3(-4.0, 3.4, 1.0), c + Vector3(4.0, 3.4, 1.0), 15, 0.4, Color("ffcf7a"))
 	var umb := box(shot, Vector3(0.08, 2.4, 0.08), c + Vector3(3.6, 1.2, 1.6), Color("ddd"))
 	box(umb, Vector3(1.8, 0.1, 1.8), Vector3(0, 1.2, 0), Color("ff3bd5"))
@@ -264,6 +271,56 @@ static func _rooftop(shot: BottleShot, c: Vector3) -> void:
 	box(shot, Vector3(6.0, c.y, 6.0), Vector3(h.x, c.y * 0.5 - 0.02, h.z + 1.5), Color("4a4542"))
 	var tank := WeaponModels.tube(shot, 0.9, 2.0, Vector3(h.x - 3.4, c.y + 1.6, h.z - 0.4), WeaponModels.mat(Color("7a5236"), 0.0, 0.8))
 	tank.rotation.x = PI * 0.5
+
+
+## Line-of-sight guard, run once the bottles stand: any stash sign (neon_bottle) whose box a
+## line from `eye` to a bottle's hit zone crosses is lifted until the line is clear (bottles at
+## both ends of their motion count). Returns how many signs had to move (0 = the set is clean).
+static func clear_sightlines(shot: Node3D, eye: Vector3, targets: Array, radius: float) -> int:
+	var moved := 0
+	for n in shot.get_children():
+		if not (n is Node3D) or not n.has_meta("sign_h"):
+			continue
+		var s := n as Node3D
+		var h := float(s.get_meta("sign_h"))
+		var lifted := false
+		for _try in 40:
+			var lo := s.position + Vector3(-0.42 * h, -0.05 * h, -0.08 * h)
+			var hi := s.position + Vector3(0.42 * h, 1.17 * h, 0.08 * h)
+			var hit := false
+			for t in targets:
+				for off in [Vector3.ZERO, Vector3(radius, 0, 0), Vector3(-radius, 0, 0), Vector3(0, radius, 0)]:
+					if segment_hits_box(eye, (t as Vector3) + off, lo, hi):
+						hit = true
+						break
+				if hit:
+					break
+			if not hit:
+				break
+			s.position.y += 0.15
+			lifted = true
+		if lifted:
+			moved += 1
+	return moved
+
+
+## Slab test: does the segment a-b pass through the axis-aligned box lo..hi?
+static func segment_hits_box(a: Vector3, b: Vector3, lo: Vector3, hi: Vector3) -> bool:
+	var t0 := 0.0
+	var t1 := 1.0
+	var d := b - a
+	for k in 3:
+		if absf(d[k]) < 1e-6:
+			if a[k] < lo[k] or a[k] > hi[k]:
+				return false
+		else:
+			var ta := (lo[k] - a[k]) / d[k]
+			var tb := (hi[k] - a[k]) / d[k]
+			t0 = maxf(t0, minf(ta, tb))
+			t1 = minf(t1, maxf(ta, tb))
+			if t0 > t1:
+				return false
+	return true
 
 
 # ---------------------------------------------------------------- street-end facade

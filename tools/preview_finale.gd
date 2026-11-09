@@ -41,7 +41,8 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	_frame += 1
 	_hero.begin()
-	_hero.push(Transform3D(Basis(), Vector3(0, 0, -0.5)), "idle", _frame / 60.0)
+	if not (is_instance_valid(shot) and shot.is_inside_tree() and shot.camera_in_head()):
+		_hero.push(Transform3D(Basis(), Vector3(0, 0, -0.5)), "idle", _frame / 60.0)
 	_hero.finish()
 	if is_instance_valid(shot) and (shot._state != _last_state or shot._cam_mode != _last_cam):
 		_last_state = shot._state

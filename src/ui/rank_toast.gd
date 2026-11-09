@@ -51,7 +51,7 @@ static func build(unit: String, u: Dictionary, allies: Dictionary) -> PanelConta
 	stats.add_theme_constant_override("separation", 8)
 	stats.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(stats)
-	for s in [["fist", CodexPanel.number(float(u.get("dmg", 1)))], ["speed", CodexPanel.number(float(u.get("rate", 1.0)))]]:
+	for s in [["fist", CodexPanel.number(float(u.get("dmg", 1)))], [CodexPanel.RATE_ICON, CodexPanel.number(float(u.get("rate", 1.0)))]]:
 		stats.add_child(RetentionPanel.icon_safe(String(s[0]), 40))
 		stats.add_child(UiKit.label(String(s[1]), 34, Color.WHITE, 8))
 	for sp in CodexPanel.specials(u):

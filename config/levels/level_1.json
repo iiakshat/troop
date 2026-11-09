@@ -16,7 +16,7 @@
     {"at": 36, "type": "hint", "id": "swipe", "icon": "swipe"},
     {"at": 61, "type": "gates", "tutorial": "swipe", "gates": [{"lane": 0, "op": "num", "v": 4}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 3}, {"lane": 2, "op": "num", "v": 10}]},
     {"at": 96, "type": "wave", "groups": [{"enemy": "thug", "n": 37}]},
-    {"at": 130, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 6}, {"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "num", "v": 8}]},
+    {"at": 130, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 6}, {"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "num", "v": -3, "step": 0.5, "max": 9}]},
     {"at": 165, "type": "wave", "groups": [{"enemy": "thug", "n": 77}]},
     {"at": 201, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 12}, {"lane": 1, "op": "num", "v": -4, "step": 1.5, "max": 8}, {"lane": 2, "op": "mul", "k": 2}]},
     {"at": 236, "type": "wave", "groups": [{"enemy": "thug", "n": 131}]},

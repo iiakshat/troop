@@ -41,6 +41,20 @@ func _ready() -> void:
 	var tw := big.create_tween()
 	tw.tween_interval(0.15)
 	tw.tween_property(big, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	# The rank's weapon, big, in front of its icon: what actually makes this rank different.
+	var wid := CodexPanel.weapon_icon(unit)
+	if wid != "":
+		var wpn := icon_safe(wid, 200)
+		wpn.size = Vector2(200, 200)
+		wpn.position = Vector2(330, 150)
+		wpn.pivot_offset = Vector2(100, 100)
+		wpn.rotation = -0.25
+		stage.add_child(wpn)
+		wpn.scale = Vector2.ZERO
+		var tw2 := wpn.create_tween()
+		tw2.tween_interval(0.4)
+		tw2.tween_property(wpn, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		big.position.x = 70
 
 	var name_label := UiKit.label(String(u.get("name", unit.capitalize())).to_upper(), 76, UiKit.YELLOW, 16)
 	col.add_child(name_label)
@@ -50,7 +64,7 @@ func _ready() -> void:
 	stats.add_theme_constant_override("separation", 12)
 	stats.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(stats)
-	for s in [["fist", CodexPanel.number(float(u.get("dmg", 1)))], ["speed", CodexPanel.number(float(u.get("rate", 1.0)))]]:
+	for s in [["fist", CodexPanel.number(float(u.get("dmg", 1)))], [CodexPanel.RATE_ICON, CodexPanel.number(float(u.get("rate", 1.0)))]]:
 		stats.add_child(icon_safe(String(s[0]), 64))
 		stats.add_child(UiKit.label(String(s[1]), 56, Color.WHITE, 10))
 	for sp in CodexPanel.specials(u):
@@ -69,7 +83,7 @@ func _ready() -> void:
 		vr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		vb.add_child(vr)
 		vr.add_child(UiKit.label(v, 56, Color.WHITE, 10))
-		vr.add_child(icon_safe(CodexPanel.rank_icon("constable"), 64))
+		vr.add_child(CodexPanel.constable_ref(64))
 		bottom.add_child(vb)
 	bottom.add_child(gate_icon(unit))
 

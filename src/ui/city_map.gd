@@ -169,7 +169,7 @@ func _ready() -> void:
 	_content.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_content.size = Vector2(BASE_W, PAD_TOP + map_h + PAD_BOTTOM)
 	add_child(_content)
-	for n in ["map", "buildings", "locks", "nodes", "overlay", "banners", "marker"]:
+	for n in ["map", "buildings", "locks", "nodes", "overlay", "pills", "banners", "marker"]:
 		var c := Control.new()
 		c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_content.add_child(c)
@@ -454,7 +454,7 @@ func _build_nodes() -> void:
 			var pw := _pill_box(Vector2(124, 46), Color(0.05, 0.1, 0.25, 0.8), "power", 36, 28)
 			pw.position = c + Vector2(-62, dia * 0.5 - 8)
 			pw.visible = false
-			_layers["nodes"].add_child(pw)
+			_layers["pills"].add_child(pw)  # above the building price tags
 			_nodes[n] = {"btn": b, "c": c, "r": dia * 0.5, "stars": stars, "lock": lock, "crown": crown, "power": pw}
 
 
@@ -545,6 +545,7 @@ func refresh_levels() -> void:
 	if node_state(save, selected, count) == "locked":
 		selected = cur
 	var power := Game.squad_power()
+	var quiet := Game.first_build_pending()
 	for n in _nodes:
 		var e: Dictionary = _nodes[n]
 		var st := node_state(save, n, count)
@@ -567,7 +568,7 @@ func refresh_levels() -> void:
 			(e["crown"] as Control).modulate = Color(0.45, 0.45, 0.5, 0.85) if st == "locked" else Color.WHITE
 		var pw: Panel = e["power"]
 		var rec := Game.recommended_power(n)
-		var info := power_hint(st, n, cur, rec, power)
+		var info := power_hint(st, n, cur, rec, power, quiet)
 		pw.visible = bool(info["show"])
 		b.modulate = WARN_TINT if bool(info["warn"]) else Color.WHITE
 		if pw.visible:
@@ -607,12 +608,19 @@ const WARN_TINT := Color(1.0, 0.62, 0.55)
 const POWER_AHEAD := 4            ## the power pill shows on the current level and this many after it
 
 
+const WARN_GAP := 1.15             ## warn only when the recommendation is this far above the power
+const WARN_AHEAD := 1              ## only the current node and this many after it can warn
+
+
 ## Whether a level node shows its recommended power, and whether it warns (pure, tested):
-## not on beaten levels, only from the current level to POWER_AHEAD levels past it; it warns
-## when the recommendation is above the player's Squad Power.
-static func power_hint(state: String, n: int, current: int, rec: int, power: int) -> Dictionary:
+## not on beaten levels, only from the current level to POWER_AHEAD levels past it. Every level
+## is winnable without upgrades, so it warns only on the current or next node, only when the
+## recommendation is more than WARN_GAP above the player's Squad Power, and never while the
+## first-build pointer is up (`quiet`), so the map never says "too weak" and "build this" at once.
+static func power_hint(state: String, n: int, current: int, rec: int, power: int, quiet := false) -> Dictionary:
 	var show := state != "beaten" and rec > 0 and n >= current and n <= current + POWER_AHEAD
-	return {"show": show, "warn": show and rec > power}
+	var warn := show and not quiet and n <= current + WARN_AHEAD and float(rec) > float(power) * WARN_GAP
+	return {"show": show, "warn": warn}
 
 
 ## The whole round button texture scaled to the node (no 9-slice, so it stays a circle).

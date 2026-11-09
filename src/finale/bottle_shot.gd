@@ -631,6 +631,13 @@ func _bottle_radius(i: int) -> float:
 
 
 ## World point of a hero-space point (BottleLogic's frame: hero at the origin, floor y = 0).
+## True while the camera sits in the hero's head (pistol sights, bow, scope): the hero's own
+## body must not be drawn then, or his shoulders and arms fill the screen as big slabs.
+func camera_in_head() -> bool:
+	var e := to_world(Vector3(0.0, float(logic.wcfg.get("eye_y", 1.6)), -0.35))
+	return _cam.origin.distance_to(e) < 0.6
+
+
 func to_world(p: Vector3) -> Vector3:
 	return Vector3(hero_pos.x + p.x, _floor_y + p.y, hero_pos.z + p.z)
 
@@ -683,6 +690,17 @@ func _build_wall() -> void:
 			var shelf := FinaleStash.shelf(theme, width)
 			shelf.position = Vector3(0, _floor_y + float(h), _wall_z + 0.22)
 			_rack.add_child(shelf)
+		if theme == "carnival":
+			# A plain dark board behind the shelves: red/white bottles vanish on red/white stripes.
+			var top := 0.0
+			var low := INF
+			for h in heights:
+				top = maxf(top, float(h))
+				low = minf(low, float(h))
+			var bh := top - low + 1.25 * _bscale / BOTTLE_SCALE + 0.3
+			var board := World._box(Vector3(width + 0.5, bh, 0.06), Color("1d1a2e"))
+			board.position = Vector3(0, _floor_y + low - 0.3 + bh * 0.5, _wall_z + 0.05)
+			_rack.add_child(board)
 	var level_seed := int(logic.layout.get("seed", 0))
 	for i in logic.count():
 		var gold := logic.is_gold(i)
@@ -727,6 +745,15 @@ func _build_wall() -> void:
 		WeaponModels.box(plate, Vector3(0.06, 0.4, 0.06), Vector3(0, -h * 0.5 - 0.2, -0.05), WeaponModels.mat(Color("3a3f46"), 0.8, 0.4))
 		_plates.append(plate)
 	_move_bottles()
+	# No stash sign may stand between the eye and any bottle (over its whole motion).
+	var targets: Array = []
+	for i in logic.count():
+		for k in 9:
+			targets.append(_bottle_center(i, k * 0.5))
+	var eye := to_world(Vector3(0.0, float(logic.wcfg.get("eye_y", 1.6)), -0.35))
+	var moved := FinaleStash.clear_sightlines(self, eye, targets, float(logic.wcfg.get("hit_radius", 0.15)) * logic.size)
+	if moved > 0:
+		push_warning("Bottle Shot %s: %d stash sign(s) lifted out of the line of sight" % [theme, moved])
 	_reticle = MeshInstance3D.new()
 	var tm := TorusMesh.new()
 	tm.inner_radius = 0.13

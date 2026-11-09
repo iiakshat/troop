@@ -212,15 +212,26 @@ func _ready() -> void:
 	_rays.offset_bottom = 60
 	_rays.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_mult_root.add_child(_rays)
-	_mult_label = UiKit.label("×1", 88, UiKit.GOLD, 18)
-	UiKit.full_rect(_mult_label)
+	# The reward multiplier is the smaller number, behind a coin (what it multiplies); the combo
+	# (flame) is the big one, so the two "×" never read as the same thing.
+	var mrow := HBoxContainer.new()
+	UiKit.full_rect(mrow)
+	mrow.alignment = BoxContainer.ALIGNMENT_CENTER
+	mrow.add_theme_constant_override("separation", 6)
+	mrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_mult_root.add_child(mrow)
+	var coin := UiKit.icon("coin", 52)
+	coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	mrow.add_child(coin)
+	_mult_label = UiKit.label("×1", 58, UiKit.GOLD, 14)
+	_mult_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_mult_label.modulate.a = 0.85
-	_mult_root.add_child(_mult_label)
+	mrow.add_child(_mult_label)
 	# Combo: flame + ×N, right side.
 	_combo_root = Control.new()
 	_combo_root.set_anchors_and_offsets_preset(Control.PRESET_CENTER_RIGHT)
-	_combo_root.offset_left = -230
-	_combo_root.offset_right = -14
+	_combo_root.offset_left = -236
+	_combo_root.offset_right = -26
 	_combo_root.offset_top = -250
 	_combo_root.offset_bottom = -110
 	_combo_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -230,9 +241,10 @@ func _ready() -> void:
 	_flame.position = Vector2(0, 10)
 	_flame.size = Vector2(110, 110)
 	_combo_root.add_child(_flame)
-	_combo_label = UiKit.label("×2", 84, Color("ffb13a"), 16)
-	_combo_label.position = Vector2(84, 14)
-	_combo_label.size = Vector2(140, 110)
+	_combo_label = UiKit.label("×2", 96, Color("ffb13a"), 18)
+	_combo_label.position = Vector2(80, 10)
+	_combo_label.size = Vector2(130, 116)
+	_combo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_combo_root.add_child(_combo_label)
 	# Wind (bow).
 	_wind_root = Control.new()
@@ -283,11 +295,20 @@ func set_bottles(n: int) -> void:
 	_bottle_n.text = str(n)
 
 
+## Wind arrow: hidden when calm (a near-zero roll teaches nothing); otherwise its length and
+## opacity grow with the strength.
 func set_wind(w: float) -> void:
-	_wind_root.visible = absf(w) > 0.001 or logic.weapon == "bow"
+	_wind_root.visible = absf(w) >= WIND_MIN
 	_wind_glyph.angle = 0.0 if w >= 0.0 else PI
+	var k := clampf(absf(w) / 1.5, 0.0, 1.0)
+	_wind_glyph.pivot_offset = _wind_glyph.size * 0.5
+	_wind_glyph.scale = Vector2(0.55 + 0.45 * k, 1.0)
+	_wind_glyph.modulate.a = 0.55 + 0.45 * k
 	_wind_glyph.queue_redraw()
 	_wind_label.text = "%.1f" % absf(w)
+
+
+const WIND_MIN := 0.05
 
 
 func show_reload(on: bool) -> void:
@@ -332,7 +353,7 @@ func _process(delta: float) -> void:
 		_mult_label.text = "×%s" % fmt(_mult_to if _mult_t >= 1.0 else snappedf(_mult_shown, 0.5))
 	if _punch > 0.0:
 		_punch = maxf(_punch - delta / (0.6 if _punch_gold else 0.45), 0.0)
-		var big := 1.25 if _punch_gold else 0.9
+		var big := 0.7 if _punch_gold else 0.5
 		var s := 1.0 + big * _punch * _punch + 0.12 * sin(_punch * PI * 4.0) * _punch
 		_mult_label.pivot_offset = _mult_label.size * 0.5
 		_mult_label.scale = Vector2.ONE * s
@@ -351,7 +372,8 @@ func _process(delta: float) -> void:
 			_rays.color.a = 0.0
 			_rays.queue_redraw()
 	# Combo: punches in, the flame flickers while the streak runs; a miss shakes it red and fades it.
-	_combo_root.pivot_offset = _combo_root.size * 0.5
+	# Pivot on the right edge: the punch grows into the screen, never past its edge.
+	_combo_root.pivot_offset = Vector2(_combo_root.size.x, _combo_root.size.y * 0.5)
 	if _combo_punch > 0.0:
 		_combo_punch = maxf(_combo_punch - delta / 0.45, 0.0)
 		_combo_root.scale = Vector2.ONE * (1.0 + 0.6 * _combo_punch * _combo_punch)

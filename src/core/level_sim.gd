@@ -575,9 +575,13 @@ func _shoot_lane(t: Dictionary, dt: float, which: int) -> void:
 		t["progress"] = float(t["progress"]) + dmg
 		if not t.has("step_eff"):
 			t["step_eff"] = gate_step(t, dmg / dt)
-		var step_hp := float(t["step_eff"])
 		var inc := int(t.get("inc", 1))
-		while float(t["progress"]) >= step_hp and int(t["v"]) < int(t["max"]):
+		while int(t["v"]) < int(t["max"]):
+			# The dps-scaled step only covers the climb to 0; past 0 the gate is a troop
+			# offer and keeps the level's designed cost per tick.
+			var step_hp := float(t["step_eff"]) if int(t["v"]) < 0 else float(t.get("step", 1.0))
+			if float(t["progress"]) < step_hp:
+				break
 			t["progress"] = float(t["progress"]) - step_hp
 			var before: int = t["v"]
 			t["v"] = mini(before + inc, int(t["max"]))
@@ -597,7 +601,7 @@ func _shoot_lane(t: Dictionary, dt: float, which: int) -> void:
 				out.append({"type": "obstacle_broken", "ob": t})
 
 
-## Hits per tick of a red gate, fixed when the squad first shoots it: the level's `step`,
+## Hits per tick of a red gate below 0, fixed when the squad first shoots it: the level's `step`,
 ## but never so big that this squad (firing `dps`) needs more than gate_clear_s seconds to
 ## shoot it up to 0. A small squad still sees it tick every few hits.
 func gate_step(g: Dictionary, dps: float) -> float:

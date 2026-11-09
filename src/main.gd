@@ -283,6 +283,7 @@ func _open_boosters(n: int, over_result := false) -> void:
 ## Station over the result screen; closing it returns to the result (badges refresh).
 func _open_station_from_result() -> void:
 	var p := StationPanel.new()
+	p.focus_room = result.tip_room if result.visible else ""
 	ui.add_child(p)
 	p.tree_exited.connect(func():
 		if is_instance_valid(result):
@@ -530,8 +531,8 @@ func _toggle_pause() -> void:
 	col.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	col.offset_left = -240
 	col.offset_right = 240
-	col.offset_top = -200
-	col.offset_bottom = 200
+	col.offset_top = -270
+	col.offset_bottom = 270
 	col.add_theme_constant_override("separation", 20)
 	pause_panel.add_child(col)
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -548,6 +549,13 @@ func _toggle_pause() -> void:
 	var quit := UiKit.icon_button("home", "blue", 130)
 	quit.pressed.connect(func(): _show_lobby())
 	row.add_child(quit)
+	# Sound and music, right where players notice them (same toggles as the lobby settings).
+	var audio := HBoxContainer.new()
+	audio.alignment = BoxContainer.ALIGNMENT_CENTER
+	audio.add_theme_constant_override("separation", 20)
+	col.add_child(audio)
+	audio.add_child(SettingsPanel.toggle_button("sound", "sound", "sound_off", 110))
+	audio.add_child(SettingsPanel.toggle_button("music", "music", "music_off", 110))
 	ui.add_child(pause_panel)
 
 
@@ -582,7 +590,7 @@ func _notification(what: int) -> void:
 func _process(_delta: float) -> void:
 	if is_instance_valid(hud) and is_instance_valid(view):
 		hud.set_progress(view.sim.progress())  # goal gradient: the bar fills towards the Gang HQ
-	if _pilot and view and view.sim.state == "run":
+	if _pilot and view and view.sim.state == "run" and not view.hold:  # a tutorial step steers
 		_pilot.drive(view.sim)
 	if _args.has("strike") and view and view.finale and view.finale._state == "aim" and _frame % 40 == 0:
 		# Autoplay the finale: aim where the next unbroken bottle will be when the knife lands.
