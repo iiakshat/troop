@@ -64,7 +64,13 @@ static func run(eco: Dictionary, finale: Dictionary, units: Dictionary, opts: Di
 		var cap := int(units["world"].get("max_squad", 150)) + int(fx["capacity"])
 		var troops := mini(int(round(float(o["troops_base"]) + float(o["troops_per_level"]) * L)), cap)
 		var base := float(finale["clear_bonus"]) + troops * float(finale["per_troop"])
-		var mult := (1.0 + float(o["normal_bottles"]) * float(finale["bonus_per_bottle"]))
+		# v1.1 combo: the bottles break in a row, so the n-th adds bonus_per_bottle x combo(n).
+		var hits := float(o["normal_bottles"])
+		var combo_sum := 0.0
+		for n in range(1, int(ceil(hits)) + 1):
+			var c := minf(1.0 + float(finale.get("combo_step", 0.0)) * (n - 1), float(finale.get("combo_max", 1.0)))
+			combo_sum += c * minf(hits - (n - 1), 1.0)
+		var mult := 1.0 + combo_sum * float(finale["bonus_per_bottle"])
 		mult *= 1.0 + (float(finale["gold_mult"]) - 1.0) * float(o["gold_chance"])
 		var finale_coins := int(round(base * mult * (1.0 + float(fx["coins"]))))
 		var win := Economy.level_reward(L, finale_coins, false, eco)

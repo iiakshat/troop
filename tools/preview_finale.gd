@@ -62,7 +62,10 @@ func _process(_delta: float) -> void:
 						var to := Vector3(shot.hero_pos.x + p.x, p.y, shot._wall_z + 0.12)
 						aim = lg.position(i, shot._ft + lg.flight_time(from.distance_to(to)))
 						break
-			shot.throw_at(aim)
+			if str(_throws) == String(_args.get("miss", "")) and shot._mode == null:
+				shot._throw_knife(aim)   # throw_at always hits the next target; a miss aims by hand
+			else:
+				shot.throw_at(aim)
 	var every := int(_args.get("every", "0"))
 	if (_args.has("shots") and String(_args["shots"]).split(",").has(str(_frame))) or (every > 0 and _frame % every == 0):
 		get_viewport().get_texture().get_image().save_png("%s_%d.png" % [_args.get("out", "_local/shots/fin"), _frame])

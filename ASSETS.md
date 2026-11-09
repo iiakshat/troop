@@ -67,3 +67,4 @@ All files are mono 44.1 kHz OGG Vorbis built by `python -I tools/make_sfx.py <do
 | `assets/audio/spin_tick` | Kenney, *Interface Sounds* (OGA `kenney_interfaceSounds.zip`) | CC0 |
 | `assets/audio/rank_up, gate_bad` | Kenney, *85 Music Jingles* (OGA `jingleSounds_Kenney.zip`) | CC0 |
 | `assets/audio/music_menu.ogg, music_level.ogg, music_boss.ogg` | Generated for this game with Google Lyria (`tools/lyria_music.py make`), then cut into whole-bar loops with a crossfaded seam and normalised to -14 LUFS (`tools/lyria_music.py loop`). Raw clips: the first AUDIO worktree's `_local/music_raw/`. | Generated output (Google Gemini API terms); no third-party samples |
+| Bottle Shot weapons and stash sets (`src/finale/weapon_models.gd`, `finale_stash.gd`, HUD icons drawn in `finale_hud.gd`) | Built from primitives in code for this game; details in `docs/assets_finale.md` | Original |
