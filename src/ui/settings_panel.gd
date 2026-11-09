@@ -1,6 +1,6 @@
 class_name SettingsPanel
 extends Control
-## Sound, music and vibration toggles (icons) plus the credits that CC-BY assets require
+## Sound (speaker), music (note) and vibration toggles (icons; each has an "off" look) plus the credits that CC-BY assets require
 ## (every CC BY row in ASSETS.md: game-icons.net icons and the app icon, Vincent Sevedge's
 ## gunshots).
 
@@ -46,7 +46,7 @@ func _ready() -> void:
 	row.add_theme_constant_override("separation", 22)
 	col.add_child(row)
 	row.add_child(_toggle("sound", "sound", "sound_off"))
-	row.add_child(_toggle("music", "sound", "sound_off", Color("ffd23f")))
+	row.add_child(_toggle("music", "music", "music_off"))
 	row.add_child(_toggle("vibration", "vibrate", "vibrate"))
 	var credits := UiKit.label(CREDITS, 26, UiKit.INK, 0, true)
 	credits.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -55,16 +55,29 @@ func _ready() -> void:
 	UiKit.pop(p, 0.7)
 
 
-func _toggle(key: String, on_icon: String, off_icon: String, tint := Color.WHITE) -> Button:
-	var on := bool(Game.save.get(key, true))
-	var b := UiKit.icon_button(on_icon if on else off_icon, "green" if on else "grey", 150)
-	(b.get_meta("icon") as TextureRect).modulate = tint
+func _toggle(key: String, on_icon: String, off_icon: String) -> Button:
+	var b := UiKit.icon_button(on_icon, "green", 150)
+	_paint(b, bool(Game.save.get(key, true)), on_icon, off_icon)
 	b.pressed.connect(func():
 		var now := Game.toggle(key)
-		var ic: TextureRect = b.get_meta("icon")
-		ic.texture = UiKit.icon_texture(on_icon if now else off_icon)
-		b.add_theme_stylebox_override("normal", UiKit._tex_box("green" if now else "grey", "square"))
-		b.add_theme_stylebox_override("hover", UiKit._tex_box("green" if now else "grey", "square"))
+		_paint(b, now, on_icon, off_icon)
 		if key == "music":
-			Sfx.music_changed())
+			Sfx.music_changed()
+		elif key == "sound":
+			Sfx.sound_changed()
+		if now:
+			Sfx.play("tap")
+		UiKit.bump(b, 1.08))
+	b.set_meta("key", key)
 	return b
+
+
+## On = green button with the icon; off = grey button with the "off" icon (slashed).
+static func _paint(b: Button, on: bool, on_icon: String, off_icon: String) -> void:
+	var ic: TextureRect = b.get_meta("icon")
+	ic.texture = UiKit.icon_texture(on_icon if on else off_icon)
+	ic.modulate = Color.WHITE if on else Color(1, 1, 1, 0.85)
+	var colr := "green" if on else "grey"
+	for st in ["normal", "hover", "focus"]:
+		b.add_theme_stylebox_override(st, UiKit._tex_box(colr, "square"))
+	b.add_theme_stylebox_override("pressed", UiKit._tex_box(colr, "square", true))
