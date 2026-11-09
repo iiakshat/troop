@@ -6,11 +6,17 @@ extends Node3D
 ## - Everything else is a compact floating sign: maths as numbers (x2, -8, -40%), effects as
 ##   glossy icons (gang split, broken armour, pistol, SMG, bomb, turncoat), never words.
 ## A red sign shot past zero turns into a troop group: the negative becomes an advantage.
+## Recruits show the rank's icon beside "+N" so a sergeant offer reads apart from constables.
+## A gate a crashed barricade blocked is boarded up with crossed planks and greys out.
 
 const GREEN := Color(0.18, 0.78, 0.42)
 const RED := Color(0.9, 0.24, 0.27)
 const BLUE := Color(0.25, 0.52, 0.95)
 const GOLD := Color(0.95, 0.72, 0.2)
+const GREY := Color(0.42, 0.42, 0.45)
+
+static var _plank_mesh: BoxMesh
+static var _plank_mat: StandardMaterial3D
 
 var row: Dictionary
 var _panels: Dictionary = {}   # lane -> {gate, root, sign, mat, label, tag, pad_mat, flash, pop}
@@ -66,9 +72,18 @@ func setup(r: Dictionary, font: Font, lane_x: Array) -> GateRowView:
 		tag.position = Vector3(0, 2.9, 0)
 		tag.modulate = Color("7dffb0")
 		root.add_child(tag)
+		var tag_icon := Sprite3D.new()
+		tag_icon.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		tag_icon.shaded = false
+		tag_icon.render_priority = 3
+		tag_icon.pixel_size = 0.85 / 320.0
+		tag_icon.position = Vector3(-0.62, 2.9, 0)
+		tag_icon.visible = false
+		root.add_child(tag_icon)
 
 		_panels[lane] = {"gate": gate, "root": root, "sign": sign, "mat": mat, "label": label,
-			"icon": icon, "tag": tag, "pad_mat": pad_mat, "flash": 0.0, "pop": 0.0}
+			"icon": icon, "tag": tag, "tag_icon": tag_icon, "pad_mat": pad_mat, "flash": 0.0, "pop": 0.0,
+			"boards": null}
 		refresh(gate)
 	return self
 
@@ -92,9 +107,17 @@ func refresh(gate: Dictionary, ticked := false) -> void:
 		return
 	var info := describe(gate)
 	var troops := is_troops(gate)
-	(p["sign"] as Node3D).visible = not troops
-	(p["tag"] as Label3D).visible = troops
+	var blocked := is_blocked(gate)
+	(p["sign"] as Node3D).visible = not troops or blocked
+	(p["tag"] as Label3D).visible = troops and not blocked
 	(p["tag"] as Label3D).text = info["text"]
+	var tag_icon: Sprite3D = p["tag_icon"]
+	tag_icon.visible = troops and not blocked and gate["op"] == "recruit"
+	if tag_icon.visible:
+		tag_icon.texture = UiKit.icon_texture(String(gate["unit"]))
+	(p["tag"] as Label3D).position.x = 0.38 if tag_icon.visible else 0.0
+	if blocked:
+		_board_up(p)
 	var label: Label3D = p["label"]
 	var icon: Sprite3D = p["icon"]
 	label.text = info["text"]
@@ -111,12 +134,39 @@ func refresh(gate: Dictionary, ticked := false) -> void:
 		label.font_size = 130
 	else:
 		label.position.x = 0.0
-	var c: Color = info["color"]
+	var c: Color = GREY if blocked else info["color"]
 	(p["mat"] as StandardMaterial3D).albedo_color = Color(c, 0.85)
 	(p["pad_mat"] as StandardMaterial3D).albedo_color = Color(c, 0.35)
 	if ticked:
 		p["flash"] = 1.0
 		p["pop"] = 1.0
+
+
+## Crossed planks nailed over a blocked gate (mesh and material shared by every row).
+func _board_up(p: Dictionary) -> void:
+	if p["boards"] != null:
+		return
+	if _plank_mesh == null:
+		_plank_mesh = BoxMesh.new()
+		_plank_mesh.size = Vector3(2.7, 0.32, 0.12)
+		_plank_mat = StandardMaterial3D.new()
+		_plank_mat.albedo_color = Color("8a5a2e")
+		_plank_mat.roughness = 1.0
+	var boards := Node3D.new()
+	boards.position = Vector3(0, 1.7, 0.25)
+	for a in [0.5, -0.5]:
+		var mi := MeshInstance3D.new()
+		mi.mesh = _plank_mesh
+		mi.material_override = _plank_mat
+		mi.rotation.z = a
+		boards.add_child(mi)
+	(p["root"] as Node3D).add_child(boards)
+	p["boards"] = boards
+
+
+## True when a crashed barricade boarded this gate up (nothing to pick up any more).
+static func is_blocked(g: Dictionary) -> bool:
+	return bool(g.get("blocked", false))
 
 
 func lane_root(lane: int) -> Node3D:
@@ -138,11 +188,13 @@ func _process(delta: float) -> void:
 			p["flash"] = maxf(float(p["flash"]) - delta * 6.0, 0.0)
 			p["pop"] = maxf(float(p["pop"]) - delta * 5.0, 0.0)
 			var info := describe(p["gate"])
-			var c: Color = (info["color"] as Color).lerp(Color.WHITE, float(p["flash"]))
+			var base: Color = GREY if is_blocked(p["gate"]) else info["color"]
+			var c: Color = base.lerp(Color.WHITE, float(p["flash"]))
 			(p["mat"] as StandardMaterial3D).albedo_color = Color(c, 0.85 + 0.15 * float(p["flash"]))
 			var s := Vector3.ONE * (1.0 + 0.3 * float(p["pop"]))
 			(p["sign"] as Node3D).scale = s
 			(p["tag"] as Label3D).scale = s
+			(p["tag_icon"] as Sprite3D).scale = s
 	if _fade >= 0.0:
 		_fade += delta
 		for lane in _panels:

@@ -15,10 +15,15 @@ var _n := 0
 var _cap := 0
 
 
-func setup(kind: String, capacity: int) -> Crowd:
+## A missing bake falls back to `fallback` (a role that always exists), never a crash.
+func setup(kind: String, capacity: int, fallback := "constable") -> Crowd:
 	if clips.is_empty():
 		clips = Config.load_json(DIR + "clips.json")
 	_cap = capacity
+	name = "Crowd_" + kind
+	if not ResourceLoader.exists(DIR + kind + "_mesh.res"):
+		push_warning("Crowd: no baked role '%s', drawing '%s'" % [kind, fallback])
+		kind = fallback
 	var mat := ShaderMaterial.new()
 	mat.shader = SHADER
 	var vat: Texture2D = load(DIR + kind + "_vat.res")
@@ -43,7 +48,6 @@ func setup(kind: String, capacity: int) -> Crowd:
 	material_override = mat
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	custom_aabb = AABB(Vector3(-60, -5, -200), Vector3(120, 40, 260))
-	name = "Crowd_" + kind
 	return self
 
 
