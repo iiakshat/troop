@@ -38,8 +38,8 @@ func test_rooms_open_by_district_and_cap_out() -> void:
 	var st := {}
 	for room in eco["station"]:
 		check(SaveData.room_cost(eco, st, room, 0) > 0, room + " level 1 open from the start")
-	st["armory"] = 2
-	eq(SaveData.room_cost(eco, st, "armory", 0), -1, "level 3 needs district 1")
+	st["armory"] = 3
+	eq(SaveData.room_cost(eco, st, "armory", 0), -1, "level 4 needs district 1")
 	eq(SaveData.room_lock(eco, st, "armory", 0), 1, "lock names district 1")
 	check(SaveData.room_cost(eco, st, "armory", 1) > 0, "open once district 1 is liberated")
 	eq(SaveData.room_lock(eco, st, "armory", 1), 0, "no lock")

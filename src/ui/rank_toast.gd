@@ -37,9 +37,7 @@ static func build(unit: String, u: Dictionary, allies: Dictionary) -> PanelConta
 	row.add_theme_constant_override("separation", 12)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(row)
-	var names: Array = CodexPanel.RANK_ICONS.get(unit, []).duplicate()
-	names.push_front(String(u.get("icon", unit)))
-	row.add_child(RetentionPanel.icon_safe(RetentionPanel.first_icon(names), 110))
+	row.add_child(RetentionPanel.icon_safe(CodexPanel.rank_icon(unit), 110))
 	var col := VBoxContainer.new()
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	col.add_theme_constant_override("separation", 0)
@@ -66,11 +64,48 @@ static func build(unit: String, u: Dictionary, allies: Dictionary) -> PanelConta
 	return card
 
 
-static func _play(card: PanelContainer) -> void:
+## v1.1: at the start of the level after a Station purchase, the same corner card shows what
+## improved: per room its in-game icon and now > next number (StationPanel.value_text), and the
+## Squad Power. `list` = Game.take_improvements(). Returns the card or null when empty.
+static func show_upgrades(parent: Node, list: Array) -> PanelContainer:
+	if parent == null or not is_instance_valid(parent) or list.is_empty():
+		return null
+	var card := PanelContainer.new()
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.z_index = 40
+	card.add_theme_stylebox_override("panel", RetentionPanel.box(Color("2e8b3e"), 24, 6, UiKit.INK, 12))
+	card.custom_minimum_size = Vector2(WIDTH, 0)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 4)
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(col)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 8)
+	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	head.add_child(RetentionPanel.icon_safe("power", 56))
+	head.add_child(UiKit.label(str(Game.squad_power()), 44, UiKit.YELLOW, 9))
+	col.add_child(head)
+	for e in list.slice(0, 3):
+		var room := String(e["room"])
+		var r: Dictionary = Game.economy["station"].get(room, {})
+		var line := HBoxContainer.new()
+		line.add_theme_constant_override("separation", 8)
+		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		line.add_child(RetentionPanel.icon_safe(StationPanel.effect_icon(String(r.get("effect", ""))), 46))
+		line.add_child(UiKit.label(StationPanel.value_text(room, int(e["before"])), 38, Color.WHITE, 8))
+		line.add_child(RetentionPanel.icon_safe("play", 28, UiKit.YELLOW))
+		line.add_child(UiKit.label(StationPanel.value_text(room, int(e["after"])), 38, UiKit.YELLOW, 8))
+		col.add_child(line)
+	parent.add_child(card)
+	_play(card, ["upgrade", "rank_up"])
+	return card
+
+
+static func _play(card: PanelContainer, sounds: Array = ["rank_up", "recruit"]) -> void:
 	# Top-left corner, under the HUD's top bar.
 	var top := 150.0 + UiKit.safe_insets(card).x
 	card.position = Vector2(-WIDTH - 20, top)
-	RetentionPanel.sfx(["rank_up", "recruit"])
+	RetentionPanel.sfx(sounds)
 	var tw := card.create_tween()
 	tw.tween_property(card, "position:x", 16.0, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_interval(DURATION - 0.6)

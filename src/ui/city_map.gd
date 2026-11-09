@@ -48,7 +48,7 @@ var map_h := 0.0                ## map height at BASE_W
 var _k := 1.0                   # screen px per base px
 var _content: Control
 var _layers := {}
-var _hand: TextureRect = null   # first-build pointer
+var _hand: TextureRect = null   # first-build pointer, then the best-next-purchase pointer
 var _hand_at := ""
 var _hand_tw: Tween = null
 var _bands: Array = []          # [{d, rect, pads: [], lock}]
@@ -381,7 +381,8 @@ func _build_buildings() -> void:
 		}
 		_bld_order.append(id)
 	# First-build pointer (one time, no words): a hand tapping the cheapest ruin the new
-	# player can afford, until the first building is started.
+	# player can afford, until the first building is started. After that the same hand bobs
+	# over the best next purchase (Game.best_purchase) when it is a building.
 	_hand = UiKit.icon("hand", 120)
 	_hand.size = Vector2(120, 120)
 	_hand.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -448,7 +449,13 @@ func _build_nodes() -> void:
 				crown.size = Vector2(72, 72)
 				crown.position = c + Vector2(-36, -dia * 0.5 - 58)
 				_layers["nodes"].add_child(crown)
-			_nodes[n] = {"btn": b, "c": c, "r": dia * 0.5, "stars": stars, "lock": lock, "crown": crown}
+			# Recommended Squad Power (v1.1): a small pill under the nodes ahead of the player;
+			# red with a warning tint on the node when the squad is weaker than that.
+			var pw := _pill_box(Vector2(124, 46), Color(0.05, 0.1, 0.25, 0.8), "power", 36, 28)
+			pw.position = c + Vector2(-62, dia * 0.5 - 8)
+			pw.visible = false
+			_layers["nodes"].add_child(pw)
+			_nodes[n] = {"btn": b, "c": c, "r": dia * 0.5, "stars": stars, "lock": lock, "crown": crown, "power": pw}
 
 
 func _build_marker() -> void:
@@ -537,6 +544,7 @@ func refresh_levels() -> void:
 	var cur := current_level(save, count)
 	if node_state(save, selected, count) == "locked":
 		selected = cur
+	var power := Game.squad_power()
 	for n in _nodes:
 		var e: Dictionary = _nodes[n]
 		var st := node_state(save, n, count)
@@ -557,6 +565,15 @@ func refresh_levels() -> void:
 			s.modulate = Color.WHITE if i < got else Color(0.18, 0.13, 0.1, 0.75)
 		if e["crown"] != null:
 			(e["crown"] as Control).modulate = Color(0.45, 0.45, 0.5, 0.85) if st == "locked" else Color.WHITE
+		var pw: Panel = e["power"]
+		var rec := Game.recommended_power(n)
+		var info := power_hint(st, n, cur, rec, power)
+		pw.visible = bool(info["show"])
+		b.modulate = WARN_TINT if bool(info["warn"]) else Color.WHITE
+		if pw.visible:
+			(pw.get_meta("label") as Label).text = str(rec)
+			var psb: StyleBoxFlat = pw.get_theme_stylebox("panel")
+			psb.bg_color = Color(0.85, 0.2, 0.15, 0.92) if bool(info["warn"]) else Color(0.05, 0.1, 0.25, 0.8)
 	_set_current(cur)
 	_place_marker(false)
 	for band in _bands:
@@ -584,6 +601,18 @@ func refresh_levels() -> void:
 		sb.shadow_offset = Vector2(0, 6)
 		(e["box"] as Panel).add_theme_stylebox_override("panel", sb)
 		(e["icon"] as TextureRect).texture = UiKit.icon_texture(icon_name)
+
+
+const WARN_TINT := Color(1.0, 0.62, 0.55)
+const POWER_AHEAD := 4            ## the power pill shows on the current level and this many after it
+
+
+## Whether a level node shows its recommended power, and whether it warns (pure, tested):
+## not on beaten levels, only from the current level to POWER_AHEAD levels past it; it warns
+## when the recommendation is above the player's Squad Power.
+static func power_hint(state: String, n: int, current: int, rec: int, power: int) -> Dictionary:
+	var show := state != "beaten" and rec > 0 and n >= current and n <= current + POWER_AHEAD
+	return {"show": show, "warn": show and rec > power}
 
 
 ## The whole round button texture scaled to the node (no 9-slice, so it stays a circle).
@@ -646,6 +675,7 @@ func refresh_buildings() -> void:
 	var cheapest := ""
 	var cheapest_cost := 1 << 30
 	var pointing := Game.first_build_pending()
+	var best: Dictionary = {} if pointing else Game.best_purchase()
 	var save: Dictionary = Game.save
 	var eco: Dictionary = Game.economy
 	var t: int = Game.now()
@@ -669,11 +699,11 @@ func refresh_buildings() -> void:
 		if work.visible:
 			(work.get_meta("label") as Label).text = UiKit.fmt_time(City.remaining(save, id, t))
 		var tag: Panel = e["tag"]
-		tag.visible = st == "ruin"
-		var can := false
+		var cost := City.next_cost(save, id, eco)
+		var can := (st == "ruin" or st == "built") and cost >= 0 and coins >= cost and City.can_start(save, id, t, eco) == ""
+		# Ruins always show their price; built ones only when the upgrade is affordable now.
+		tag.visible = st == "ruin" or can
 		if tag.visible:
-			var cost := City.next_cost(save, id, eco)
-			can = cost >= 0 and coins >= cost and City.can_start(save, id, t, eco) == ""
 			(tag.get_meta("label") as Label).text = UiKit.fmt_coins(cost)
 			if pointing and can and cost < cheapest_cost:
 				cheapest = id
@@ -688,6 +718,8 @@ func refresh_buildings() -> void:
 		if bubble.visible:
 			(bubble.get_meta("label") as Label).text = UiKit.fmt_coins(amount)
 		e["status"] = st
+	if not pointing and String(best.get("kind", "")) == "building" and _bld.has(String(best["id"])):
+		cheapest = String(best["id"])
 	_point_hand(cheapest)
 
 

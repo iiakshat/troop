@@ -4,7 +4,9 @@ extends Control
 ## side buttons (Daily = gift, Spin = wheel, Missions on the left; star chest with its
 ## progress on the right) and a bottom bar (Station, Codex, a big Play showing the selected
 ## level, Style). Every button has a "!" alert when something is claimable or affordable.
-## Icons and numbers only.
+## Icons and numbers only. v1.1: the top bar shows Squad Power (emblem + number, tap = Station;
+## counts up after an upgrade) and a hand bobs over the Station button when the best next
+## purchase (Game.best_purchase) is a room; the map points at buildings itself.
 ##
 ## Signals for INTEGRATE (RETENTION-UI panels open from main.gd, or via open_panel()):
 ##   play_pressed(level)  Play, or tapping the selected level node again
@@ -29,6 +31,10 @@ var map: CityMap
 var _chrome: Control
 var _coins: HBoxContainer
 var _coin_icon: Control
+var _power: HBoxContainer
+var _shown_power := -1
+var _hand: TextureRect
+var _hand_tw: Tween
 var _play: Button
 var _play_icon: TextureRect
 var _play_label: Label
@@ -89,6 +95,13 @@ func _build_top() -> void:
 	var gear := UiKit.icon_button("settings", "yellow", 92)
 	gear.pressed.connect(func(): _open(SettingsPanel.new()))
 	top.add_child(gear)
+	_power = UiKit.pill("power", "0", Color.WHITE)
+	_power.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_power.mouse_filter = Control.MOUSE_FILTER_STOP
+	_power.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+			_open(StationPanel.new()))
+	top.add_child(_power)
 	var gap := Control.new()
 	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -183,6 +196,12 @@ func _build_bottom() -> void:
 	_style.pressed.connect(func(): _open(StylePanel.new()))
 	row.add_child(_style)
 	_play_breathe()
+	# Best-next-purchase pointer for station rooms (no words): a hand tapping the Station.
+	_hand = UiKit.icon("hand", 104)
+	_hand.size = Vector2(104, 104)
+	_hand.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hand.visible = false
+	_chrome.add_child(_hand)
 
 
 func _play_breathe() -> void:
@@ -202,6 +221,7 @@ func _open(p: Control) -> void:
 	_overlay = p
 	p.tree_exited.connect(_on_panel_closed)
 	add_child(p)
+	_point_station()
 
 
 ## Closes the open panel (for Android back). True if there was one to close.
@@ -285,6 +305,41 @@ func refresh() -> void:
 	_play_label.text = str(_level)
 	var boss := Economy.is_boss(_level, Game.economy)
 	_play_icon.texture = UiKit.icon_texture("boss_crown" if boss else "play")
+	_refresh_power()
+	_point_station.call_deferred()
+
+
+## Squad Power pill: counts up with a bump when it grew (an upgrade was just bought).
+func _refresh_power() -> void:
+	var p := Game.squad_power()
+	if _shown_power >= 0 and p > _shown_power:
+		UiKit.pill_count(_power, _shown_power, p, 0.6)
+		UiKit.bump(_power, 1.2)
+	else:
+		UiKit.pill_set(_power, str(p))
+	_shown_power = p
+
+
+func _point_station() -> void:
+	if not is_inside_tree() or _hand == null:
+		return
+	var best: Dictionary = {} if Game.first_build_pending() else Game.best_purchase()
+	var show := String(best.get("kind", "")) == "room" and not is_instance_valid(_overlay)
+	if show == _hand.visible:
+		return
+	_hand.visible = show
+	if _hand_tw:
+		_hand_tw.kill()
+		_hand_tw = null
+	if show:
+		# Fingertip (the icon's lower right) on the Station button's upper half.
+		var r := _station.get_global_rect()
+		var tip := r.position + Vector2(r.size.x * 0.62, r.size.y * 0.42)
+		_hand.global_position = tip - Vector2(92, 92)
+		var p := _hand.position
+		_hand_tw = _hand.create_tween().set_loops()
+		_hand_tw.tween_property(_hand, "position", p - Vector2(18, 18), 0.35).set_trans(Tween.TRANS_SINE)
+		_hand_tw.tween_property(_hand, "position", p, 0.35).set_trans(Tween.TRANS_SINE)
 
 
 # ---------------------------------------------------------------- debug (screenshots)

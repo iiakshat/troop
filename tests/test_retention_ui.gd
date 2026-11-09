@@ -107,6 +107,7 @@ func test_panels_build_and_close() -> void:
 	var panels: Array = [
 		DailyPanel.new(), MissionsPanel.new(), SpinPanel.new(), BoosterPanel.new(10),
 		RevivePanel.new(0.8, 40), CodexPanel.new(), StarChestPanel.new(), WelcomeBackPanel.new(500),
+		RankUnlockPanel.new("sergeant"),
 	]
 	for p in panels:
 		var name: String = (p.get_script() as Script).get_global_name()
@@ -172,3 +173,23 @@ func test_panels_build_and_close() -> void:
 	holder.free()
 	game.save = keep
 	game.save_path = keep_path
+
+
+func test_codex_sorted_by_value_and_one_rank_icon() -> void:
+	var allies: Dictionary = Config.units()["allies"]
+	var ids := CodexPanel.ranks_by_value(allies)
+	eq(ids.size(), allies.size(), "every rank listed")
+	eq(String(ids[0]), "hero", "hero first")
+	for i in range(2, ids.size()):
+		check(CodexPanel.value_of(allies, String(ids[i - 1])) <= CodexPanel.value_of(allies, String(ids[i])), "sorted by value at %s" % ids[i])
+	for id in allies:
+		var ic := CodexPanel.rank_icon(String(id))
+		check(RetentionPanel.has_icon(ic), "%s has an icon (%s)" % [id, ic])
+	eq(CodexPanel.rank_icon("sniper"), "rank_sniper", "sniper uses the v1.1 headgear icon")
+
+
+func test_map_power_hint() -> void:
+	eq(CityMap.power_hint("beaten", 3, 5, 200, 100), {"show": false, "warn": false}, "beaten: nothing")
+	eq(CityMap.power_hint("current", 5, 5, 200, 100), {"show": true, "warn": true}, "current, under: warns")
+	eq(CityMap.power_hint("locked", 7, 5, 90, 100), {"show": true, "warn": false}, "ahead, strong enough")
+	eq(CityMap.power_hint("locked", 5 + CityMap.POWER_AHEAD + 1, 5, 90, 100)["show"], false, "not too far ahead")

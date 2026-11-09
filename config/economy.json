@@ -9,7 +9,7 @@
   "level_coins": {
     "_note": "Win coins = finale coins (config/finale.json, incl. evidence room) x mult(L). mult(L) = base + per_level x (L-1), x boss_mult on every boss_every-th level, x replay_mult when the level was already beaten. x2 rewarded ad doubles the final number.",
     "base": 1.0,
-    "per_level": 0.03,
+    "per_level": 0.04,
     "boss_every": 10,
     "boss_mult": 1.5,
     "replay_mult": 0.5
@@ -17,25 +17,36 @@
 
   "_station_note": "Cost of level k = base x growth^(k-1), rounded (price_round). req[k-1] = district that must be liberated before level k can be bought (0 = open from the start). Effects: knife +per damage, speed +per (sim: +0.5 throws/s each), squad +per starting constables, capacity +per squad cap, coins +per finale coin bonus, charges: shield ceil(lv/2), bomb floor(lv/2).",
   "station": {
-    "armory":   { "icon": "knife",      "max": 10, "base": 60,  "growth": 1.7, "req": [0, 0, 1, 1, 2, 2, 3, 3, 4, 4], "effect": "knife",    "per": 1 },
-    "range":    { "icon": "speed",      "max": 10, "base": 60,  "growth": 1.7, "req": [0, 0, 1, 1, 2, 2, 3, 3, 4, 4], "effect": "speed",    "per": 1 },
-    "training": { "icon": "badge",      "max": 10, "base": 90,  "growth": 1.7, "req": [0, 0, 1, 1, 2, 2, 3, 3, 4, 4], "effect": "squad",    "per": 1 },
-    "barracks": { "icon": "station",    "max": 6,  "base": 150, "growth": 2.0, "req": [0, 1, 2, 3, 4, 4],             "effect": "capacity", "per": 25 },
-    "evidence": { "icon": "money",      "max": 6,  "base": 200, "growth": 2.0,  "req": [0, 1, 2, 3, 4, 4],             "effect": "coins",    "per": 0.1 },
-    "garage":   { "icon": "police_car", "max": 4,  "base": 300, "growth": 3.0,  "req": [0, 1, 2, 4],                   "effect": "charges",  "per": 1 }
+    "armory":   { "icon": "knife",      "max": 10, "base": 80,  "growth": 1.45, "req": [0, 0, 0, 1, 1, 2, 2, 3, 4, 4], "effect": "knife",    "per": 1 },
+    "range":    { "icon": "speed",      "max": 10, "base": 80,  "growth": 1.45, "req": [0, 0, 0, 1, 1, 2, 2, 3, 4, 4], "effect": "speed",    "per": 1 },
+    "training": { "icon": "badge",      "max": 10, "base": 110, "growth": 1.45, "req": [0, 0, 0, 1, 1, 2, 2, 3, 4, 4], "effect": "squad",    "per": 1 },
+    "barracks": { "icon": "station",    "max": 6,  "base": 150, "growth": 1.6,  "req": [0, 1, 2, 3, 4, 4],             "effect": "capacity", "per": 25 },
+    "evidence": { "icon": "money",      "max": 6,  "base": 200, "growth": 1.6,  "req": [0, 1, 2, 3, 4, 4],             "effect": "coins",    "per": 0.1 },
+    "garage":   { "icon": "police_car", "max": 4,  "base": 300, "growth": 2.2,  "req": [0, 1, 2, 4],                   "effect": "charges",  "per": 1 }
   },
   "station_order": ["armory", "range", "training", "barracks", "evidence", "garage"],
 
+  "power": {
+    "_note": "Squad Power (lobby top bar, level nodes) = dps x (hero knife dmg x throws/s + starting constables x constable dmg x rate) + cap x squad cap + charge x (shields + bombs) + coin_pct x evidence coin bonus in percent; all from the station's real effects (units.json base numbers). recommended = [[level, power], ...], linear between anchors, fitted with tests/econ_sim.gd to what a player who spends their coins has at that level. Below it a level node shows a warning tint; every level is still winnable without upgrades.",
+    "dps": 10.0,
+    "cap": 0.2,
+    "charge": 15.0,
+    "coin_pct": 1.0,
+    "recommended": [[1, 60], [5, 90], [10, 155], [20, 300], [30, 485], [40, 670], [50, 815]]
+  },
+
   "city": {
-    "_note": "5 districts x 5 buildings. lv 0 = ruin, 1 = rebuilt, 2-4 = upgrades. cost/time/income are for lv 1; level k costs cost x upgrade_cost_mult[k-1], takes time x upgrade_time_mult[k-1] seconds (capped at max_build_seconds) and earns income x income_mult^(k-1) coins per hour. A district's buildings can be rebuilt once the district is reached; upgrades need it liberated (its boss beaten). Storage holds storage.base_hours of income, +hours_per_level per City Hall level. While a building upgrades it keeps earning at its old level.",
+    "_note": "5 districts x 5 buildings. lv 0 = ruin, 1 = rebuilt, 2-4 = upgrades. cost/time/income are for lv 1; level k costs cost x upgrade_cost_mult[k-1], takes time x upgrade_time_mult[k-1] seconds (capped at max_build_seconds) and earns income x income_mult^(k-1) coins per hour. A district's buildings can be rebuilt once the district is reached; upgrades up to pre_liberation_max_level are open while you fight there, higher ones need it liberated (its boss beaten). Liberating district d pays liberation_bonus[d-1] coins once (not doubled by the x2 ad). Storage holds storage.base_hours of income, +hours_per_level per City Hall level. While a building upgrades it keeps earning at its old level.",
     "district_levels": 10,
     "max_level": 4,
     "upgrade_cost_mult": [1.0, 2.2, 4.0, 7.0],
     "upgrade_time_mult": [1.0, 1.5, 2.0, 2.5],
     "income_mult": 1.6,
     "max_build_seconds": 14400,
-    "max_parallel_builds": 2,
+    "max_parallel_builds": 3,
     "upgrade_needs_liberation": true,
+    "pre_liberation_max_level": 2,
+    "liberation_bonus": [250, 500, 750, 1000, 1500],
     "storage": { "base_hours": 3, "city_hall": "city_hall", "hours_per_level": 1 },
     "welcome_back": { "_note": "The welcome-back popup shows when at least min_coins wait in storage and the player was away min_away_seconds.", "min_coins": 20, "min_away_seconds": 600 },
     "speedup_ad": { "_note": "A rewarded ad cuts a build timer by fraction of what is left, at least min_seconds (never past done).", "fraction": 0.5, "min_seconds": 600 },
@@ -64,14 +75,14 @@
       "ferry":         { "district": 3, "cost": 710,  "time": 720,  "income": 59 },
       "factory":       { "district": 4, "cost": 810,  "time": 900,  "income": 66 },
       "power_station": { "district": 4, "cost": 940,  "time": 1140, "income": 74 },
-      "garage":        { "district": 4, "cost": 1100, "time": 1440, "income": 84 },
-      "train_station": { "district": 4, "cost": 1250, "time": 1800, "income": 93 },
-      "fire_station":  { "district": 4, "cost": 1400, "time": 2280, "income": 101 },
-      "hotel":         { "district": 5, "cost": 1650, "time": 2880, "income": 116 },
-      "bank":          { "district": 5, "cost": 1900, "time": 3600, "income": 129 },
-      "museum":        { "district": 5, "cost": 2150, "time": 4500, "income": 142 },
-      "fountain_park": { "district": 5, "cost": 2500, "time": 5700, "income": 161 },
-      "city_hall":     { "district": 5, "cost": 2850, "time": 7200, "income": 178 }
+      "garage":        { "district": 4, "cost": 1100, "time": 1440, "income": 67 },
+      "train_station": { "district": 4, "cost": 1250, "time": 1800, "income": 74 },
+      "fire_station":  { "district": 4, "cost": 1400, "time": 2280, "income": 81 },
+      "hotel":         { "district": 5, "cost": 1650, "time": 2880, "income": 84 },
+      "bank":          { "district": 5, "cost": 1900, "time": 3600, "income": 93 },
+      "museum":        { "district": 5, "cost": 2150, "time": 4500, "income": 102 },
+      "fountain_park": { "district": 5, "cost": 2500, "time": 5700, "income": 116 },
+      "city_hall":     { "district": 5, "cost": 2850, "time": 7200, "income": 128 }
     }
   },
 

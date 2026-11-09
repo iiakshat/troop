@@ -197,6 +197,11 @@ func show_loss(level: int, cause: String, progress := -1.0, peak := 0) -> void:
 		pk.add_child(UiKit.label(str(peak), 60, Color.WHITE, 12))
 		cause_row.add_child(pk)
 	col.add_child(UiKit.label(String(info[1]), 52, Color.WHITE, 14))
+	# v1.1: the single upgrade that would have helped most (Game.best_upgrade_after_loss), as
+	# room icon + its in-game number before > after; a hand bobs on the Station when affordable.
+	var tip: Dictionary = Game.best_upgrade_after_loss()
+	if not tip.is_empty():
+		col.add_child(_upgrade_tip(tip))
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 20)
@@ -209,12 +214,53 @@ func show_loss(level: int, cause: String, progress := -1.0, peak := 0) -> void:
 	row.add_child(station)
 	_station = station
 	UiKit.set_alert(station, _station_alert())
+	if bool(tip.get("affordable", false)):
+		_hand_on(station)
 	var retry := UiKit.icon_button("retry", "green", 140)
 	retry.custom_minimum_size.x = 220
 	retry.pressed.connect(func(): retry_pressed.emit())
 	row.add_child(retry)
 	_show()
 	RetentionPanel.pulse(retry, 0.04)
+
+
+## Loss tip card (green): the room's icon, its in-game number now > next, and its price
+## (coin + number; dimmed when the player cannot afford it yet).
+func _upgrade_tip(tip: Dictionary) -> Control:
+	var room := String(tip["room"])
+	var r: Dictionary = Game.economy["station"].get(room, {})
+	var lv := Game.room_level(room)
+	var card := RetentionPanel.card_box(Color("2e8b3e"), 10, 22, 5)
+	var h := HBoxContainer.new()
+	h.alignment = BoxContainer.ALIGNMENT_CENTER
+	h.add_theme_constant_override("separation", 10)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(h)
+	h.add_child(RetentionPanel.icon_safe(String(r.get("icon", "station")), 84))
+	h.add_child(UiKit.label(StationPanel.value_text(room, lv), 50, Color.WHITE, 10))
+	h.add_child(RetentionPanel.icon_safe("play", 34, UiKit.YELLOW))
+	h.add_child(UiKit.label(StationPanel.value_text(room, lv + 1), 50, UiKit.YELLOW, 10))
+	var price := HBoxContainer.new()
+	price.add_theme_constant_override("separation", 4)
+	price.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	price.add_child(RetentionPanel.icon_safe("coin", 40))
+	price.add_child(UiKit.label(UiKit.fmt_coins(int(tip["cost"])), 36, Color.WHITE, 8))
+	price.modulate.a = 1.0 if bool(tip.get("affordable", false)) else 0.55
+	h.add_child(price)
+	return card
+
+
+## A hand bobbing on a button (fingertip on its upper half), freed with it.
+func _hand_on(b: Control) -> void:
+	var hand := RetentionPanel.icon_safe("hand", 96)
+	hand.size = Vector2(96, 96)
+	hand.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hand.z_index = 5
+	b.add_child(hand)
+	hand.position = Vector2(-4, -44)
+	var tw := hand.create_tween().set_loops()
+	tw.tween_property(hand, "position", Vector2(-20, -60), 0.35).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(hand, "position", Vector2(-4, -44), 0.35).set_trans(Tween.TRANS_SINE)
 
 
 ## Road bar: how far the squad got, flag at the finish, percent above the marker.

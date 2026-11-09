@@ -157,3 +157,48 @@ func test_reward_tables_are_sane() -> void:
 		check(SaveData.BOOSTERS.has(b), b + " is a booster")
 	for p in ["x2_coins", "revive", "x2_offline", "spin", "booster_headstart", "booster_shield", "booster_bomb"]:
 		check((eco["ads"]["placements"] as Array).has(p), "placement " + p)
+
+
+func test_purchase_curve_holds() -> void:
+	# v1.1 item 5: a typical player (tests/econ_model.gd) has 1-3 things to buy after nearly
+	# every win, never nothing in the first three districts, and fewer buys deeper in.
+	var Model = load("res://tests/econ_model.gd")
+	var rows: Array = Model.run(eco, Config.load_json("res://config/finale.json"), Config.units())
+	eq(rows.size(), Config.LEVEL_COUNT, "one row per level")
+	var s: Dictionary = Model.summary(rows)
+	check(float(s["in_band"]) >= 0.85, "1-3 buys after at least 85%% of wins (%.2f)" % float(s["in_band"]))
+	for L in s["none"]:
+		check(int(L) > 30, "something to buy after every win in districts 1-3 (none at L%d)" % int(L))
+	var early := 0
+	var late := 0
+	for r in rows:
+		if int(r["level"]) <= 20:
+			early += int(r["buys"])
+		elif int(r["level"]) > 30:
+			late += int(r["buys"])
+	check(late < early, "coins buy less deeper in (%d vs %d)" % [late, early])
+	for r in rows:
+		check(int(r["power"]) >= int(r["rec"]), "a spending player meets the recommended power at L%d" % (int(r["level"]) + 1))
+
+
+func test_squad_power_and_pointers() -> void:
+	var units := Config.units()
+	var base := Economy.station_power({}, units, eco)
+	check(base > 0, "an empty station still has power")
+	for room in eco["station_order"]:
+		check(Economy.room_power_gain({}, String(room), units, eco) > 0, String(room) + " adds power")
+	var rec := Economy.recommended_power(1, eco)
+	eq(rec, base, "level 1 asks for no upgrades")
+	var prev := 0
+	for L in range(1, Config.LEVEL_COUNT + 1):
+		var r := Economy.recommended_power(L, eco)
+		check(r >= prev, "recommended power never drops (L%d)" % L)
+		prev = r
+	var save := SaveData.migrate({}, eco)
+	save["coins"] = 0
+	eq(Economy.best_purchase(save, 1_800_000_000, eco, units), {}, "nothing pointed at with no coins")
+	save["coins"] = 100000
+	var best := Economy.best_purchase(save, 1_800_000_000, eco, units)
+	check(not best.is_empty() and best["kind"] != "cosmetic", "points at progress, never a cosmetic")
+	var loss := Economy.best_upgrade_after_loss(save, eco, units)
+	check(not loss.is_empty() and bool(loss["affordable"]) and int(loss["gain"]) > 0, "a loss points at an affordable room that adds power")

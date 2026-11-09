@@ -5,11 +5,22 @@ extends Control
 ## squad, squad cap, coin bonus, powers at the start), level pips (up to 10), and a coin price.
 ## A level that needs a district liberated first shows district_lock + that district's number
 ## on the button instead of the price. Frees itself on close and emits `closed`.
+## v1.1 (why upgrade): a Squad Power pill next to the coins, the in-game thing each room
+## changes as a small icon before its numbers, the Squad Power the next level adds (+N), a
+## one-second looping mini-preview on the room icon (a knife flying, a coin rising...), and a
+## celebration on purchase (sparks, flash, power counting up, "+N" floating away).
 
 signal closed
 
 var _rows: Dictionary = {}
 var _coins: HBoxContainer
+var _power: HBoxContainer
+
+## The in-game thing each effect changes (shown before its numbers and in the mini-preview).
+const EFFECT_ICONS := {
+	"knife": ["knife_power", "knife"], "speed": ["speed"], "squad": ["rank_constable", "badge"],
+	"capacity": ["person", "badge"], "coins": ["coin"], "charges": ["shield", "police_car"],
+}
 
 
 func _ready() -> void:
@@ -37,9 +48,14 @@ func _ready() -> void:
 	var close := UiKit.icon_button("close", "red", 96)
 	close.pressed.connect(_close)
 	head.add_child(close)
+	var pills := HBoxContainer.new()
+	pills.alignment = BoxContainer.ALIGNMENT_CENTER
+	pills.add_theme_constant_override("separation", 18)
+	col.add_child(pills)
+	_power = UiKit.pill("power", str(Game.squad_power()), Color.WHITE)
+	pills.add_child(_power)
 	_coins = UiKit.pill("coin", str(int(Game.save["coins"])))
-	_coins.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.add_child(_coins)
+	pills.add_child(_coins)
 	for room in Game.economy["station_order"]:
 		col.add_child(_row(String(room)))
 	refresh()
@@ -62,7 +78,14 @@ func _row(room: String) -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	card.add_child(row)
-	row.add_child(UiKit.icon(String(r["icon"]), 104))
+	var ic := Control.new()
+	ic.custom_minimum_size = Vector2(104, 104)
+	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var room_icon := UiKit.icon(String(r["icon"]), 104)
+	room_icon.size = Vector2(104, 104)
+	ic.add_child(room_icon)
+	ic.add_child(preview(String(r["effect"]), 58, Vector2(52, 52)))
+	row.add_child(ic)
 
 	var mid := VBoxContainer.new()
 	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -73,6 +96,7 @@ func _row(room: String) -> Control:
 	values.alignment = BoxContainer.ALIGNMENT_CENTER
 	values.add_theme_constant_override("separation", 10)
 	mid.add_child(values)
+	values.add_child(RetentionPanel.icon_safe(effect_icon(String(r["effect"])), 44))
 	var now := UiKit.label("", 46, Color.WHITE, 10)
 	values.add_child(now)
 	var arrow := UiKit.icon("play", 34, UiKit.YELLOW)
@@ -92,10 +116,19 @@ func _row(room: String) -> Control:
 		pip.custom_minimum_size = Vector2(pip_w, 16)
 		pips.add_child(pip)
 
+	var gain_row := HBoxContainer.new()
+	gain_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	gain_row.add_theme_constant_override("separation", 4)
+	gain_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	gain_row.add_child(RetentionPanel.icon_safe("power", 34))
+	var gain := UiKit.label("", 30, UiKit.YELLOW, 8)
+	gain_row.add_child(gain)
+	mid.add_child(gain_row)
+
 	var buy := UiKit.button("", "green", 40, Vector2(190, 100))
 	buy.pressed.connect(func(): _buy(room))
 	row.add_child(buy)
-	_rows[room] = {"now": now, "next": next, "arrow": arrow, "pips": pips, "buy": buy, "card": card}
+	_rows[room] = {"now": now, "next": next, "arrow": arrow, "pips": pips, "buy": buy, "card": card, "gain": gain, "gain_row": gain_row}
 	return card
 
 
@@ -125,13 +158,101 @@ static func value_text(room: String, lv: int) -> String:
 	return str(lv)
 
 
+static func effect_icon(effect: String) -> String:
+	return RetentionPanel.first_icon(EFFECT_ICONS.get(effect, ["star_icon"]))
+
+
+## One-second looping mini-preview of what a room changes: the effect's icon doing it (a knife
+## flying out, two knives in quick succession, a constable popping in, the squad growing, a
+## coin rising, a shield pulsing). `at` = top-left inside its parent.
+static func preview(effect: String, px := 58, at := Vector2.ZERO) -> Control:
+	var holder := Control.new()
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.position = at
+	holder.size = Vector2(px, px)
+	var ic := RetentionPanel.icon_safe(effect_icon(effect), px)
+	ic.size = Vector2(px, px)
+	ic.pivot_offset = Vector2(px, px) * 0.5
+	holder.add_child(ic)
+	var tw := ic.create_tween().set_loops()
+	match effect:
+		"knife", "speed":
+			var throws := 2 if effect == "speed" else 1
+			for i in throws:
+				tw.tween_callback(func():
+					ic.position = Vector2(-px * 0.3, 0)
+					ic.modulate.a = 1.0)
+				tw.tween_property(ic, "position:x", px * 0.5, 0.5 / throws).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+				tw.parallel().tween_property(ic, "modulate:a", 0.0, 0.25 / throws).set_delay(0.25 / throws)
+			tw.tween_interval(0.5)
+		"squad", "capacity":
+			tw.tween_callback(func(): ic.scale = Vector2.ONE * 0.6)
+			tw.tween_property(ic, "scale", Vector2.ONE * 1.15, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			tw.tween_property(ic, "scale", Vector2.ONE, 0.15)
+			tw.tween_interval(0.6)
+		"coins":
+			tw.tween_callback(func():
+				ic.position = Vector2(0, px * 0.2)
+				ic.modulate.a = 1.0)
+			tw.tween_property(ic, "position:y", -px * 0.4, 0.7).set_trans(Tween.TRANS_SINE)
+			tw.parallel().tween_property(ic, "modulate:a", 0.0, 0.4).set_delay(0.3)
+			tw.tween_interval(0.3)
+		_:
+			tw.tween_property(ic, "scale", Vector2.ONE * 1.2, 0.3).set_trans(Tween.TRANS_SINE)
+			tw.tween_property(ic, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_SINE)
+			tw.tween_interval(0.4)
+	return holder
+
+
 func _buy(room: String) -> void:
+	var before := Game.squad_power()
 	if Game.buy_room(room):
 		Sfx.play("upgrade")
-		UiKit.pop(_rows[room]["card"], 0.85)
+		RetentionPanel.sfx(["rank_up", "coin"], -4.0, 1.2)
+		Game.vibrate(40)
 		refresh()
+		_celebrate(room, before, Game.squad_power())
 	else:
 		Sfx.play("error")
+
+
+## Purchase celebration: the card flashes and pops, sparks burst from the button, the power
+## pill counts up and a "+N" with the power emblem floats up from the card.
+func _celebrate(room: String, from: int, to: int) -> void:
+	var c: Dictionary = _rows[room]
+	var card: Control = c["card"]
+	UiKit.pop(card, 0.85)
+	card.modulate = Color(1.8, 1.8, 1.4)
+	card.create_tween().tween_property(card, "modulate", Color.WHITE, 0.4)
+	UiKit.pill_count(_power, from, to, 0.6)
+	UiKit.bump(_power, 1.3)
+	var btn: Control = c["buy"]
+	var centre := btn.get_global_rect().get_center()
+	for i in 12:
+		var sp := RetentionPanel.icon_safe("star_icon", 34)
+		sp.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		sp.size = Vector2(34, 34)
+		sp.z_index = 30
+		add_child(sp)
+		sp.global_position = centre - Vector2(17, 17)
+		var dir := Vector2.from_angle(TAU * i / 12.0 + randf() * 0.3)
+		var tw := sp.create_tween().set_parallel()
+		tw.tween_property(sp, "global_position", sp.global_position + dir * randf_range(90.0, 150.0), 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw.tween_property(sp, "modulate:a", 0.0, 0.35).set_delay(0.15)
+		tw.chain().tween_callback(sp.queue_free)
+	if to > from:
+		var float_row := HBoxContainer.new()
+		float_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		float_row.z_index = 31
+		float_row.add_child(RetentionPanel.icon_safe("power", 56))
+		float_row.add_child(UiKit.label("+%d" % (to - from), 54, UiKit.YELLOW, 12))
+		add_child(float_row)
+		var r := card.get_global_rect()
+		float_row.global_position = r.position + Vector2(r.size.x * 0.4, 0)
+		var tw2 := float_row.create_tween().set_parallel()
+		tw2.tween_property(float_row, "global_position:y", r.position.y - 110.0, 0.9).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw2.tween_property(float_row, "modulate:a", 0.0, 0.4).set_delay(0.5)
+		tw2.chain().tween_callback(float_row.queue_free)
 
 
 func refresh() -> void:
@@ -146,6 +267,9 @@ func refresh() -> void:
 		(c["now"] as Label).text = value_text(room, lv)
 		(c["next"] as Label).text = "" if maxed else value_text(room, lv + 1)
 		(c["arrow"] as Control).visible = not maxed
+		var g := 0 if maxed else Game.room_power_gain(room)
+		(c["gain"] as Label).text = "+%d" % g
+		(c["gain_row"] as Control).modulate.a = 1.0 if g > 0 else 0.0
 		var pips: HBoxContainer = c["pips"]
 		for i in pips.get_child_count():
 			var sb := StyleBoxFlat.new()

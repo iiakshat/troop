@@ -73,15 +73,16 @@ func test_station_gated_by_district() -> void:
 	g.save["coins"] = 100000
 	check(g.buy_room("armory"), "lv 1")
 	check(g.buy_room("armory"), "lv 2")
-	eq(g.room_cost("armory"), -1, "lv 3 locked")
+	check(g.buy_room("armory"), "lv 3 (v1.1: open in district 1)")
+	eq(g.room_cost("armory"), -1, "lv 4 locked")
 	var st: Dictionary = g.room_state("armory")
 	eq(int(st["locked"]), 1, "needs district 1")
 	check(int(st["cost"]) > 0 and not bool(st["can_buy"]), "price shown, cannot buy")
 	check(not g.buy_room("armory"), "refused")
 	g.save["stars"]["10"] = 1
 	check(g.buy_room("armory"), "open after the boss")
-	eq(g.room_level("armory"), 3, "lv 3")
-	eq(int(g.save["stats"]["upgrade"]), 3, "upgrades counted for missions")
+	eq(g.room_level("armory"), 4, "lv 4")
+	eq(int(g.save["stats"]["upgrade"]), 4, "upgrades counted for missions")
 	g.free()
 
 
@@ -229,4 +230,23 @@ func test_existing_api_still_works() -> void:
 	g.mark_hint("swipe")
 	check(g.hint_seen("swipe"), "hint")
 	check(g.upgrades().has("knife") and g.coin_bonus() == 0.0, "upgrades")
+	g.free()
+
+
+func test_rank_card_due_once_and_improvements() -> void:
+	var g := _game()
+	eq(g.rank_card_due(1), "", "no card at level 1")
+	eq(g.rank_card_due(3), "", "none before the sergeant")
+	eq(g.rank_card_due(4), "sergeant", "sergeant card before level 4")
+	g.mark_rank_card("sergeant")
+	eq(g.rank_card_due(4), "", "shown once")
+	eq(g.rank_card_due(8), "inspector", "next rank later")
+	g.mark_rank_seen("inspector")
+	eq(g.rank_card_due(8), "", "a rank already met in a level needs no card")
+	g.save["coins"] = 100000
+	var p0: int = g.squad_power()
+	check(g.buy_room("armory") and g.buy_room("armory"), "two armory levels")
+	check(g.squad_power() > p0, "Squad Power grew")
+	eq(g.take_improvements(), [{"room": "armory", "before": 0, "after": 2}], "one line per room, first before to last after")
+	eq(g.take_improvements(), [], "cleared once taken")
 	g.free()

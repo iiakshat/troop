@@ -270,8 +270,9 @@ func play_music(mode: Variant = "menu") -> void:
 		return
 	var cur := _music[_music_cur]
 	if not _music_on():
-		_fade_music(cur, SILENT_DB, 0.3, true)
-		_fade_music(_music[1 - _music_cur], SILENT_DB, 0.3, true)
+		# Off = silent at once. (Two _fade_music calls in a row used to kill each other's
+		# tween, so the playing track never faded and the toggle seemed broken.)
+		stop_music()
 		return
 	var stream := _music_stream(m)
 	if stream == null:
@@ -297,6 +298,35 @@ func play_music(mode: Variant = "menu") -> void:
 ## The settings toggle changed: start or stop the current track.
 func music_changed() -> void:
 	play_music(_music_mode if _music_mode != "" else "menu")
+
+
+## Both music players stop now (the mode is kept, so turning music back on resumes it).
+func stop_music() -> void:
+	_setup()
+	if _music_tween:
+		_music_tween.kill()
+		_music_tween = null
+	for m in _music:
+		m.stop()
+		m.volume_db = SILENT_DB
+
+
+## The settings sound toggle changed: when off, every effect still sounding stops at once.
+func sound_changed() -> void:
+	if _sound_on():
+		return
+	_setup()
+	for i in _players.size():
+		_players[i].stop()
+		_player_id[i] = ""
+
+
+## True while a music track is audible (tests and the settings panel).
+func music_playing() -> bool:
+	for m in _music:
+		if m.playing:
+			return true
+	return false
 
 
 ## Lower the music (e.g. while an ad popup is up) or bring it back.
