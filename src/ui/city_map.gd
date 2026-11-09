@@ -687,6 +687,27 @@ func focus_level(n: int, animate := true) -> void:
 		_set_scroll(target)
 
 
+## After a win: the map opens on the level just beaten, then the pin hops to the new current
+## level and the map glides there (call right after the lobby is shown).
+func advance_from(prev: int) -> void:
+	if not _nodes.has(prev) or prev == selected:
+		return
+	var target := selected
+	selected = prev
+	_place_marker(false)
+	selected = target
+	focus_level(prev, false)
+	var tw := create_tween()
+	tw.tween_interval(0.45)
+	tw.tween_callback(_hop_to_selected)
+
+
+func _hop_to_selected() -> void:
+	focus_level(selected, true)
+	_place_marker(true)
+	Sfx.play("unlock")
+
+
 func select(n: int) -> void:
 	if node_state(Game.save, n, Config.LEVEL_COUNT) == "locked":
 		return

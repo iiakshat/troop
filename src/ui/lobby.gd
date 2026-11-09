@@ -12,6 +12,8 @@ extends Control
 ##                        Connect only one of the two.
 ##   daily_pressed  spin_pressed  missions_pressed  codex_pressed  star_chest_pressed
 ## Station, Style, Settings and BuildingPanel open here (one overlay at a time).
+## close_overlay() -> bool closes the open panel (Android back: close it, else quit).
+## After a win, lobby.map.advance_from(level_just_beaten) makes the pin hop to the next level.
 ## Debug args (after --): save=path (load that save, never write), building=<id> (open its
 ## panel), focus=N (scroll the map to level N).
 
@@ -308,5 +310,8 @@ func _debug_args() -> void:
 	var b := _arg("building")
 	if b != "":
 		_open_building(b)
+	var adv := _arg("advance")
+	if adv != "":
+		map.advance_from(int(adv))
 	if _arg("collect") != "":
 		get_tree().create_timer(1.0).timeout.connect(map.collect_any)

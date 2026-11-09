@@ -103,6 +103,16 @@ func _run() -> void:
 	_check(not (map._bld["cafe"]["bubble"] as Control).visible, "bubble gone after collecting")
 	_check(_lobby._flying == 1, "coins are flying to the counter")
 
+	# After a win the pin hops on; the new level stays selected.
+	_g().save["stars"] = {"1": 3}
+	_g().save["unlocked"] = 2
+	map.refresh_levels()
+	map.select(2)
+	map.advance_from(1)
+	_check(map.selected == 2, "advance keeps the new level selected")
+	_lobby.refresh()
+	_check(_lobby._play_label.text == "2", "Play shows the selected level")
+
 
 ## The Game autoload (not a compile-time global in a SceneTree script).
 func _g() -> Node:
