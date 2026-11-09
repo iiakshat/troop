@@ -18,7 +18,9 @@ static func list(save: Dictionary) -> Array:
 
 
 static func needs_roll(save: Dictionary, today: String) -> bool:
-	return String(save.get("missions", {}).get("date", "")) != today
+	# Only a later date rolls ("YYYY-MM-DD" compares as a string): a clock moved back keeps
+	# the current missions instead of re-rolling (and paying out) again.
+	return today > String(save.get("missions", {}).get("date", ""))
 
 
 ## Rolls today's missions (once per date): `per_day` entries with distinct stats from the pool,

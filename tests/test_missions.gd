@@ -90,3 +90,12 @@ func test_record_claim_and_bonus() -> void:
 	eq(Missions.claim_bonus(s, e), {}, "no second bonus")
 	eq(Missions.record(s, "nothing", 0), [], "zero amount ignored")
 	eq(Missions.claim(s, 9), {}, "bad index")
+
+
+func test_clock_going_back_does_not_reroll() -> void:
+	var s := _save()
+	check(Missions.roll(s, "2026-11-09", 1, 5, eco), "rolled today")
+	check(not Missions.needs_roll(s, "2026-11-08"), "a day back: no roll")
+	check(not Missions.roll(s, "2026-11-01", 2, 5, eco), "far back: no roll")
+	check(not Missions.needs_roll(s, "2026-11-09"), "back to today: same missions")
+	check(Missions.needs_roll(s, "2026-11-10"), "a real new day rolls")

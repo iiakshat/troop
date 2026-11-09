@@ -208,7 +208,10 @@ func _open(p: Control) -> void:
 func close_overlay() -> bool:
 	if not is_instance_valid(_overlay) or _overlay.is_queued_for_deletion():
 		return false
-	if _overlay.has_method("_close"):
+	# Prefer close(): retention panels emit `closed` there, which the boot popup chain waits on.
+	if _overlay.has_method("close"):
+		_overlay.call("close")
+	elif _overlay.has_method("_close"):
 		_overlay.call("_close")
 	else:
 		_overlay.queue_free()

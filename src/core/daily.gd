@@ -35,8 +35,9 @@ static func state(save: Dictionary, today: String, economy: Dictionary = {}) -> 
 	if last == "":
 		return out
 	var gap := days_between(last, today)
-	if gap == 0 or gap == -1:
-		# Claimed today (or the date stepped back a day, e.g. travelling west): wait.
+	if gap <= 0:
+		# Claimed today, or the clock moved back (travel, or a player winding the date):
+		# wait for a real new day. Never a fresh start, so date toggling grants nothing.
 		out["can_claim"] = false
 		out["claimed_today"] = gap == 0
 		out["day"] = day
@@ -44,7 +45,7 @@ static func state(save: Dictionary, today: String, economy: Dictionary = {}) -> 
 	if gap == 1:
 		out["day"] = day % size + 1
 		return out
-	# Missed at least a day (or the clock jumped far back): start over, or carry on.
+	# Missed at least a day: start over, or carry on.
 	var reset := bool(Economy.cfg(economy)["daily"].get("reset_on_miss", true))
 	out["missed"] = reset and day > 0
 	out["day"] = 1 if reset else day % size + 1

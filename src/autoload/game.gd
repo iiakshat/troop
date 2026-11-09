@@ -131,15 +131,27 @@ func load_save() -> void:
 	var raw: Variant = {}
 	if FileAccess.file_exists(SAVE_PATH):
 		raw = Config.load_json(SAVE_PATH)
+	if not (raw is Dictionary and not (raw as Dictionary).is_empty()) and FileAccess.file_exists(SAVE_PATH + ".bak"):
+		# save.json is missing or broken (the process died mid-write): use the last good one.
+		raw = Config.load_json(SAVE_PATH + ".bak")
 	save = SaveData.migrate(raw, economy)
 
 
+## Atomic: writes save.json.tmp, keeps the previous file as save.json.bak, then renames the
+## new file into place, so a kill mid-write never leaves a truncated save.
 func write_save() -> void:
 	if save_path == "":
 		return
-	var f := FileAccess.open(save_path, FileAccess.WRITE)
-	if f:
-		f.store_string(JSON.stringify(save, "\t"))
+	var tmp := save_path + ".tmp"
+	var f := FileAccess.open(tmp, FileAccess.WRITE)
+	if f == null:
+		return
+	f.store_string(JSON.stringify(save, "\t"))
+	f.close()
+	var real := ProjectSettings.globalize_path(save_path)
+	if FileAccess.file_exists(save_path):
+		DirAccess.copy_absolute(real, real + ".bak")
+	DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp), real)
 
 
 func reset_progress() -> void:

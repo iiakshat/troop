@@ -69,5 +69,6 @@ func test_clock_going_back() -> void:
 	Daily.claim(s, "2026-11-08", eco)
 	check(not Daily.can_claim(s, "2026-11-07", eco), "a day back: wait")
 	eq(Daily.claim(s, "2026-11-07", eco), {}, "no double claim by moving the date back")
-	check(Daily.can_claim(s, "2026-11-01", eco), "far back counts as a fresh start")
-	eq(Daily.next_day(s, "2026-11-01", eco), 1, "from day 1")
+	check(not Daily.can_claim(s, "2026-11-01", eco), "far back: still wait (no claim by winding the date)")
+	check(Daily.can_claim(s, "2026-11-09", eco), "the real next day still claims")
+	eq(Daily.next_day(s, "2026-11-09", eco), 2, "and carries the streak on")
