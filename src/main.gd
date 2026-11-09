@@ -500,7 +500,7 @@ func _toggle_pause() -> void:
 	row.add_theme_constant_override("separation", 20)
 	col.add_child(row)
 	var restart := UiKit.icon_button("retry", "yellow", 130)
-	restart.pressed.connect(func(): _start_level(current_level, {}))
+	restart.pressed.connect(func(): _start_level(current_level, _boosters))  # same attempt: keep the boosters
 	row.add_child(restart)
 	var quit := UiKit.icon_button("home", "blue", 130)
 	quit.pressed.connect(func(): _show_lobby())

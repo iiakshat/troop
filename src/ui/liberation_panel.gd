@@ -22,13 +22,12 @@ func _ready() -> void:
 	top.add_child(icon_safe(first_icon(["crown", "boss_crown", "star_icon"]), 120))
 	var num_label := UiKit.label(str(district), 120, UiKit.YELLOW, 18)
 	top.add_child(num_label)
-	var grid := GridContainer.new()
-	grid.columns = 3
+	var grid := HFlowContainer.new()  # 3 + 2, the short row centred
+	grid.alignment = FlowContainer.ALIGNMENT_CENTER
+	grid.custom_minimum_size = Vector2(580, 0)
 	grid.add_theme_constant_override("h_separation", 12)
 	grid.add_theme_constant_override("v_separation", 12)
-	var wrap := CenterContainer.new()
-	wrap.add_child(grid)
-	col.add_child(wrap)
+	col.add_child(grid)
 	var ids := City.buildings_in(district, Game.economy)
 	var i := 0
 	for b in ids:
