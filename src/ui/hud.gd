@@ -21,6 +21,7 @@ var _hint_t := 0.0
 var _hint_mode := ""
 var _hint_target: Control = null
 var _pulse: Dictionary = {}
+var tutor := false   # a Tutorial runs this level: it owns the hints in Tutorial.OWNS
 
 
 func _ready() -> void:
@@ -170,7 +171,7 @@ func set_charges(charges: Dictionary) -> void:
 ## A one-time icon cue. `ev` = {"id", "icon", "power"?}.
 func show_hint(ev: Dictionary) -> void:
 	var id := String(ev.get("id", ev.get("icon", "")))
-	if id == "" or Game.hint_seen(id):
+	if id == "" or Game.hint_seen(id) or (tutor and Tutorial.OWNS.has(id)):
 		return
 	Game.mark_hint(id)
 	var icon_name := String(ev.get("icon", "hand"))

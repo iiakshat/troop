@@ -50,6 +50,7 @@ var district := 1
 var demo := false
 var paused := false
 var input_enabled := true      # false under --autoplay so stray clicks can't interfere
+var hold := false              # a first-run tutorial (Tutorial) freezes the street until the player acts
 
 var _crowds: Dictionary = {}
 var _allies: Array = []        # {kind, pos, slot, phase, flash, fire_t}
@@ -300,6 +301,9 @@ func _process(delta: float) -> void:
 
 func _update_time_scale(delta: float) -> void:
 	var target := 1.0
+	if hold:
+		_time_scale = 0.0
+		return
 	if _slowmo > 0.0:
 		# Boss death: half a second of slow motion (the sim stays exact, just slower).
 		_slowmo -= delta

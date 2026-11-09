@@ -17,9 +17,11 @@ extends Node
 ##   reset=1 (fresh save)  coins=N (and unlock every level)  save=path (play on a copy of that
 ##   JSON save, never written)  lobby=1 (menu even for a new player)  ads=1 (show the ad
 ##   popup even under autoplay)
+##   tutor=auto (the first-run tutorials run even under autoplay and act themselves out
+##   after 1.6 s, for screenshots)
 ##   panel=station|style|settings|daily|missions|spin|codex|booster|chest|welcome|revive|
 ##         liberation|map   (open that screen over the map; map = the map alone)
-## Autoplay skips boosters, the revive offer and the ad popups.
+## Autoplay skips boosters, the revive offer, the ad popups and the tutorials.
 
 var world: World
 var fx: Fx
@@ -328,6 +330,11 @@ func _start_level(n: int, boosters: Dictionary = {}) -> void:
 	var improved := Game.take_improvements()
 	if not _autoplay():
 		RankToast.show_upgrades(hud, improved)  # v1.1: what the last Station visit improved
+	if not _autoplay() or String(_args.get("tutor", "")) == "auto":
+		# v1.1: first-run freeze-frame tutorials, each once ever. Never under autoplay, except
+		# tutor=auto (debug: each step acts itself out, for screenshots).
+		hud.tutor = true
+		view.add_child(Tutorial.new().setup(view, hud, String(_args.get("tutor", "")) == "auto"))
 	if _autoplay():
 		# lanes=… wins; otherwise the level's stored winning route (tune.gd), then a fixed default.
 		var lanes: Array = []
