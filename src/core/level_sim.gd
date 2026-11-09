@@ -801,7 +801,7 @@ func _hurt(n: int, cause: String, source_id: int = 0, announce: bool = true) -> 
 	if not squad.hero_alive() and state == "run":
 		state = "lost"
 		lose_cause = cause
-		out.append({"type": "lost", "cause": cause})
+		out.append({"type": "lost", "cause": cause, "source": source_id})
 	return lost
 
 
