@@ -1,5 +1,5 @@
 {
-	"_rows": 78,
+	"_rows": 90,
 	"die": {
 		"frames": 20,
 		"length": 2.5,
@@ -35,5 +35,12 @@
 		"length": 0.541666666666667,
 		"loop": true,
 		"row": 32
+	},
+	"throw": {
+		"frames": 12,
+		"length": 0.6,
+		"loop": false,
+		"release": 0.324,
+		"row": 78
 	}
 }

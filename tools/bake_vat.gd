@@ -17,6 +17,8 @@ const SRC := "res://art_src/characters/"
 var _cfg: Dictionary
 var _done := false
 var _lengths := {}
+var _idle_base: Array = []   # local [pos, rot, scale] of every bone at Idle frame 0
+var _throw_ref := {}         # per-role measurements of the idle pose for the throw
 
 
 func _initialize() -> void:
@@ -48,6 +50,10 @@ func _run() -> void:
 		print("baked %-10s verts=%d tris=%d rows=%d  %.1fs" % [role, info["verts"], info["tris"], info["rows"], (Time.get_ticks_msec() - t0) / 1000.0])
 	for name in _lengths:
 		clip_table[name]["length"] = _lengths[name]
+	for c in _cfg["clips"]:
+		if String(c.get("proc", "")) == "throw":
+			# seconds into the clip when the knife leaves the hand (game code times the throw on it)
+			clip_table[c["name"]]["release"] = THROW_RELEASE * float(_lengths.get(c["name"], 0.0))
 	var f := FileAccess.open(OUT + "clips.json", FileAccess.WRITE)
 	f.store_string(JSON.stringify(clip_table, "\t"))
 	quit()
@@ -135,6 +141,8 @@ func _bake_role(role: String, recipe: Dictionary) -> Dictionary:
 
 	# --- reference frame from the idle pose: height, feet, facing
 	_pose(ap, "Idle", 0.0)
+	_idle_base = _capture(sk)
+	_throw_ref = {}
 	var rest: PackedVector3Array = _skin_all(sk, verts, meshes)
 	var lo := Vector3(INF, INF, INF)
 	var hi := Vector3(-INF, -INF, -INF)
@@ -174,14 +182,19 @@ func _bake_role(role: String, recipe: Dictionary) -> Dictionary:
 	var flip := 0.0  # 1 or -1 once the winding is known
 	var first_frame := PackedVector3Array()
 	for c in _cfg["clips"]:
-		var anim_name := _find_anim(ap, String(c["src"]))
-		var length := ap.get_animation(anim_name).length
+		var proc := String(c.get("proc", ""))
+		var length := float(c.get("length", 1.0))
+		if proc == "":
+			length = ap.get_animation(_find_anim(ap, String(c["src"]))).length
 		_lengths[c["name"]] = length
 		var frames := int(c["frames"])
 		var row0 := int(table[c["name"]]["row"])
 		for f in frames:
 			var t := length * f / frames if bool(c["loop"]) else length * f / maxf(frames - 1, 1)
-			_pose(ap, String(c["src"]), t)
+			if proc == "":
+				_pose(ap, String(c["src"]), t)
+			else:
+				_proc_pose(ap, sk, proc, t / maxf(length, 0.0001))
 			var ps := _skin_all(sk, verts, meshes)
 			var pm := PackedVector3Array()
 			pm.resize(n)
@@ -315,6 +328,252 @@ func _skin_all(sk: Skeleton3D, verts: Array, meshes: Array) -> PackedVector3Arra
 			p += ((list[binds[k]] as Transform3D) * (vd["v"] as Vector3)) * ws[k]
 		out[vi] = p
 	return out
+
+
+# ---------------------------------------------------------------- procedural clips
+
+## Clips the Quaternius rig does not have. Each frame starts from Idle frame 0 and the
+## bake poses the skeleton itself. The overhand knife throw: torso twist and lean, a
+## weight shift, two-bone IK for both arms and both legs (the left foot steps), and a
+## wrist snap. Keys are in the body frame [right, forward, up]: hands in arm lengths from
+## their shoulder, body and step in leg lengths, elbows / wrist as directions, angles in
+## degrees (twist > 0 = right shoulder back, lean > 0 = forward). "I" = the idle value.
+const THROW_RELEASE := 0.54  # fraction of the clip where the knife leaves the hand
+const THROW_KEYS := [
+	{"t": 0.0, "twist": 0.0, "lean": 0.0, "body": [0.0, 0.0], "step": [0.0, 0.0],
+		"rh": "I", "re": "I", "rw": "I", "lh": "I", "le": "I"},
+	# wind-up: knife cocked behind the head, elbow up and out, front arm points at the target
+	{"t": 0.3, "twist": 30.0, "lean": -6.0, "body": [-0.03, 0.0], "step": [0.08, 0.1],
+		"rh": [0.15, -0.42, 0.45], "re": [1.0, 0.2, 0.3], "rw": [0.0, -0.6, 0.8],
+		"lh": [-0.2, 0.6, 0.35], "le": [-1.0, 0.0, -0.3]},
+	{"t": 0.38, "twist": 34.0, "lean": -8.0, "body": [-0.04, 0.0], "step": [0.14, 0.1],
+		"rh": [0.15, -0.48, 0.42], "re": [1.0, 0.1, 0.3], "rw": [0.0, -0.7, 0.7],
+		"lh": [-0.2, 0.62, 0.38], "le": [-1.0, 0.0, -0.3]},
+	# elbow leads, hand comes over the top
+	{"t": 0.46, "twist": 8.0, "lean": 4.0, "body": [0.03, -0.01], "step": [0.24, 0.04],
+		"rh": [0.18, 0.2, 0.72], "re": [0.7, 0.6, 0.2], "rw": [0.0, -0.1, 1.0],
+		"lh": [-0.3, 0.4, 0.1], "le": [-1.0, -0.3, -0.3]},
+	# release: arm long and forward, front foot planted, front arm pulled in
+	{"t": THROW_RELEASE, "twist": -22.0, "lean": 14.0, "body": [0.08, -0.04], "step": [0.28, 0.0],
+		"rh": [0.08, 0.82, 0.32], "re": [1.0, 0.0, -0.4], "rw": [0.0, 1.0, 0.1],
+		"lh": [-0.38, 0.0, -0.4], "le": [-0.6, -0.8, 0.0]},
+	# follow-through: hand finishes low across the body
+	{"t": 0.72, "twist": -34.0, "lean": 22.0, "body": [0.1, -0.05], "step": [0.28, 0.0],
+		"rh": [-0.28, 0.55, -0.45], "re": [1.0, 0.3, -0.1], "rw": [-0.3, 0.6, -0.7],
+		"lh": [-0.35, -0.15, -0.55], "le": [-0.6, -0.8, 0.0]},
+	{"t": 1.0, "twist": 0.0, "lean": 0.0, "body": [0.0, 0.0], "step": [0.0, 0.0],
+		"rh": "I", "re": "I", "rw": "I", "lh": "I", "le": "I"},
+]
+
+
+func _proc_pose(_ap: AnimationPlayer, sk: Skeleton3D, kind: String, u: float) -> void:
+	_restore(sk, _idle_base)
+	match kind:
+		"throw":
+			_throw_pose(sk, u)
+		_:
+			push_error("unknown procedural clip " + kind)
+	sk.force_update_all_bone_transforms()
+
+
+func _capture(sk: Skeleton3D) -> Array:
+	var out: Array = []
+	for i in sk.get_bone_count():
+		out.append([sk.get_bone_pose_position(i), sk.get_bone_pose_rotation(i), sk.get_bone_pose_scale(i)])
+	return out
+
+
+func _restore(sk: Skeleton3D, base: Array) -> void:
+	for i in mini(base.size(), sk.get_bone_count()):
+		sk.set_bone_pose_position(i, base[i][0])
+		sk.set_bone_pose_rotation(i, base[i][1])
+		sk.set_bone_pose_scale(i, base[i][2])
+	sk.force_update_all_bone_transforms()
+
+
+func _gp(sk: Skeleton3D, bone: String) -> Vector3:
+	var i := sk.find_bone(bone)
+	return sk.get_bone_global_pose(i).origin if i >= 0 else Vector3.ZERO
+
+
+func _has(sk: Skeleton3D, bones: Array) -> bool:
+	for b in bones:
+		if sk.find_bone(String(b)) < 0:
+			return false
+	return true
+
+
+## Skeleton-space vector -> [right, forward, up] coordinates, and back.
+func _to_body(v: Vector3, r: Dictionary) -> Vector3:
+	return Vector3(v.dot(r["R"]), v.dot(r["F"]), v.dot(r["U"]))
+
+
+func _from_body(v: Vector3, r: Dictionary) -> Vector3:
+	return r["R"] * v.x + r["F"] * v.y + r["U"] * v.z
+
+
+## Idle measurements (skeleton space) the throw keys are relative to.
+func _throw_measure(sk: Skeleton3D) -> Dictionary:
+	var r := {}
+	var rt := _gp(sk, "UpperArm.R") - _gp(sk, "UpperArm.L")
+	r["R"] = rt.normalized()
+	var up := _gp(sk, "Head") - _gp(sk, "Hips")
+	up = (up - r["R"] * up.dot(r["R"])).normalized()
+	r["U"] = up
+	r["F"] = up.cross(r["R"])
+	for s in ["R", "L"]:
+		var sh := _gp(sk, "UpperArm." + s)
+		var el := _gp(sk, "LowerArm." + s)
+		var ha := _gp(sk, "Fist." + s)
+		var arm := sh.distance_to(el) + el.distance_to(ha)
+		r["arm" + s] = arm
+		var k := String(s).to_lower()
+		r[k + "h"] = _to_body((ha - sh) / arm, r)
+		var line := (ha - sh).normalized()
+		var off := (el - sh) - line * (el - sh).dot(line)
+		r[k + "e"] = _to_body(off.normalized(), r) if off.length() > arm * 0.02 else Vector3(0.6 if s == "R" else -0.6, -0.8, 0.0)
+		r[k + "w"] = _to_body((_gp(sk, "Fist.%s_end" % s) - ha).normalized(), r)
+		r["ankle" + s] = _gp(sk, "LowerLeg.%s_end" % s)
+		var fb := sk.find_bone("Foot." + s)
+		r["foot" + s] = sk.get_bone_global_pose(fb) if fb >= 0 else Transform3D()
+	r["leg"] = _gp(sk, "UpperLeg.L").distance_to(_gp(sk, "LowerLeg.L")) + _gp(sk, "LowerLeg.L").distance_to(_gp(sk, "LowerLeg.L_end"))
+	if OS.get_cmdline_user_args().has("verbose=1"):
+		print("throw ref: ", r)
+	return r
+
+
+func _throw_pose(sk: Skeleton3D, u: float) -> void:
+	if not _has(sk, ["UpperArm.R", "LowerArm.R", "Fist.R", "Fist.R_end", "UpperArm.L", "LowerArm.L", "Fist.L", "Fist.L_end", "Head", "Hips"]):
+		return  # unknown rig: hold the idle pose rather than break
+	if _throw_ref.is_empty():
+		_throw_ref = _throw_measure(sk)
+	var r := _throw_ref
+	var k := _sample(THROW_KEYS, u, r)
+	var leg := float(r["leg"])
+	# weight shift, then lean and twist up the spine; the head counters to keep its aim
+	var body := sk.find_bone("Body")
+	if body >= 0:
+		var g := sk.get_bone_global_pose(body)
+		var bv: Vector2 = k["body"]
+		g.origin += _from_body(Vector3(0.0, bv.x, bv.y) * leg, r)
+		sk.set_bone_global_pose(body, g)
+	var lean_axis: Vector3 = (r["U"] as Vector3).cross(r["F"])
+	var twist_axis: Vector3 = -(r["U"] as Vector3)
+	var tw := float(k["twist"])
+	var ln := float(k["lean"])
+	_turn(sk, "Hips", lean_axis, ln * 0.5)
+	_turn(sk, "Hips", twist_axis, tw * 0.25)
+	_turn(sk, "Abdomen", twist_axis, tw * 0.35)
+	_turn(sk, "Abdomen", lean_axis, ln * 0.25)
+	_turn(sk, "Torso", twist_axis, tw * 0.4)
+	_turn(sk, "Torso", lean_axis, ln * 0.25)
+	_turn(sk, "Neck", twist_axis, -tw * 0.7)
+	_turn(sk, "Neck", lean_axis, -ln * 0.6)
+	# legs: the right foot stays planted, the left one steps forward
+	if _has(sk, ["UpperLeg.L", "LowerLeg.L", "LowerLeg.L_end", "UpperLeg.R", "LowerLeg.R", "LowerLeg.R_end"]):
+		var sv: Vector2 = k["step"]
+		var step := _from_body(Vector3(0.0, sv.x, sv.y) * leg, r)
+		_ik2(sk, "UpperLeg.R", "LowerLeg.R", "LowerLeg.R_end", r["ankleR"], r["F"])
+		_ik2(sk, "UpperLeg.L", "LowerLeg.L", "LowerLeg.L_end", r["ankleL"] + step, r["F"])
+		var fb := sk.find_bone("Foot.L")
+		if fb >= 0:
+			var fx: Transform3D = r["footL"]
+			fx.origin += step
+			sk.set_bone_global_pose(fb, fx)
+	# arms
+	for s in ["R", "L"]:
+		var c := String(s).to_lower()
+		var sh := _gp(sk, "UpperArm." + s)
+		var target := sh + _from_body(k[c + "h"], r) * float(r["arm" + s])
+		_ik2(sk, "UpperArm." + s, "LowerArm." + s, "Fist." + s, target, _from_body(k[c + "e"], r))
+	sk.force_update_all_bone_transforms()
+	_aim(sk, sk.find_bone("Fist.R"), _gp(sk, "Fist.R_end") - _gp(sk, "Fist.R"), _from_body(k["rw"], r))
+
+
+## Rotates bone `name` about its own origin by `deg` around a skeleton-space axis.
+func _turn(sk: Skeleton3D, name: String, axis: Vector3, deg: float) -> void:
+	var i := sk.find_bone(name)
+	if i < 0 or is_zero_approx(deg):
+		return
+	sk.force_update_all_bone_transforms()
+	var g := sk.get_bone_global_pose(i)
+	g.basis = Basis(axis.normalized(), deg_to_rad(deg)) * g.basis
+	sk.set_bone_global_pose(i, g)
+
+
+## Turns bone `i` so its direction `from` points along `to` (skeleton space).
+func _aim(sk: Skeleton3D, i: int, from: Vector3, to: Vector3) -> void:
+	if i < 0 or from.length_squared() < 1e-14 or to.length_squared() < 1e-14:
+		return
+	var g := sk.get_bone_global_pose(i)
+	g.basis = Basis(Quaternion(from.normalized(), to.normalized())) * g.basis
+	sk.set_bone_global_pose(i, g)
+	sk.force_update_all_bone_transforms()
+
+
+## Two-bone IK: upper `a`, lower `b` and end joint `c` reach `target`; the middle joint
+## bends towards `pole` (a direction).
+func _ik2(sk: Skeleton3D, a_name: String, b_name: String, c_name: String, target: Vector3, pole: Vector3) -> void:
+	var a := sk.find_bone(a_name)
+	var b := sk.find_bone(b_name)
+	sk.force_update_all_bone_transforms()
+	var pa := _gp(sk, a_name)
+	var pb := _gp(sk, b_name)
+	var pc := _gp(sk, c_name)
+	var l1 := pa.distance_to(pb)
+	var l2 := pb.distance_to(pc)
+	var to := target - pa
+	var d := clampf(to.length(), absf(l1 - l2) + (l1 + l2) * 0.02, (l1 + l2) * 0.999)
+	var dir := to.normalized()
+	var pp := pole - dir * pole.dot(dir)
+	if pp.length_squared() < 1e-12:
+		pp = (pb - pa) - dir * (pb - pa).dot(dir)
+	pp = pp.normalized()
+	var x := (l1 * l1 - l2 * l2 + d * d) / (2.0 * d)
+	var h := sqrt(maxf(l1 * l1 - x * x, 0.0))
+	var elbow := pa + dir * x + pp * h
+	_aim(sk, a, pb - pa, elbow - pa)
+	pb = _gp(sk, b_name)
+	pc = _gp(sk, c_name)
+	_aim(sk, b, pc - pb, pa + dir * d - pb)
+
+
+## Hermite spline through the keys (Catmull-Rom tangents, at rest at both ends).
+func _sample(keys: Array, u: float, ref: Dictionary) -> Dictionary:
+	var n := keys.size()
+	var i := 0
+	while i < n - 2 and u > float(keys[i + 1]["t"]):
+		i += 1
+	var t0 := float(keys[i]["t"])
+	var t1 := float(keys[i + 1]["t"])
+	var s := clampf((u - t0) / maxf(t1 - t0, 0.000001), 0.0, 1.0)
+	var h00 := 2.0 * s * s * s - 3.0 * s * s + 1.0
+	var h10 := s * s * s - 2.0 * s * s + s
+	var h01 := -2.0 * s * s * s + 3.0 * s * s
+	var h11 := s * s * s - s * s
+	var out := {}
+	for f in keys[0]:
+		if f == "t":
+			continue
+		var p0: Variant = _kv(keys[i], f, ref)
+		var p1: Variant = _kv(keys[i + 1], f, ref)
+		var m0: Variant = p0 * 0.0
+		var m1: Variant = p0 * 0.0
+		if i > 0:
+			m0 = (p1 - _kv(keys[i - 1], f, ref)) * ((t1 - t0) / (t1 - float(keys[i - 1]["t"])))
+		if i + 2 < n:
+			m1 = (_kv(keys[i + 2], f, ref) - p0) * ((t1 - t0) / (float(keys[i + 2]["t"]) - t0))
+		out[f] = p0 * h00 + m0 * h10 + p1 * h01 + m1 * h11
+	return out
+
+
+func _kv(key: Dictionary, f: String, ref: Dictionary) -> Variant:
+	var v: Variant = key[f]
+	if v is String:
+		return ref[f]
+	if v is Array:
+		return Vector2(v[0], v[1]) if v.size() == 2 else Vector3(v[0], v[1], v[2])
+	return float(v)
 
 
 # ---------------------------------------------------------------- weapons

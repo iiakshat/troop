@@ -1,5 +1,5 @@
 {
-  "_note": "Role recipes for tools/bake_vat.gd. base = FBX in art_src/characters. colors = material name -> hex (unlisted keep the source colour). weapon / offhand = simple meshes attached to the hand bones. height = metres after baking. Re-run the bake after any change.",
+  "_note": "Role recipes for tools/bake_vat.gd. base = FBX in art_src/characters. colors = material name -> hex (unlisted keep the source colour). weapon / offhand = simple meshes attached to the hand bones. height = metres after baking. A clip with proc (no src) is posed by the bake tool itself from Idle (throw = overhand knife throw), length in seconds. Re-run the bake after any change.",
   "height": 1.85,
   "clips": [
     { "name": "run",   "src": "Walk",            "frames": 16, "loop": true },
@@ -7,7 +7,8 @@
     { "name": "shoot", "src": "Shoot_OneHanded", "frames": 8,  "loop": true },
     { "name": "punch", "src": "Punch",           "frames": 10, "loop": false },
     { "name": "hit",   "src": "RecieveHit",      "frames": 8,  "loop": false },
-    { "name": "die",   "src": "Defeat",          "frames": 20, "loop": false }
+    { "name": "die",   "src": "Defeat",          "frames": 20, "loop": false },
+    { "name": "throw", "proc": "throw", "length": 0.6, "frames": 12, "loop": false }
   ],
   "roles": {
     "hero":      { "base": "Casual2_Male", "weapon": "knife",
