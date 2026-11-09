@@ -12,6 +12,7 @@ extends Node
 ##   boosters=headstart,bomb   tokens to take into a level= run (free, for tests)
 ##   stop_at=win|loss|revive (screenshot 3 s into that screen, then quit)
 ##   frames=N screenshot=path shots=100,200 out=prefix  report=1 (print the result)
+##   chain=N (autoplay: after a win go result -> map -> next level, until level N)
 ##   revive=1 (offer the revive under autoplay too; revive=auto also takes it after 1 s)
 ##   reset=1 (fresh save)  coins=N (and unlock every level)  save=path (play on a copy of that
 ##   JSON save, never written)  lobby=1 (menu even for a new player)  ads=1 (show the ad
@@ -129,6 +130,12 @@ func _show_lobby(advance := 0, liberated := 0, then_level := 0) -> void:
 		_debug_panel(String(_args["panel"]))
 		return
 	var steps: Array = []
+	if _autoplay():
+		# Autoplay chain (chain=N): no popups, straight on to the next level.
+		_boot_popups_done = true
+		if liberated > 0 and _args.has("report"):
+			print("LIBERATED ", liberated)
+		liberated = 0
 	if liberated > 0:
 		steps.append(func(next: Callable): _celebrate(liberated, next))
 	if not _boot_popups_done:
@@ -365,6 +372,8 @@ func _on_finished(r: Dictionary) -> void:
 		_stop_at("win")
 		if _args.has("report"):
 			print("WIN ", _last_win)
+		if _autoplay() and current_level < int(_args.get("chain", "0")):
+			_after(2.0, func(): _leave_result(true))
 	elif not view.sim.revived and not _revive_offered and (not _autoplay() or _args.has("revive")):
 		_offer_revive(r)
 		return
