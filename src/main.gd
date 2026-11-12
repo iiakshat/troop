@@ -46,6 +46,8 @@ var _charges := {}
 var _revive_offered := false
 var _last_win := {}          # Game.win_level() result of the level just won ({} after a loss)
 var _boot_popups_done := false
+var _boot: BootSequence      # the brand boot screens while they run
+var _boot_held: Array = []   # their warmed resources, kept alive behind the age screen
 var _daily_shown := ""       # date the daily popup last opened by itself
 var _flow_busy := false      # a result -> map sequence is running (ignore double taps)
 var _back_armed := 0         # msec of the last Back on the bare map (twice in 2 s quits)
@@ -112,7 +114,8 @@ func _ready() -> void:
 	result.visible = false
 	if _boot_screens():
 		# Brand (owner 2026-11-12): axnex intro -> key-art loading screen; the flow builds once its loads are in.
-		add_child(BootSequence.new(BootSequence.is_first_launch(), _begin_flow))
+		_boot = BootSequence.new(BootSequence.is_first_launch(), _begin_flow)
+		add_child(_boot)
 	else:
 		_begin_flow()
 
@@ -128,6 +131,10 @@ func _boot_screens() -> bool:
 func _begin_flow() -> void:
 	if AgeScreen.needed(_args):
 		# v2 §8: the neutral age screen comes first, once, before any ad or analytics SDK starts.
+		# The boot's warmed crowds (or map) stay alive behind it until the first screen holds
+		# its own; dropped, they would leave the cache and level 1 would load them all again.
+		if is_instance_valid(_boot):
+			_boot_held = _boot.held
 		var age := AgeScreen.new()
 		age.done.connect(_begin, CONNECT_ONE_SHOT)
 		ui.add_child(age)
@@ -144,6 +151,7 @@ func _begin() -> void:
 		_start_level(1)  # brand-new player: straight into the action, no menu
 	else:
 		_show_lobby()
+	_boot_held = []  # the first screen holds its own references now
 
 
 ## True for runs started with a debug arg that would otherwise change the real save.

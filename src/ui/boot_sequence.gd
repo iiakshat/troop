@@ -22,6 +22,10 @@ var stage := "intro"   # intro | loading | fade | done
 var first_launch := true
 var write_seen := true  # false in tests: never write the save
 var shot := 0
+## The warmed resources, handed over when the flow starts: whoever shows a screen before the
+## first real one (the age screen) keeps them, or they drop out of the cache and that screen
+## reads and uploads them all again.
+var held: Array = []
 var _flow: Callable
 var _warm := PackedStringArray()
 var _built := false
@@ -127,6 +131,7 @@ func advance(dt: float) -> void:
 			ls.advance(dt)
 			if not _built and ls.loaded():
 				_built = true
+				held = ls.held()
 				if _flow.is_valid():
 					_flow.call()
 				ls.mark_built()

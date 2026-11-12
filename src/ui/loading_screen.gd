@@ -4,7 +4,10 @@ extends Control
 ## full-screen key-art shot, the charge or the standoff, alternating per launch (`pick_shot`,
 ## a tiny user:// file, never the save). It covers any screen with its focal point kept,
 ## pushes in slowly (PUSH over PUSH_TIME) and a soft red and blue siren light sweeps across
-## it. Over a bottom scrim: one icon-only tip card (pictures and arrows, no words) and the
+## it. The shot lights up out of the intro's navy (ART_IN, with the push: one camera move).
+## A shot with a `keep` share never loses more of its width than that, so a tall phone (9:20)
+## still shows the whole squad: it hangs from the top and its bottom melts into the navy
+## under the scrim. Over a bottom scrim: one icon-only tip card (pictures and arrows, no words) and the
 ## siren light-bar loading bar.
 ##
 ## The bar follows real loading. The first screen's heavy resources load on threads (`warm`
@@ -12,14 +15,18 @@ extends Control
 ## opaque screen (`mark_built`) and the rest fills. The bar moves toward that real value at
 ## most 1/FILL_TIME per second and never runs ahead of it. Driven by advance().
 
+## keep: the share of the shot's width still on screen at the end of the push-in (none = plain
+## cover). The charge's five figures span almost its whole width (heads at 6% and 95%).
 const SHOTS := [
-	{"path": "res://assets/brand/keyart_charge.jpg", "focus": Vector2(0.5, 0.45)},
+	{"path": "res://assets/brand/keyart_charge.jpg", "focus": Vector2(0.5, 0.45), "keep": 0.92},
 	{"path": "res://assets/brand/keyart_standoff.jpg", "focus": Vector2(0.5, 0.47)},
 ]
 const SHOT_FILE := "user://boot_art.cfg"
 const SHOT_FILE_DEBUG := "user://boot_art_debug.cfg"  # debug-save runs keep the player's turn
 const PUSH := 0.04          # the push-in: the shot grows this much over PUSH_TIME
 const PUSH_TIME := 3.0
+const ART_IN := 0.4         # the shot fades up from the navy over this (eased), as the push starts
+const ART_FADE := 0.1       # a shot shorter than the screen melts into the navy over this share of the height
 const WARM_SHARE := 0.85    # of the bar: the threaded loads (the rest is the build)
 const FILL_TIME := 0.9      # seconds the bar takes at least from empty to full
 const SWEEP_PERIOD := 2.8   # one pass of the siren lights
@@ -52,6 +59,8 @@ var _warm := 0.0
 var _built := false
 var _chirped := false
 var _art: Texture2D
+var _art_t := 0.0     # seconds the shot has been up (it may arrive after the screen)
+var _art_failed := false
 var _paths := PackedStringArray()
 var _done := {}       # path -> true once loaded, failed or missing
 var _held: Array = [] # loaded resources, kept until the first screen holds its own
@@ -67,7 +76,7 @@ func _init(tip_index := -1, shot_index := 0, warm := PackedStringArray()) -> voi
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	tip = tip_index if tip_index >= 0 else int(Time.get_unix_time_from_system()) % TIPS.size()
 	shot = clampi(shot_index, 0, SHOTS.size() - 1)
-	_art = art_texture(shot)
+	_poll_art()
 	for p in warm:
 		_paths.append(p)
 		if not ResourceLoader.exists(p) or ResourceLoader.load_threaded_request(p) != OK:
@@ -94,7 +103,7 @@ func _layer() -> Control:
 
 
 ## The shot's texture: taken from the threaded request BootSequence started during the intro
-## when there is one, else loaded now.
+## when there is one, else loaded now (blocking: the screen itself uses _poll_art).
 static func art_texture(i: int) -> Texture2D:
 	var path := String(SHOTS[i]["path"])
 	if ResourceLoader.load_threaded_get_status(path) != ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
@@ -123,14 +132,49 @@ static func pick_shot(path := "") -> int:
 
 ## Where a tex_size image is drawn to cover view: scaled to cover, then by zoom about the
 ## focal point (shares of the image), placed so the focal point sits as near the middle as
-## the image's edges allow.
-static func cover_rect(tex_size: Vector2, view: Vector2, focus: Vector2, zoom := 1.0) -> Rect2:
-	var k := maxf(view.x / tex_size.x, view.y / tex_size.y) * zoom
+## the image's edges allow. keep > 0: at most (1 - keep) of the width is cut even at the full
+## push (always covering the width); a shot that ends up shorter than the view hangs from the
+## top (the caller fills below it).
+static func cover_rect(tex_size: Vector2, view: Vector2, focus: Vector2, zoom := 1.0, keep := 0.0) -> Rect2:
+	var k := maxf(view.x / tex_size.x, view.y / tex_size.y)
+	if keep > 0.0:
+		k = minf(k, maxf(view.x / tex_size.x, view.x / (tex_size.x * keep * (1.0 + PUSH))))
+	k *= zoom
 	var s := tex_size * k
 	var pos := view / 2.0 - focus * s
 	pos.x = clampf(pos.x, view.x - s.x, 0.0)
-	pos.y = clampf(pos.y, view.y - s.y, 0.0)
+	pos.y = clampf(pos.y, view.y - s.y, 0.0) if s.y >= view.y else 0.0
 	return Rect2(pos, s)
+
+
+## The shot's rect on `view` at the push-in after `secs` of it being up.
+func shot_rect(view: Vector2, secs: float) -> Rect2:
+	var x := clampf(secs / PUSH_TIME, 0.0, 1.0)
+	var zoom := 1.0 + PUSH * (1.0 - pow(1.0 - x, 2.0))  # eases out: the push settles
+	var s: Dictionary = SHOTS[shot]
+	var tex := _art.get_size() if _art else Vector2(1152, 2048)
+	return cover_rect(tex, view, s["focus"], zoom, float(s.get("keep", 0.0)))
+
+
+## The shot's opacity over the navy: it lights up from 0 as it arrives, never cuts in.
+func art_alpha() -> float:
+	return smoothstep(0.0, ART_IN, _art_t) if _art else 0.0
+
+
+func art_ready() -> bool:
+	return _art != null
+
+
+## Takes the shot once its threaded load is in: while it is still decoding the navy shows and
+## no frame waits on it (a tap on the intro's first frame must not freeze the screen).
+func _poll_art() -> void:
+	if _art != null or _art_failed:
+		return
+	var path := String(SHOTS[shot]["path"])
+	if ResourceLoader.load_threaded_get_status(path) == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
+		return
+	_art = art_texture(shot)
+	_art_failed = _art == null
 
 
 func progress() -> float:
@@ -159,8 +203,15 @@ func held_count() -> int:
 	return _held.size()
 
 
+func held() -> Array:
+	return _held
+
+
 func advance(dt: float) -> void:
 	t += dt
+	_poll_art()
+	if _art:
+		_art_t += dt
 	_warm = _poll_warm()
 	_shown = minf(real_progress(), _shown + dt / FILL_TIME)
 	if not _chirped and t >= 0.2:
@@ -204,9 +255,15 @@ func _draw_art(ci: CanvasItem) -> void:
 	ci.draw_rect(Rect2(Vector2.ZERO, view), BootSequence.BG)
 	if _art == null:
 		return
-	var x := clampf(t / PUSH_TIME, 0.0, 1.0)
-	var zoom := 1.0 + PUSH * (1.0 - pow(1.0 - x, 2.0))  # eases out: the push settles
-	ci.draw_texture_rect(_art, cover_rect(_art.get_size(), view, SHOTS[shot]["focus"], zoom), false)
+	var r := shot_rect(view, _art_t)
+	ci.draw_texture_rect(_art, r, false, Color(1, 1, 1, art_alpha()))
+	if r.end.y < view.y:
+		# a tall phone: the shot hangs from the top and its bottom melts into the navy (under the scrim)
+		var bg := BootSequence.BG
+		var y0 := r.end.y - view.y * ART_FADE
+		ci.draw_polygon(PackedVector2Array([Vector2(0, y0), Vector2(view.x, y0), Vector2(view.x, r.end.y), Vector2(0, r.end.y)]),
+			PackedColorArray([Color(bg, 0.0), Color(bg, 0.0), bg, bg]))
+		ci.draw_rect(Rect2(0, r.end.y - 1.0, view.x, view.y - r.end.y + 1.0), bg)
 
 
 ## Two soft beacon glows, red and blue, crossing the shot in opposite directions (additive,

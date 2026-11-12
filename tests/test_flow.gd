@@ -169,6 +169,27 @@ func test_loading_warms_real_files_on_threads() -> void:
 	ls.free()
 
 
+
+## The warmed resources are handed to the flow when it starts, so a screen shown before the
+## first real one (the age screen on a fresh install) keeps them in the cache.
+func test_boot_hands_warmed_resources_to_the_flow() -> void:
+	var got := [-1]
+	var box := []  # lambdas capture locals by value: the sequence is reached through this
+	var seq := BootSequence.new(false, func(): got[0] = (box[0] as BootSequence).held.size(), 0,
+		PackedStringArray(["res://assets/icons/gloss/coin.png"]))
+	box.append(seq)
+	seq.write_seen = false
+	seq.tap()
+	var waited := 0
+	while got[0] < 0 and waited < 400:
+		OS.delay_msec(5)
+		seq.advance(0.005)
+		waited += 1
+	eq(got[0], 1, "the flow finds the warmed file held for it")
+	check(seq.held[0] is Texture2D, "the real resource, not a path")
+	seq.free()
+
+
 ## Shot 4 and shot 5 alternate per launch, kept in a tiny user:// file (never the save).
 func test_keyart_alternates_per_launch() -> void:
 	var path := "user://_test_boot_art.cfg"
@@ -204,6 +225,71 @@ func test_keyart_cover_keeps_focus() -> void:
 	var b := LoadingScreen.cover_rect(tex, Vector2(720, 1280), Vector2(0.5, 0.5), 1.0 + LoadingScreen.PUSH)
 	check(absf(b.size.x / a.size.x - (1.0 + LoadingScreen.PUSH)) < 0.001, "the push-in grows the shot by PUSH")
 	check((a.get_center() - b.get_center()).length() < 0.5, "the push-in grows about the focal point")
+
+
+
+## The shot lights up out of the intro's navy (eased, with the push), never a one-frame cut
+## to full brightness; the push and the fade start together when the shot is up.
+func test_keyart_fades_up_from_the_navy() -> void:
+	var ls := LoadingScreen.new(0, 0, PackedStringArray())
+	check(ls.art_ready(), "no threaded request: the shot loads at once")
+	eq(ls.art_alpha(), 0.0, "the first frame is the navy")
+	ls.advance(1.0 / 60.0)
+	check(ls.art_alpha() < 0.05, "one frame in, the shot is barely lit (got %.3f)" % ls.art_alpha())
+	var last := ls.art_alpha()
+	var smooth := true
+	for i in int(LoadingScreen.ART_IN * 60.0) + 2:
+		ls.advance(1.0 / 60.0)
+		smooth = smooth and ls.art_alpha() >= last and ls.art_alpha() - last < 0.12
+		last = ls.art_alpha()
+	check(smooth, "it brightens a little each frame")
+	near(ls.art_alpha(), 1.0, "fully lit after ART_IN")
+	var r0 := ls.shot_rect(Vector2(540, 960), 0.0)
+	var r1 := ls.shot_rect(Vector2(540, 960), LoadingScreen.PUSH_TIME)
+	check(r1.size.x > r0.size.x * 1.03, "the push-in runs from the shot's first frame")
+	ls.free()
+
+
+## While the shot is still decoding on its thread the screen never waits for it (a tap on the
+## intro's first frame): the navy shows, and the shot is taken, then faded up, once it is in.
+func test_keyart_is_never_waited_for() -> void:
+	var path := String(LoadingScreen.SHOTS[1]["path"])
+	ResourceLoader.load_threaded_request(path)
+	var ls := LoadingScreen.new(0, 1, PackedStringArray())
+	var waited := 0
+	while not ls.art_ready() and waited < 400:
+		OS.delay_msec(5)
+		ls.advance(0.005)
+		waited += 1
+	check(ls.art_ready(), "the shot arrives")
+	check(ls.art_alpha() < 0.1, "and fades up from the moment it arrives (got %.3f)" % ls.art_alpha())
+	ls.free()
+
+
+## 9:20 phones (1080x2400, the most common size): the charge keeps its five figures (heads at 6%
+## and 95% of its width) instead of a cover fit cutting the flanking troops in half. It covers
+## the width, hangs from the top, and its bottom edge sits where the scrim is already dark.
+## On 9:16 it still covers the whole screen.
+func test_keyart_keeps_the_squad_on_tall_phones() -> void:
+	var tex := Vector2(1152, 2048)
+	var s: Dictionary = LoadingScreen.SHOTS[0]
+	var keep := float(s.get("keep", 0.0))
+	check(keep > 0.0 and keep <= 0.92, "the charge keeps at least 92% of its width")
+	for view in [Vector2(1080, 2400), Vector2(1080, 2340), Vector2(1080, 2520), Vector2(720, 1600)]:
+		for zoom in [1.0, 1.0 + LoadingScreen.PUSH]:
+			var r := LoadingScreen.cover_rect(tex, view, s["focus"], zoom, keep)
+			var shown: float = view.x / r.size.x
+			check(shown >= keep - 0.001, "%s zoom %.2f: %.0f%% of the width shown" % [view, zoom, shown * 100.0])
+			var left := -r.position.x / r.size.x
+			check(left <= 0.05 and left + shown >= 0.95, "%s: both flanking heads in frame" % view)
+			check(r.position.x <= 0.01 and r.end.x >= view.x - 0.01, "%s: the width is covered" % view)
+			check(absf(r.position.y) < 0.01 or r.end.y >= view.y - 0.01, "%s: it hangs from the top" % view)
+			check(r.end.y >= view.y * 0.78, "%s: its bottom edge is where the scrim is over half navy (%.0f%%)" % [view, 100.0 * r.end.y / view.y])
+	for view in [Vector2(1080, 1920), Vector2(720, 1280), Vector2(1080, 2160)]:
+		var r := LoadingScreen.cover_rect(tex, view, s["focus"], 1.0, keep)
+		if view.y / view.x <= 16.0 / 9.0 + 0.001:
+			check(r.end.y >= view.y - 0.01 and r.position.y <= 0.01, "%s: a 9:16 screen is still fully covered" % view)
+		check(absf(r.size.x / r.size.y - tex.x / tex.y) < 0.001, "%s: the shot keeps its aspect" % view)
 
 
 ## The loading bar warms what the first screen loads: a brand-new player's level 1 builds
