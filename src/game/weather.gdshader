@@ -42,10 +42,10 @@ void fragment() {
 		float fx = fract(s);
 		float rnd = hash(vec2(cell, 7.0));
 		float run = fract(r * 2.2 - phase * (1.6 + 1.4 * rnd) + rnd);
-		float line = smoothstep(0.12, 0.0, abs(fx - 0.5)) * smoothstep(0.0, 0.25, run) * smoothstep(0.6, 0.35, run);
-		float edge = smoothstep(0.24, 0.42, r);
-		a = line * edge * step(0.55, rnd);
+		float line = smoothstep(0.17, 0.0, abs(fx - 0.5)) * smoothstep(0.0, 0.25, run) * smoothstep(0.6, 0.35, run);
+		float edge = smoothstep(0.2, 0.42, r) * smoothstep(0.16, 0.34, abs(uv.x - 0.5));   // the road in the middle stays clear
+		a = line * edge * step(0.5, rnd);
 		ALBEDO = vec3(1.0);
-		ALPHA = clamp(a * amount * 0.32, 0.0, 0.32);
+		ALPHA = clamp(a * amount * 0.8, 0.0, 0.7);
 	}
 }

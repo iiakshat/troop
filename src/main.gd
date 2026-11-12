@@ -373,7 +373,7 @@ func _start_level(n: int, boosters: Dictionary = {}) -> void:
 	_perf_worst.clear()
 	add_child(view)
 	if world.has_method("set_theme"):
-		world.set_theme(ceili(n / 10.0))
+		world.set_theme(ceili(n / 10.0), String(level.get("look", "")))   # v2.1: the level's own look
 	hud = Hud.new()
 	ui.add_child(hud)
 	ui.move_child(hud, 0)

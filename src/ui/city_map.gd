@@ -106,7 +106,7 @@ static func fallback_layout(districts := 5, per := 10) -> Dictionary:
 
 ## The level the map focuses on and Play starts: the first level not beaten yet (the highest
 ## unlocked one when everything is beaten).
-const BADGE := 46               ## archetype badge size (base px)
+const BADGE := 56               ## archetype badge size (base px)
 static var _arch_cache := {}
 
 

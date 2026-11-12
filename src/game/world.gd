@@ -638,7 +638,7 @@ func _apply_extras(t: Dictionary) -> void:
 		_headlights = SpotLight3D.new()
 		_headlights.position = Vector3(0, 3.2, 5.0)
 		_headlights.spot_range = 75.0
-		_headlights.spot_angle = 17.0
+		_headlights.spot_angle = 24.0
 		_headlights.spot_attenuation = 0.6
 		_headlights.light_color = Color("fff1d2")
 		_headlights.shadow_enabled = false
