@@ -296,10 +296,13 @@ func _warm_up() -> void:
 		_lens_warm = true
 	var at_world := global_transform * at if is_inside_tree() else at
 	if _mode == null:
-		# Knives: the thrown knife, and a scrap of its air streak (drawn in world space).
+		# Knives: the thrown knife, a scrap of its air streak (drawn in world space) and the aim
+		# ring (placed every aiming frame once playing).
 		var knife := FinaleKnife.make(_blade_color, _cord_color)
 		knife.position = at + Vector3(-0.6, 0, 0)
 		_warm_root.add_child(knife)
+		_reticle.position = at + Vector3(0, 0.6, 0)
+		_reticle.visible = true
 		_trail_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP, _trail_mat)
 		for p in [Vector3(-0.3, 0, 0), Vector3(0.3, 0, 0), Vector3(-0.3, 0.05, 0), Vector3(0.3, 0.05, 0)]:
 			_trail_mesh.surface_set_color(Color(_trail_color, 0.4))
@@ -330,6 +333,8 @@ func _end_warm() -> void:
 		_warm_root.visible = false
 	if _trail_mesh:
 		_trail_mesh.clear_surfaces()
+	if _reticle:
+		_reticle.visible = false
 	if _mode and _mode.is_node_ready():
 		_mode.warm(false)
 	if _lens_warm:
