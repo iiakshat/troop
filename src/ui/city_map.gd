@@ -398,8 +398,9 @@ func _point_hand(cheapest: String) -> void:
 	if _hand == null:
 		return
 	var show := cheapest != ""
-	if show and _hand_at != cheapest:
-		_hand_at = cheapest
+	var key := "%s:%d" % [cheapest, City.level(Game.save, cheapest, Game.now())] if show else ""
+	if show and _hand_at != key:  # a new item, or the same one a level up: fresh numbers
+		_hand_at = key
 		var tag: Control = _bld[cheapest]["tag"]
 		# Fingertip on the price tag.
 		_hand.position = _bld[cheapest]["pos"] + tag.position + tag.size * 0.5

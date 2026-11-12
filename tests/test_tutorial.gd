@@ -199,3 +199,18 @@ func test_pointer_hand_puts_the_fingertip_on_the_spot() -> void:
 	var tip := h.position + h.tip_offset()
 	check(tip.distance_to(Vector2(100, 50)) < 1.0, "fingertip on the spot (got %s)" % tip)
 	b.free()
+
+
+func test_buy_tag_shows_icon_then_before_and_after() -> void:
+	var tag := PointerHand.tag("coin", "10", "20", 30)
+	var texts: Array = []
+	var icons := 0
+	for c in tag.get_child(0).get_children():
+		if c is Label:
+			texts.append((c as Label).text)
+		elif c is TextureRect:
+			icons += 1
+	eq(texts, ["10", "20"], "before, then after")
+	eq(icons, 2, "the item's icon and the ▸ between the numbers")
+	eq(tag.mouse_filter, Control.MOUSE_FILTER_IGNORE, "the tag never blocks a tap on the map")
+	tag.free()
