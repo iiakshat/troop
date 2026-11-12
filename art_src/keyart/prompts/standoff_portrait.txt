@@ -1,0 +1,10 @@
+Outpainting task. The attached image is a tall 9:16 canvas. The square in its middle is a finished cartoon key-art illustration: over the shoulder of the hero (teal t-shirt, blue jeans, short brown hair, a knife in his hand), looking down a long street at a cartoon gang at golden hour. The flat grey band above the square and the flat grey band below it are EMPTY canvas that you must paint.
+
+Return the full 9:16 image:
+- The middle square stays exactly as given: the same hero, the same gang, the same faces, poses, sizes, positions, outlines, colours, lighting and camera angle. Do not redraw, move, zoom, crop or reframe it.
+- TOP band: the natural continuation of the scene above the square. The warm red brick apartment building on the left and the pastel painted buildings on both sides rise higher with more windows, window frames and cornices, and the glowing golden-hour sky opens between them, warm haze and soft sun rays from the low sun at the end of the street. A hint of red siren light at the top left corner and blue at the top right corner.
+- BOTTOM band: the continuation below the square. The hero's body simply continues down: his blue jeans and legs, standing still, facing away from us, his hand around the knife handle exactly where it is. Around him the warm sunlit asphalt road, with the gang's long dark shadows stretching toward the camera.
+
+Everything joins the square seamlessly: no seam, border, frame, line or change of colour where the bands meet it. Same art style everywhere: chunky stylised 3D cartoon, simple toon shading, clean dark outlines, bold saturated colours, cinematic movie-poster lighting with shallow depth of field.
+
+Strictly: NO new characters, people, faces or animals in the new areas. NO text, letters, numbers, signs with writing, logos, watermarks or UI anywhere. Any shop sign or awning is plain stripes or blank.

@@ -1,0 +1,10 @@
+Outpainting task. The attached image is a tall 9:16 canvas. The square in its middle is a finished cartoon key-art illustration. The flat grey band above the square and the flat grey band below it are EMPTY canvas that you must paint.
+
+Return the full 9:16 image:
+- The middle square stays exactly as given: the same characters, faces, poses, sizes, positions, outlines, colours, lighting, dust and camera angle. Do not redraw, move, zoom, crop or reframe it.
+- TOP band: the natural continuation of the scene above the square. The same colourful painted brick apartment buildings (red and blue on the left, pink and green on the right, dark blue towers in the distance) rise higher on both sides in the same low worm's-eye perspective, converging upward, with lit yellow windows, cornices and window frames, and the deep blue evening sky between them. A faint red and blue siren glow fades upward.
+- BOTTOM band: the continuation of the street below the square. More of the dusty asphalt road right in front of the camera, with the runners' long soft dark shadows stretching toward the camera, scattered pebbles and drifting tan dust clouds, softly out of focus as it comes closer to the lens.
+
+Everything joins the square seamlessly: no seam, border, frame, line or change of colour where the bands meet it. Same art style everywhere: chunky stylised 3D cartoon, simple toon shading, clean dark outlines, bold saturated colours, cinematic movie-poster lighting with shallow depth of field.
+
+Strictly: NO new characters, people, faces or animals in the new areas. NO text, letters, numbers, signs with writing, logos, watermarks or UI anywhere. Any shop sign or awning is plain stripes or blank.

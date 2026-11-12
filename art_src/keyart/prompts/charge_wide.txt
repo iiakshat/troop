@@ -1,0 +1,11 @@
+Outpainting task. The attached image is a wide 21:9 canvas. The square in its centre is a finished cartoon key-art illustration: a worm's-eye view of a hero in a teal t-shirt sprinting toward the camera with his police squad, on a city street at dusk. The flat grey band on the left of the square and the flat grey band on its right are EMPTY canvas that you must paint.
+
+Return the full 21:9 image:
+- The centre square stays exactly as given: the same characters, faces, poses, sizes, positions, outlines, colours, lighting, dust and camera angle. Do not redraw, move, zoom, crop or reframe it.
+- LEFT band: the street continues sideways. More of the colourful painted brick apartment buildings (red and blue, like the ones already on the left of the square) lining the street, closer to the camera and so a little larger, with lit yellow windows, window frames and cornices, shop fronts with plain striped awnings at street level, the deep blue evening sky at the top, and the dusty road with drifting tan dust clouds at the bottom. A cool blue siren glow.
+- RIGHT band: the same on the other side: more pink and green painted apartment buildings, lit windows, plain awnings, the evening sky at the top, the dusty road and dust clouds at the bottom. A warm red siren glow.
+- The outer edges are slightly out of focus (shallow depth of field), so the eye goes to the squad in the centre.
+
+Everything joins the square seamlessly: no seam, border, frame, line or change of colour where the bands meet it. Same art style everywhere: chunky stylised 3D cartoon, simple toon shading, clean dark outlines, bold saturated colours, cinematic movie-poster lighting.
+
+Strictly: NO new characters, people, faces or animals in the new areas. NO text, letters, numbers, signs with writing, logos, watermarks or UI anywhere. Any shop sign or awning is plain stripes or blank.

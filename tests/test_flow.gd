@@ -75,15 +75,16 @@ func test_sfx_ids_and_calls() -> void:
 	check(true, "Sfx duck calls ran")
 
 
-## BRAND: the boot screens (axnex intro -> Siren Squad logo -> loading -> the flow).
-## Driven by advance()/tap() so no frames or tweens are needed.
+## BRAND: the boot screens (axnex intro -> the cinematic loading screen -> the flow; owner
+## 2026-11-12: no wordmark). Driven by advance()/tap() so no frames or tweens are needed;
+## tests warm nothing (an empty list) and pin the shot, so no user:// file is written.
 func _boot_seq(first_launch: bool, flow: Callable) -> BootSequence:
-	var seq := BootSequence.new(first_launch, flow)
+	var seq := BootSequence.new(first_launch, flow, 0, PackedStringArray())
 	seq.write_seen = false  # tests never write the save
 	return seq
 
 
-func test_boot_shows_intro_then_logo_on_first_launch() -> void:
+func test_boot_shows_intro_then_loading_on_first_launch() -> void:
 	var tree := Engine.get_main_loop() as SceneTree
 	var game: Node = tree.root.get_node_or_null("Game")
 	var keep: Dictionary = game.save.duplicate(true)
@@ -97,15 +98,13 @@ func test_boot_shows_intro_then_logo_on_first_launch() -> void:
 	seq.advance(BootIntro.DURATION * 0.5)
 	eq(seq.stage, "intro", "the intro runs its full length")
 	seq.advance(BootIntro.DURATION * 0.5 + 0.02)
-	eq(seq.stage, "logo", "the Siren Squad logo follows the intro")
+	eq(seq.stage, "loading", "the loading screen follows the intro (no wordmark screen)")
+	check(seq.loading_screen() is LoadingScreen, "the loading screen is up")
 	check((game.save["seen_hints"] as Array).has("intro"), "a finished intro is remembered")
 	check(not BootSequence.is_first_launch(), "the next launch is not a first launch")
-	seq.advance(TitleLogo.DURATION + 0.02)
-	eq(seq.stage, "loading", "the loading screen follows the logo")
-	eq(started[0], 0, "the game flow waits for the loading bar")
 	for i in 120:
 		seq.advance(1.0 / 30.0)
-	eq(started[0], 1, "the game flow starts once, when the bar is full")
+	eq(started[0], 1, "the game flow starts once")
 	eq(seq.stage, "done", "the boot screens fade out and finish")
 	seq.free()
 	game.save = keep
@@ -117,12 +116,102 @@ func test_intro_skippable_after_first_launch() -> void:
 	eq(seq.stage, "intro", "later launches still open on the intro")
 	seq.advance(0.1)
 	seq.tap()
-	eq(seq.stage, "logo", "a tap skips the intro after the first launch")
-	seq.tap()
-	eq(seq.stage, "loading", "a tap also hurries the logo after the first launch")
+	eq(seq.stage, "loading", "a tap skips the intro after the first launch")
 	seq.tap()
 	eq(seq.stage, "loading", "the loading bar cannot be skipped")
 	seq.free()
+
+
+## The bar follows real loading: it never shows more than is loaded, the flow (the first
+## screen's build) waits for the threaded loads, and the bar is full only after the build.
+func test_loading_bar_follows_real_loading() -> void:
+	var started := [0]
+	var seq := _boot_seq(false, func(): started[0] += 1)
+	seq.tap()
+	var ls := seq.loading_screen()
+	var real := [0.0]
+	ls.warm_progress = func() -> float: return real[0]
+	for i in 60:
+		seq.advance(1.0 / 30.0)
+	eq(started[0], 0, "nothing loaded: the flow waits")
+	eq(ls.progress(), 0.0, "nothing loaded: the bar stays empty")
+	real[0] = 0.5
+	var ahead := false
+	for i in 60:
+		seq.advance(1.0 / 30.0)
+		ahead = ahead or ls.progress() > ls.real_progress() + 0.0001
+	check(not ahead, "the bar never runs ahead of the real progress")
+	check(ls.progress() > 0.2 and ls.progress() <= 0.5 * LoadingScreen.WARM_SHARE + 0.0001,
+		"half loaded: the bar shows half the loading share (got %.3f)" % ls.progress())
+	eq(started[0], 0, "half loaded: the flow still waits")
+	real[0] = 1.0
+	seq.advance(1.0 / 30.0)
+	eq(started[0], 1, "everything loaded: the flow builds the first screen")
+	check(ls.progress() < 1.0, "the bar is not full the moment the build starts")
+	for i in 90:
+		seq.advance(1.0 / 30.0)
+	eq(started[0], 1, "the flow runs once")
+	eq(seq.stage, "done", "after the build the bar fills and the screens fade out")
+	seq.free()
+
+
+## The threaded warm-up loads real files (a missing one never blocks the boot) and keeps
+## them cached until the loading screen goes.
+func test_loading_warms_real_files_on_threads() -> void:
+	var ls := LoadingScreen.new(0, 0, PackedStringArray(["res://assets/icons/gloss/coin.png", "res://nope/missing.png"]))
+	var waited := 0
+	while not ls.loaded() and waited < 400:
+		OS.delay_msec(5)
+		ls.advance(0.005)
+		waited += 1
+	check(ls.loaded(), "the warm-up finishes")
+	eq(ls.held_count(), 1, "the real file is held in the cache, the missing one skipped")
+	ls.free()
+
+
+## Shot 4 and shot 5 alternate per launch, kept in a tiny user:// file (never the save).
+func test_keyart_alternates_per_launch() -> void:
+	var path := "user://_test_boot_art.cfg"
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	var a := LoadingScreen.pick_shot(path)
+	var b := LoadingScreen.pick_shot(path)
+	var c := LoadingScreen.pick_shot(path)
+	eq(a, 0, "the first launch shows the charge")
+	eq(b, 1, "the next launch shows the standoff")
+	eq(c, 0, "then the charge again")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	for s in LoadingScreen.SHOTS:
+		check(ResourceLoader.exists(String(s["path"])), "key art %s exists" % s["path"])
+		var tex := load(String(s["path"])) as Texture2D
+		check(tex != null and tex.get_height() > tex.get_width() * 1.7, "key art %s is a 9:16 portrait" % s["path"])
+
+
+## Cover-fit: the shot fills any screen, keeps its aspect and its focal point on screen; the
+## push-in grows it about the focal point.
+func test_keyart_cover_keeps_focus() -> void:
+	var tex := Vector2(1152, 2048)
+	for view in [Vector2(720, 1280), Vector2(720, 1600), Vector2(960, 1280), Vector2(720, 1080)]:
+		for zoom in [1.0, 1.0 + LoadingScreen.PUSH]:
+			var focus := Vector2(0.45, 0.47)
+			var r := LoadingScreen.cover_rect(tex, view, focus, zoom)
+			check(r.position.x <= 0.01 and r.position.y <= 0.01 and r.end.x >= view.x - 0.01 and r.end.y >= view.y - 0.01,
+				"the shot covers %s at zoom %.2f" % [view, zoom])
+			check(absf(r.size.x / r.size.y - tex.x / tex.y) < 0.001, "the shot keeps its aspect")
+			var f := r.position + r.size * focus
+			check(f.x > 0 and f.x < view.x and f.y > 0 and f.y < view.y, "the focal point stays on screen")
+	var a := LoadingScreen.cover_rect(tex, Vector2(720, 1280), Vector2(0.5, 0.5), 1.0)
+	var b := LoadingScreen.cover_rect(tex, Vector2(720, 1280), Vector2(0.5, 0.5), 1.0 + LoadingScreen.PUSH)
+	check(absf(b.size.x / a.size.x - (1.0 + LoadingScreen.PUSH)) < 0.001, "the push-in grows the shot by PUSH")
+	check((a.get_center() - b.get_center()).length() < 0.5, "the push-in grows about the focal point")
+
+
+## No wordmark is left anywhere: the logo screen and its art are gone, the light-bar stays
+## (the loading bar's front).
+func test_no_wordmark_left() -> void:
+	check(not ResourceLoader.exists("res://src/ui/title_logo.gd"), "the wordmark screen is gone")
+	check(not ResourceLoader.exists("res://assets/brand/siren_squad_logo.png"), "the wordmark image is gone")
+	check(ResourceLoader.exists("res://assets/brand/lightbar.png"), "the loading bar keeps its light-bar")
 
 
 ## The rename to Siren Squad keeps the save where it was (%APPDATA%/Godot/app_userdata/Troop).
@@ -174,3 +263,15 @@ func test_android_preset_is_branded() -> void:
 			eq(tex.get_width(), int(sizes[key]), "%s is %d px" % [key, sizes[key]])
 		else:
 			check(false, "%s exists" % path)
+	var opts := "preset.0.options"
+	var bg := Image.load_from_file(ProjectSettings.globalize_path(String(cfg.get_value(opts, "launcher_icons/adaptive_background_432x432", ""))))
+	var fg := Image.load_from_file(ProjectSettings.globalize_path(String(cfg.get_value(opts, "launcher_icons/adaptive_foreground_432x432", ""))))
+	var mono := Image.load_from_file(ProjectSettings.globalize_path(String(cfg.get_value(opts, "launcher_icons/adaptive_monochrome_432x432", ""))))
+	check(bg.get_pixel(0, 0).a > 0.99 and bg.get_pixel(431, 431).a > 0.99, "the background is the art, full bleed")
+	var clear := true
+	for y in range(0, 432, 9):
+		for x in range(0, 432, 9):
+			clear = clear and fg.get_pixel(x, y).a < 0.01
+	check(clear, "the foreground layer is clear")
+	check(mono.get_pixel(4, 4).a < 0.01 and mono.get_pixel(427, 427).a < 0.01, "the themed icon's corners are clear")
+	check(mono.get_pixel(216, 280).a > 0.9, "the themed icon is the hero's head in the middle")
