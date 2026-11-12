@@ -135,7 +135,9 @@ func test_adult_request_config() -> void:
 	eq(c.get("child_directed"), false, "adult: not child-directed")
 	eq(c.get("npa"), false, "adult: personalised allowed (after UMP consent where required)")
 	eq(c.get("consent_form"), true, "adult: UMP consent first")
-	check(String(c.get("max_rating")) in ["G", "PG", "T"], "adult: a family-safe max rating, never MA")
+	check(String(c.get("max_rating")) in ["G", "PG"], "adult: at most PG (Families policy cap for a mixed audience)")
+	eq(AdsScript.request_config(false, {"adult_tags": {"max_rating": "T"}})["max_rating"], "PG", "config cannot raise it past PG")
+	eq(AdsScript.request_config(true, {"child_tags": {"max_rating": "PG", "npa": false}})["max_rating"], "G", "config cannot loosen the child tags")
 
 
 func test_firebase_not_started_for_child() -> void:

@@ -1,5 +1,5 @@
 {
-  "_doc": "AdMob setup (spec v2 §8). Not secret. provider: admob | placeholder (placeholder forces the stub popup everywhere). is_real=false uses Google's official test IDs below; the owner pastes real IDs into android.real and sets is_real=true (docs/owner_ads_setup.md). tools/ads_export_cfg.py copies the app ID into addons/AdmobPlugin/android_export.cfg at build time. child_tags / adult_tags are the request settings per audience (Audience, Game.is_child).",
+  "_doc": "AdMob setup (spec v2 §8). Not secret. provider: admob | placeholder (placeholder forces the stub popup everywhere). is_real=false uses Google's official test IDs below; the owner pastes real IDs into android.real and sets is_real=true (docs/owner_ads_setup.md). The editor plugin addons/siren_privacy copies the app ID into addons/AdmobPlugin/android_export.cfg (generated, git-ignored) when the editor or an export starts. child_tags / adult_tags are the request settings per audience (Audience, Game.is_child).",
   "provider": "admob",
   "is_real": false,
   "android": {

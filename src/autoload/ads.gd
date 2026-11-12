@@ -7,7 +7,7 @@ extends Node
 ##   child: child-directed, under age of consent, max rating G, non-personalised, no ad/first-party
 ##          ID, no UMP form
 ##   adult: UMP consent form first where required (GDPR regions), then normal ads, max rating
-##          from config/ads.json adult_tags
+##          from config/ads.json adult_tags (G or PG; the Families policy cap for mixed audiences)
 ## IDs: Google's official test IDs until the owner sets is_real (config/ads.json). When AdMob
 ## has no rewarded ad ready (no network, still loading) the placeholder popup stands in, so the
 ## reward button always works; a missing interstitial is simply skipped.
@@ -89,8 +89,8 @@ static func request_config(is_child: bool, acfg: Dictionary = {}) -> Dictionary:
 			"npa": true, "ad_id": false, "consent_form": false}
 	var a: Dictionary = acfg.get("adult_tags", {})
 	var rating := String(a.get("max_rating", "PG"))
-	if not rating in ["G", "PG", "T"]:
-		rating = "PG"
+	if not rating in ["G", "PG"]:
+		rating = "PG"  # Families policy: a mixed-audience app shows adults at most PG
 	return {"child_directed": false, "under_age_of_consent": false, "max_rating": rating,
 		"npa": bool(a.get("npa", false)), "ad_id": bool(a.get("ad_id", true)),
 		"consent_form": bool(a.get("consent_form", true))}
