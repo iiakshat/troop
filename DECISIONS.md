@@ -256,7 +256,14 @@ Unity wasn't installed, would need about 15 GB plus a licence sign-in, and is he
 
 **Brand: no wordmark; cinematic key art; icon = hero close-up (owner, 2026-11-12).** The owner did not want the SIREN SQUAD wordmark ("Why complete name needs to be on the screen?") and picked shots 1, 4 and 5 of a key-art concept sheet. No game name appears in the app or the art: Android shows the label under the icon and the store shows the title. Icon = shot 1, the hero close-up (his head fills the adaptive safe circle; the themed icon is his head silhouette with brows, eyes and smile cut out). Loading screen = shots 4 and 5, alternating per launch from a tiny `user://boot_art.cfg` so the save is never touched. Play feature graphic = shot 4 made wide. Gemini extended the shots, but the build lays the untouched concept cells back over its painting, so the characters stay exactly as picked. The standoff's lower band drifted (an extra pair of boots, off-model long legs, a hard seam), so it is a smeared, blurred continuation of the cell under the scrim. The loading bar used to be a 1.4 s timer; it now follows real loading. The first screen's resources load on threads and fill 85 %, the first screen is built under the opaque screen, and the bar never shows more than is loaded. The axnex studio intro stays as it was.
 
-## v2 shield polish (2026-11-12, SHIELD)
+## v2 polish review fixes (2026-11-12, FIX)
+
+**The key art keeps the squad on tall phones.** A cover fit of the 9:16 charge on a 9:20 phone (1080x2400, the most common Android size) cut the flanking troops in half. Re-rendering the art taller was the better fix but a new Gemini paint could drift from the owner's pick, so the code caps the side crop instead: a shot with `keep` never loses more than that share of its width, even at the full push. Where that leaves it shorter than the screen it hangs from the top and its bottom melts into the boot navy over 10% of the height, under the scrim that already darkens the bottom for the tip and bar. 9:16 screens are unchanged; the standoff (hero cut on purpose) stays a plain cover.
+
+**A fade, not a cut.** The shot lights up out of the intro's navy over 0.4 s, starting with the push-in, so the two read as one camera move.
+
+**Pow only on safe bases.** GLSL ES and SPIR-V leave pow(x, y) undefined for x < 0 (Mali and Adreno give NaN), and the shield's Gaussians had negative bases. They square their argument instead; a test keeps the Fresnel rim's as the only pow.
+
 
 **The shield reads as a shield.** Owner: the shield looked off next to everything else. The power button was a glowing blue orb, so it did not read as a shield beside the cartoon bomb. It is now a glossy police heater shield (silver rim, cyan inner edge, gold star) in the gloss set's style, everywhere the shield icon shows. The Codex marks a riot gang with the riot-shield icon, so the squad's shield icon only ever means the squad's power.
 
