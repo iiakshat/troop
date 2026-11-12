@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 extends "res://tests/test_case.gd"
 ## Spec v2.1 §4-§5 (plan Task 4): level archetypes by district slot, unique names, something new
 ## every 3 levels, the hostage-cage rescue, and the adult L1 (trap row, danger beats, leader).
@@ -366,8 +365,8 @@ func test_map_badge_per_archetype() -> void:
 	eq(icons.size(), 9, "nine archetype badges")
 	for icon in icons:
 		check(ResourceLoader.exists("res://assets/icons/%s.svg" % icon), "%s.svg exists" % icon)
-=======
-extends "res://tests/test_case.gd"
+
+
 ## Levels as a player meets them (spec v2.1). The TUNE part (plan v2.1 Task 7): the greedy and
 ## noisy calibration players of spec §2 (tests/tune.gd), the difficulty bands, and the level
 ## test's profile checks: the §2 guard checks on every level, so "Harder" never silently
@@ -376,7 +375,6 @@ extends "res://tests/test_case.gd"
 const Tune := preload("res://tests/tune.gd")
 const DT := 1.0 / 30.0
 
-var units := Config.units()
 var _watched := {}   # level -> Tune.watch_greedy result at the model pace (filled once)
 var _pace := {}
 
@@ -615,4 +613,3 @@ func test_profile_hero_alone_opening_never_one_shot() -> void:
 		if shot != "":
 			bad.append("L%d %s" % [n, shot])
 	check(bad.is_empty(), "the hero alone is one-shot on: %s" % str(bad))
->>>>>>> worktree-wf_18d73b2c-96e-7
