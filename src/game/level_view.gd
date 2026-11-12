@@ -51,7 +51,11 @@ var demo := false
 var paused := false
 var input_enabled := true      # false under --autoplay so stray clicks can't interfere
 var hold := false              # a first-run tutorial (Tutorial) freezes the street until the player acts
-var slow := false              # ... or runs it at 0.3 speed while it shows something (red gate)
+var perf_on := false           # perf=1: main.gd logs these markers next to each frame time
+var perf_marks: Array[String] = []
+const PERF_EVENTS := ["rank_join", "row_pass", "horde_spawn", "bomb", "barrel_boom", "obstacle_hit",
+	"obstacle_broken", "finish", "revive", "lost", "melee_start"]
+var slow := false              # unused since spec v2 §3 (time never slows); kept for Tutorial
 
 var _crowds: Dictionary = {}
 var _allies: Array = []        # {kind, pos, slot, phase, flash, fire_t}
@@ -105,7 +109,6 @@ var _laser_mat: StandardMaterial3D
 var _marks: Array = []         # per lane {node, mat, t, dur}: firebomb landing rings
 var _shown_count: Dictionary = {}  # ally kind -> figures drawn (updated on squad changes)
 var _boss_music := false
-var _slowmo := 0.0             # seconds of boss-death slow motion left (real time)
 var _key_light: OmniLight3D = null
 var _anim_t := 0.0             # animation clock (seconds)
 var _meshes: Dictionary = {}            # size -> BoxMesh / name -> Mesh, shared by this level's obstacles
@@ -350,26 +353,20 @@ func _process(delta: float) -> void:
 				finished.emit({"won": false, "cause": sim.lose_cause, "kills": sim.kills, "level": level_id})
 
 
+## The street's speed this frame (1 = real time; 0 only while a first-run tutorial holds it).
+func time_scale() -> float:
+	return _time_scale
+
+
 func _update_time_scale(delta: float) -> void:
 	var target := 1.0
 	if hold:
 		_time_scale = 0.0
 		return
-	if slow:
-		_time_scale = 0.3
-		return
-	if _slowmo > 0.0:
-		# Boss death: half a second of slow motion (the sim stays exact, just slower).
-		_slowmo -= delta
-		_time_scale = 0.3
-		return
+	# Spec v2 §3: nothing else slows the street (no rank spotlight, no red-gate or boss-death
+	# slow motion); only the first-run tutorial holds above and below stop it.
 	if _spotlight > 0.0:
-		# A new rank's first arrival: one second at 0.3 speed with a ring under them.
-		_spotlight -= delta
-		_time_scale = 0.3
-		if _spotlight <= 0.0 and _spot_ring:
-			_spot_ring.visible = false
-		return
+		_spotlight -= delta   # the new rank's gold ring stays up for a second, at full speed
 	for id in _rows:
 		var row: Dictionary = (_rows[id] as GateRowView).row
 		var z := float(row["z"])
@@ -396,6 +393,8 @@ func _update_time_scale(delta: float) -> void:
 
 func _handle_events(events: Array) -> void:
 	for e in events:
+		if perf_on and String(e["type"]) in PERF_EVENTS:
+			perf_marks.append(String(e["type"]) + ("" if not e.has("unit") else ":" + String(e["unit"])))
 		if _log_events and not String(e["type"]) in ["kill", "gate_tick", "boss_hit"]:
 			print("EV %d %s %s" % [Engine.get_process_frames(), e["type"], e["horde"].get("enemy", "") if e.get("horde") is Dictionary else ""])
 		match String(e["type"]):
@@ -832,7 +831,7 @@ func _on_boss_hit(e: Dictionary) -> void:
 				fx.burst(bp, Color("e0484f"), 26, 7.0, 0.24, 0.6, 4.0)
 				fx.burst(bp, Color(0.06, 0.06, 0.08), 12, 6.0, 0.2, 0.5, 3.0)
 				(hv["bar"] as Node3D).visible = false
-			_slowmo = 0.5
+			fx.ring(c, Color(1.0, 0.85, 0.35), 40, 14.0, 0.3)   # no slow motion (spec v2 §3): a shock ring
 	if hp <= 0:
 		world.shake(1.2)
 		Sfx.play("boom")
@@ -848,7 +847,7 @@ func _on_rank_join(e: Dictionary) -> void:
 	if first:
 		fx.ring(Vector3(_squad_x, 0.4, 0.4), GateRowView.GOLD, 32, 8.0)
 		_sfx("rank_up", "recruit", -2.0)
-		# Spotlight: one second at 0.3 speed with a gold ring under the newcomers.
+		# Spotlight: a gold ring under the newcomers for a second (time stays at 1.0).
 		if not demo:
 			_spotlight = 1.0
 		_spot_kind = String(e["unit"])
@@ -1014,7 +1013,7 @@ func _update_boss_bar(hv: Dictionary, d: float) -> void:
 	# Faces the camera and grows with distance, so it reads the same far up the street;
 	# its bottom edge stays above the scaled model's head.
 	var size := 1.0
-	var cam := get_viewport().get_camera_3d()
+	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
 	if cam:
 		bar.basis = cam.global_transform.basis
 		size = clampf(cam.global_position.distance_to(front) / 16.0, 1.0, 3.2)
@@ -1288,7 +1287,7 @@ func _update_visuals(d: float) -> void:
 			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis.scaled(Vector3.ONE * (1.0 if a["kind"] == "hero" else troop_k)), pos), "idle", _anim_t + ph, float(a["flash"]))
 
 	# Enemies
-	var cam := get_viewport().get_camera_3d()
+	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
 	var boss_near := false
 	for id in _hordes:
 		var bh: Dictionary = _hordes[id]["h"]
