@@ -47,6 +47,7 @@ var _cues: Dictionary = {}    # sound cues already played
 var _view: Control
 var _font: Font
 var _art_tex: Texture2D
+var _pill: StyleBoxFlat
 
 
 # ---------------------------------------------------------------- pure
@@ -505,7 +506,9 @@ func _paint_lock(out: float) -> void:
 	var w := h * 0.95 * 2.0 + tw + h * 0.5
 	var c := _weapon_rest() + Vector2(0, ws * 0.5 + h * 0.15)
 	_view.draw_set_transform(c, 0.0, Vector2.ONE * pop)
-	var sb := StyleBoxFlat.new()
+	if _pill == null:
+		_pill = StyleBoxFlat.new()
+	var sb := _pill
 	sb.bg_color = Color(0.08, 0.05, 0.12, 0.88 * a)
 	sb.border_color = Color(1.0, 0.82, 0.25, a)
 	sb.set_border_width_all(maxi(int(h * 0.06), 2))
