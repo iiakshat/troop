@@ -9,6 +9,11 @@ extends SceneTree
 ##       [ratio=0 (calibrate the win rate only; keep the last wave's current scale)]
 ##       [tap_rate=4 (the autopilot's taps per second; 0 = a non-tapper)]
 ##       [powers=0 (no shield/bomb anywhere: sampled routes, the best route and calibration)]
+##       [profile=paced (plan v2 Task 13, the calibration profile: each level gets the no-ad
+##        pace's upgrades (pace=path, default _local/pace.json from tests/econ_sim.gd, else the
+##        model is run here), tap_rate=4, powers=0; later args override)] [zero=1 (no upgrades)]
+##       [checks=1 (per level: the stored route paced / non-tapper / L1 at 1.5 taps/s, and the
+##        best route with zero upgrades; no calibration)]
 ##
 ## calibrate=1 searches, per level, the scale for every gang's size (bosses: hp) that makes
 ## the sampled win rate match the level's `target_win`, while the best route still wins
@@ -30,6 +35,9 @@ var verbose := false
 var fit_ratio := true
 var tap_rate := 4.0      # autopilot taps per second (spec v2 section 2)
 var use_powers := true   # powers=0: every run plays without shield/bomb
+var pace := {}           # profile=paced: level (String) -> upgrades (tests/econ_model.gd)
+var profile := ""
+var fixed_upgrades := {} # upgrades=k,s,q (legacy station rooms) when no pace is used
 
 
 func _initialize() -> void:
@@ -37,9 +45,19 @@ func _initialize() -> void:
 	var hi := Config.LEVEL_COUNT
 	var out_path := ""
 	var calibrate := false
+	var checks := false
 	var only: Array = []
 	var k_eval := 1.0
 	var kf_eval := 1.0
+	var pace_path := "res://_local/pace.json"
+	var zero := false
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("pace="):
+			pace_path = a.substr(5)
+		elif a == "profile=paced":
+			profile = "paced"
+			tap_rate = 4.0
+			use_powers = false
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("level="):
 			lo = int(a.substr(6))
@@ -57,7 +75,7 @@ func _initialize() -> void:
 			beam = int(a.substr(5))
 		elif a.begins_with("upgrades="):
 			var p := a.substr(9).split(",")
-			upgrades = {"knife": int(p[0]), "speed": int(p[1]), "squad": int(p[2])}
+			fixed_upgrades = {"knife": int(p[0]), "speed": int(p[1]), "squad": int(p[2])}
 		elif a.begins_with("out="):
 			out_path = a.substr(4)
 		elif a == "calibrate=1":
@@ -70,19 +88,33 @@ func _initialize() -> void:
 			tap_rate = float(a.substr(9))
 		elif a == "powers=0":
 			use_powers = false
+		elif a == "powers=1":
+			use_powers = true
+		elif a == "zero=1":
+			zero = true
+		elif a == "checks=1":
+			checks = true
 		elif a.begins_with("k="):
 			k_eval = float(a.substr(2))
 		elif a.begins_with("kf="):
 			kf_eval = float(a.substr(3))
 	units = Config.units()
+	if profile == "paced" and not zero:
+		pace = load_pace(pace_path)
+	if checks:
+		run_checks(lo, hi, only)
+		quit(0)
+		return
 	var t0 := Time.get_ticks_msec()
 	var report: Array = []
-	print("tap_rate %.1f, powers %s" % [tap_rate, "on" if use_powers else "off"])
+	print("profile %s%s, tap_rate %.1f, powers %s" % [profile if profile != "" else "plain", " zero upgrades" if zero else "",
+		tap_rate, "on" if use_powers else "off"])
 	print("level | rows | wins/total | target | no-pow best | best troops/peak | stars | time s | k / kf")
 	if only.is_empty():
 		only = range(lo, hi + 1)
 	for n in only:
 		var level := Config.level(n)
+		upgrades = level_upgrades(n)
 		var r: Dictionary = calibrate_level(n, level) if calibrate else evaluate(n, level, k_eval, kf_eval)
 		r["target_ratio"] = float(level.get("target_ratio", -1.0))
 		report.append(r)
@@ -115,7 +147,7 @@ func evaluate(n: int, base: Dictionary, k: float, kf := 1.0, samples := -1) -> D
 	if verbose:
 		print("      loss causes ", causes)
 	var best := best_route(level, use_powers)
-	var np := best_route(level, false) if n <= 10 else {"result": {"state": "?"}}
+	var np := best if not use_powers else (best_route(level, false) if n <= 10 else {"result": {"state": "?"}})
 	var br: Dictionary = best["result"]
 	if verbose:
 		print("      best route %s -> %s troops=%d peak=%d t=%.1f" % [str(best["route"]), br["state"], br["troops"], br["peak"], br["time"]])
@@ -123,10 +155,71 @@ func evaluate(n: int, base: Dictionary, k: float, kf := 1.0, samples := -1) -> D
 		"win_rate": float(wins) / maxf(routes.size(), 1.0), "target": float(base.get("target_win", 0.5)),
 		"best_win": br["state"] == "strike", "best_route": best["route"], "best_troops": br["troops"],
 		"best_peak": br["peak"], "best_ratio": _ratio(br),
-		"best_stars": br["stars"], "best_time": br["time"], "np_win": np["result"]["state"] == "strike" or n > 10,
+		"best_stars": br["stars"], "best_time": br["time"], "np_win": np["result"]["state"] == "strike" or (use_powers and n > 10),
 		"route": best["route"] if br["state"] == "strike" else [],
-		"route_np": np["route"] if n <= 10 and np["result"]["state"] == "strike" else [],
+		# powers=0: `route` already wins without powers, so no separate route_np is stored.
+		"route_np": np["route"] if n <= 10 and use_powers and np["result"]["state"] == "strike" else [],
 		"k": k, "kf": kf}
+
+
+## The no-ad pace: _local/pace.json (tests/econ_sim.gd writes it), else the model run here.
+static func load_pace(path: String) -> Dictionary:
+	if FileAccess.file_exists(path):
+		var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+		if d is Dictionary and not (d as Dictionary).is_empty():
+			return d
+	var model = load("res://tests/econ_model.gd")
+	return model.pace(model.run(Config.economy(), Config.load_json("res://config/finale.json"), Config.units()))
+
+
+func level_upgrades(n: int) -> Dictionary:
+	if pace.is_empty():
+		return fixed_upgrades
+	return pace.get(str(n), fixed_upgrades)
+
+
+## checks=1 (plan v2 Task 13 step 4): per level, the stored route with the paced upgrades and
+## no powers for a tapper (4/s), a non-tapper (0) and, at L1, a light tapper (1.5/s); the best
+## route a tapper with zero upgrades can find; and for L1-L5 the best route of a non-tapper.
+func run_checks(lo: int, hi: int, only: Array) -> void:
+	if pace.is_empty():
+		pace = load_pace("res://_local/pace.json")
+	if only.is_empty():
+		only = range(lo, hi + 1)
+	print("level | paced 4/s       | paced 0/s       | zero-up best    | extra")
+	var zero_losses := []
+	for n in only:
+		var lv := Config.level(n)
+		var route: Array = lv.get("route", [])
+		var up := level_upgrades(n)
+		var a := Autopilot.run(lv, units, route, up, false, DT, false, 4.0)
+		var b := Autopilot.run(lv, units, route, up, false, DT, false, 0.0)
+		var keep_up := upgrades
+		var keep_tap := tap_rate
+		upgrades = {}
+		tap_rate = 4.0
+		var z: Dictionary = best_route(lv, false)["result"]
+		var extra := ""
+		if n == 1:
+			upgrades = up
+			var l1 := Autopilot.run(lv, units, route, up, false, DT, false, 1.5)
+			extra += "1.5/s %s " % _cell(l1)
+		if n <= 5:
+			upgrades = up
+			tap_rate = 0.0
+			extra += "non-tapper best %s" % _cell(best_route(lv, false)["result"])
+		upgrades = keep_up
+		tap_rate = keep_tap
+		if z["state"] != "strike":
+			zero_losses.append(n)
+		print("%5d | %-15s | %-15s | %-15s | %s" % [n, _cell(a), _cell(b), _cell(z), extra])
+	print("zero upgrades lose: %s" % str(zero_losses))
+
+
+static func _cell(r: Dictionary) -> String:
+	if r["state"] == "strike":
+		return "win %d/%d" % [r["troops"], r["peak"]]
+	return "LOSE %.0fs %s" % [float(r["time"]), str(r["cause"])]
 
 
 static func _ratio(r: Dictionary) -> float:
@@ -161,7 +254,7 @@ func calibrate_level(n: int, base: Dictionary) -> Dictionary:
 		var b: Dictionary = best_route(lv, use_powers)["result"]
 		var won: bool = b["state"] == "strike"
 		var ok: bool = won and float(b["time"]) <= MAX_TIME
-		if ok and n <= 10:
+		if ok and n <= 10 and use_powers:
 			ok = best_route(lv, false)["result"]["state"] == "strike"
 		if ok:
 			break
@@ -220,8 +313,8 @@ static func scaled_level(base: Dictionary, k: float, kf := 1.0) -> Dictionary:
 			last = i
 	for i in lv["events"].size():
 		var e: Dictionary = lv["events"][i]
-		if e["type"] != "wave":
-			continue
+		if e["type"] != "wave" or bool(e.get("fixed", false)):
+			continue  # "fixed": an opening gang sized by hand (gen_levels.py OPENING)
 		var m := k * (kf if i == last else 1.0)
 		for g in e["groups"]:
 			if g["enemy"] == "boss":

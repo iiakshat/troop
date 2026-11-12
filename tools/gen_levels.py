@@ -672,6 +672,8 @@ def apply_scale(events: list[dict], k: float, kf: float = 1.0) -> None:
                 e["kill"] = scaled(int(e["kill"]), k, 5)
     waves = [e for e in events if e["type"] == "wave"]
     for e in waves:
+        if e.get("fixed"):
+            continue  # an opening gang sized by hand (levels 1-3, OPENING)
         m = k * (kf if e is waves[-1] else 1.0)
         if abs(m - 1.0) < 1e-9:
             continue
@@ -748,9 +750,26 @@ def mechanics_of(ev: dict) -> list[tuple[str, float]]:
 
 # ------------------------------------------------------------------ levels 1-3 (hand-written)
 
+# Spec v2 section 2: levels 1-3 open with the hero alone against a small gang, before any
+# follower joins. Sized with the sim (hero 1 dmg x 3/s; cold 0.4 of that): L1's falls to a
+# light tapper (1.5 taps/s), L2's and L3's only to a tapping hero (about 4/s); a non-tapper
+# loses all three. "fixed": calibration never rescales them.
+OPENING = {1: 5, 2: 8, 3: 9}
+OPENING_SHIFT = 28  # metres levels 2-3 move down the street to make room for the opening gang
+
+
+def opening(level: int) -> list[dict]:
+    return [{"at": 30, "type": "wave", "fixed": True, "groups": [{"enemy": "thug", "n": OPENING[level]}]}]
+
+
+def shift(ev: list[dict], m: int) -> list[dict]:
+    for e in ev:
+        e["at"] = int(e["at"]) + m
+    return ev
+
+
 def level_1() -> dict:
-    ev = [
-        {"at": 30, "type": "wave", "groups": [{"enemy": "thug", "n": 8}]},
+    ev = opening(1) + [
         {"at": 34, "type": "hint", "id": "swipe", "icon": "swipe"},
         {"at": 58, "type": "gates", "tutorial": "swipe", "gates": [
             {"lane": 0, "op": "num", "v": 4}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 3},
@@ -818,7 +837,8 @@ def level_2() -> dict:
         {"at": 480, "type": "finish"},
     ]
     return {"_design": "Potholes. Teaches: steer around a pothole, x3, add-then-multiply (rows 2-3: +12 then x3 "
-                       "beats x3 then +12), fast knifers.", "events": ev, "charges": {}}
+                       "beats x3 then +12), fast knifers. Opens with the hero alone against a gang only a "
+                       "tapping hero beats.", "events": opening(2) + shift(ev, OPENING_SHIFT), "charges": {}}
 
 
 def level_3() -> dict:
@@ -852,7 +872,8 @@ def level_3() -> dict:
         {"at": 470, "type": "finish"},
     ]
     return {"_design": "Crossfire. Teaches: gunmen stop and shoot (SHIELD blocks them), barrels blow up gangs "
-                       "running past them, a power gate.", "events": ev, "charges": {"shield": 1}}
+                       "running past them, a power gate. Opens with the hero alone against a gang only a "
+                       "tapping hero beats.", "events": opening(3) + shift(ev, OPENING_SHIFT), "charges": {"shield": 1}}
 
 
 HAND = {1: level_1, 2: level_2, 3: level_3}

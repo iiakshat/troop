@@ -11,7 +11,7 @@
   "route": [2, 1, 2, 2, 2, 2],
   "route_np": [2, 1, 2, 2, 2, 2],
   "events": [
-    {"at": 31, "type": "wave", "groups": [{"enemy": "thug", "n": 8}]},
+    {"at": 31, "type": "wave", "fixed": true, "groups": [{"enemy": "thug", "n": 5}]},
     {"at": 33, "type": "hint", "id": "red_gate", "icon": "aim"},
     {"at": 36, "type": "hint", "id": "swipe", "icon": "swipe"},
     {"at": 61, "type": "gates", "tutorial": "swipe", "gates": [{"lane": 0, "op": "num", "v": 4}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 3}, {"lane": 2, "op": "num", "v": 10}]},
