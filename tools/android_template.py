@@ -4,7 +4,10 @@
    Godot version. This is exactly what the editor's Project > Install Android Build Template does:
    android/.build_version holds the template version, android/build/.gdignore keeps the editor out,
    and android_source.zip (from tools/setup_android.py) is unpacked into android/build/.
-2. Patches android/build/build.gradle for Firebase: the google-services Gradle plugin, applied only
+2. Fetches the Gradle distribution the template's wrapper wants into %USERPROFILE%/.gradle (resumable,
+   retried, SHA-256 checked) and gives the wrapper a longer network timeout. The wrapper's own
+   download gives up after 10 s without data, which a slow connection hits.
+3. Patches android/build/build.gradle for Firebase: the google-services Gradle plugin, applied only
    when android/build/google-services.json exists. The Firebase export plugin copies the owner's
    google-services.json from the project root into android/build/ at export time. That file is
    git-ignored everywhere and never committed; without it the APK still builds, and Firebase simply
@@ -14,7 +17,7 @@ android/build/ and android/.build_version are generated (git-ignored). The Fireb
 .aar files in android/firebase_*/ are committed. Safe to re-run.
 Run: python -I tools/android_template.py [--force]
 """
-import os, shutil, sys, zipfile
+import hashlib, os, re, shutil, sys, time, urllib.request, zipfile
 from pathlib import Path
 
 GODOT = "4.7.2"
@@ -99,8 +102,77 @@ def patch_gradle():
     say("build.gradle: Firebase patch added")
 
 
+def _wrapper_hash(url):
+    """The folder name Gradle's wrapper uses for a distribution URL (base-36 MD5 of the URL)."""
+    n = int.from_bytes(hashlib.md5(url.encode()).digest(), "big")
+    digits, out = "0123456789abcdefghijklmnopqrstuvwxyz", ""
+    while n:
+        n, r = divmod(n, 36)
+        out = digits[r] + out
+    return out or "0"
+
+
+def _download_resumable(url, part, tries=8):
+    """Appends to `part` from where it stopped; retries with a pause on network errors."""
+    for attempt in range(1, tries + 1):
+        have = part.stat().st_size if part.exists() else 0
+        req = urllib.request.Request(url, headers={"User-Agent": "siren-squad-build",
+                                                   "Range": "bytes=%d-" % have})
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                mode = "ab" if r.status == 206 else "wb"  # 200: the server ignored the range
+                with open(part, mode) as f:
+                    while chunk := r.read(1 << 20):
+                        f.write(chunk)
+            return
+        except urllib.error.HTTPError as e:
+            if e.code == 416:  # already complete
+                return
+            if attempt == tries:
+                raise
+        except OSError:
+            if attempt == tries:
+                raise
+        say("  network hiccup, retrying (%d/%d)" % (attempt, tries))
+        time.sleep(3 * attempt)
+
+
+def prefetch_gradle():
+    props = BUILD / "gradle" / "wrapper" / "gradle-wrapper.properties"
+    text = props.read_text(encoding="utf-8")
+    if "networkTimeout=" not in text:
+        props.write_text(text.rstrip("\n") + "\nnetworkTimeout=120000\n", encoding="utf-8")
+    m = re.search(r"^distributionUrl=(.+)$", text, re.M)
+    if not m:
+        return
+    url = m.group(1).strip().replace("\\:", ":")
+    name = url.rsplit("/", 1)[1]
+    home = Path(os.environ.get("GRADLE_USER_HOME", Path.home() / ".gradle"))
+    dist = home / "wrapper" / "dists" / name[:-4] / _wrapper_hash(url)
+    zip_path = dist / name
+    if (dist / (name + ".ok")).exists() or zip_path.exists():
+        say("Gradle %s: ready" % name[:-4])
+        return
+    say("Gradle %s: downloading (resumable)" % name[:-4])
+    dist.mkdir(parents=True, exist_ok=True)
+    part = dist / (name + ".part")
+    _download_resumable(url, part)
+    with urllib.request.urlopen(urllib.request.Request(url + ".sha256", headers={"User-Agent": "x"}),
+                                timeout=60) as r:
+        want = r.read().decode().strip().split()[0].lower()
+    h = hashlib.sha256()
+    with open(part, "rb") as f:
+        while chunk := f.read(1 << 20):
+            h.update(chunk)
+    if h.hexdigest() != want:
+        part.unlink()
+        raise SystemExit("Gradle download was corrupt (checksum); run build_apk.bat again")
+    os.replace(part, zip_path)  # the wrapper unpacks it on the first build
+
+
 def main():
     install(force="--force" in sys.argv)
+    prefetch_gradle()
     patch_gradle()
 
 
