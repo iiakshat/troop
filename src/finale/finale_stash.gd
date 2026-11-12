@@ -114,7 +114,7 @@ static func shelf(theme: String, width: float, depth := 0.5, drop := 0.0) -> Nod
 			# Plain dark boards (no stripes): the bottles must stand out from the striped booth. Thin,
 			# with the dark edge flush (a lip hanging below hid the necks of the row underneath).
 			box(n, Vector3(width, 0.025, depth), Vector3(0, -0.0125, 0), Color("5a1a20"))
-			box(n, Vector3(width, 0.025, 0.04), Vector3(0, -0.0125, depth * 0.5), Color("3a1216"))
+			box(n, Vector3(width, 0.025, 0.04), Vector3(0, -0.0125, depth * 0.5), Color("b0473a"))
 		"docks":
 			if drop > 0.0:
 				# Upper rows: a pallet plank on two posts at the ends, clear of the row below
