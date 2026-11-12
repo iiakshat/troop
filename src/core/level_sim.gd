@@ -181,6 +181,8 @@ func _init(level: Dictionary = {}, units_cfg: Dictionary = {}, upgrades: Diction
 	charges["bomb"] = int(charges["bomb"]) + int(upgrades.get("bomb", 0))
 	_build_spawns(level.get("events", []))
 	peak_squad = squad.total()
+	# A hero-alone opening (levels 2-3) starts half warm (gen_levels.py START_HEAT).
+	tap_heat = clampf(float(level.get("start_heat", 0.0)), 0.0, 1.0)
 	squad.hero_rate = hero_rate_mult()
 
 

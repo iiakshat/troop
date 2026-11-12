@@ -770,6 +770,9 @@ def mechanics_of(ev: dict) -> list[tuple[str, float]]:
 # light tapper (1.5 taps/s), L2's and L3's only to a tapping hero (about 4/s); a non-tapper
 # loses all three. "fixed": calibration never rescales them.
 OPENING = {1: 5, 2: 8, 3: 9}
+# Levels 2-3 open hero-alone and are decided in the first seconds: the hero starts half warm
+# (LevelSim tap_heat), so a casual 2 taps/s wins while 0-1 taps/s still loses (review, v2 §2).
+START_HEAT = {2: 0.5, 3: 0.5}
 OPENING_SHIFT = 28  # metres levels 2-3 move down the street to make room for the opening gang
 
 
@@ -1102,6 +1105,8 @@ def build(level: int, seen: set, cal_all: dict) -> dict:
     }
     if need_upgrades(level):
         out["need_upgrades"] = True
+    if level in START_HEAT:
+        out["start_heat"] = START_HEAT[level]
     if cal.get("coin_ref"):
         out["coin_ref"] = int(cal["coin_ref"])
     # A lane route tests/tune.gd found to win (route_np: without powers, levels 1-10).

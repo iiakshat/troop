@@ -422,6 +422,8 @@ func test_levels_are_winnable_and_reward_planning() -> void:
 			eq(cold["state"], "strike", "L%d a non-tapper wins with the stored route" % n)
 		elif n == 2 or n == 3:
 			check(cold["state"] != "strike", "L%d a non-tapper loses" % n)
+			check(Autopilot.run(lv, units, route, up, false, 1.0 / 30.0, false, 1.0)["state"] != "strike", "L%d 1 tap/s loses" % n)
+			eq(Autopilot.run(lv, units, route, up, false, 1.0 / 30.0, false, 2.0)["state"], "strike", "L%d a casual 2 taps/s wins" % n)
 		if n == 1:
 			eq(Autopilot.run(lv, units, route, up, false, 1.0 / 30.0, false, 1.5)["state"], "strike", "L1 is won with light tapping (1.5/s)")
 		# Rule 1: upgrades gate progress from mid district 1 (the stored route, no upgrades).

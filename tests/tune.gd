@@ -210,6 +210,9 @@ func run_checks(lo: int, hi: int, only: Array) -> void:
 			upgrades = up
 			var l1 := Autopilot.run(lv, units, route, up, false, DT, false, 1.5)
 			extra += "1.5/s %s " % _cell(l1)
+		if n == 2 or n == 3:
+			# A casual tapper (2/s) wins the hero-alone opening (START_HEAT in gen_levels.py).
+			extra += "2/s %s " % _cell(Autopilot.run(lv, units, route, up, false, DT, false, 2.0))
 		if n <= 5:
 			upgrades = up
 			tap_rate = 0.0

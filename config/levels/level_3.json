@@ -8,8 +8,9 @@
   "target_ratio": -1.0,
   "stars": {"star2": 45, "star3": 85},
   "charges": {"shield": 1},
+  "start_heat": 0.5,
   "coin_ref": 300,
-  "route": [0, 1, 1, 2, 0, 2],
+  "route": [0, 1, 0, 2, 0, 2],
   "events": [
     {"at": 30, "type": "wave", "fixed": true, "groups": [{"enemy": "thug", "n": 9}]},
     {"at": 64, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 10}, {"lane": 2, "op": "mul", "k": 3}]},
