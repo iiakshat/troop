@@ -8,6 +8,7 @@ Writes:
   assets/brand/lightbar.png           the light-bar alone (loading screen)
   assets/brand/icon_fg.png            adaptive icon foreground, 432x432 (badge in the safe zone)
   assets/brand/icon_bg.png            adaptive icon background, 432x432 (police-blue burst)
+  assets/brand/icon_mono.png          adaptive monochrome layer, 432x432 (Android 13 themed icons)
   assets/brand/icon_main.png          legacy launcher icon, 192x192 (fg over bg)
   assets/brand/icon.png               window / Play icon, 512x512
   art_src/brand/play_icon_512.png     Play Console hi-res icon (same as icon.png)
@@ -98,6 +99,27 @@ def square(img, side, content):
     return canvas
 
 
+def mono(fg):
+    """The themed-icon layer: the launcher tints its alpha, so it is a solid white silhouette
+    of the badge with the dark outlines cut away, which keeps the star and the light-bar apart.
+    Each part is filled solid (no glass highlights inside) and the edge is softened."""
+    a = np.asarray(fg, dtype=np.float64)
+    lum = (0.299 * a[..., 0] + 0.587 * a[..., 1] + 0.114 * a[..., 2]) / 255.0
+    mask = (a[..., 3] > 128) & (lum > 0.26)  # navy outline (dark) -> clear
+    mask = ndimage.binary_opening(mask, iterations=2)  # drop specks and hairlines
+    parts, n = ndimage.label(mask)
+    solid = np.zeros_like(mask)
+    for i in range(1, n + 1):
+        part = parts == i
+        if part.sum() > 150:
+            solid |= ndimage.binary_fill_holes(part)
+    alpha = ndimage.gaussian_filter(solid.astype(np.float64) * 255.0, 0.8)
+    out = np.zeros(a.shape, dtype=np.uint8)
+    out[..., :3] = 255
+    out[..., 3] = np.clip(alpha, 0, 255).astype(np.uint8)
+    return Image.fromarray(out, "RGBA")
+
+
 def burst(w, h, centre, rays=18):
     """Police-blue radial backdrop with soft light rays (the icon background)."""
     yy, xx = np.mgrid[0:h, 0:w].astype(np.float64)
@@ -163,6 +185,7 @@ def main():
     # 432 px) and the safe circle is 66 dp (264 px), so the badge (star tips included) fits in it.
     fg = square(badge, 432, 258)
     fg.save(OUT / "icon_fg.png")
+    mono(fg).save(OUT / "icon_mono.png")
     bg = burst(432, 432, (216, 200))
     bg.convert("RGB").save(OUT / "icon_bg.png")
     full = bg.copy()
@@ -171,7 +194,7 @@ def main():
     full.resize((512, 512), Image.LANCZOS).save(OUT / "icon.png")
     full.resize((512, 512), Image.LANCZOS).convert("RGB").save(SRC / "play_icon_512.png")
     feature(logo, badge).save(SRC / "feature_graphic.png")
-    for p in ["siren_squad_logo.png", "lightbar.png", "icon_fg.png", "icon_bg.png", "icon_main.png", "icon.png"]:
+    for p in ["siren_squad_logo.png", "lightbar.png", "icon_fg.png", "icon_mono.png", "icon_bg.png", "icon_main.png", "icon.png"]:
         print(p, Image.open(OUT / p).size)
     print("feature_graphic.png", Image.open(SRC / "feature_graphic.png").size)
 

@@ -155,3 +155,22 @@ func test_loading_tips_use_real_icons() -> void:
 	eq(String(tap_tip[0]), "hand", "the first tip is the tap")
 	eq(String(tap_tip[tap_tip.size() - 1]), "power", "tapping raises firepower (the lightning unit)")
 	check(LoadingScreen.TAP_ICONS.has("hand"), "the hand in a tip is drawn as a tap (ripple), not a pointer")
+
+
+## BRAND: the Android preset carries the Siren Squad package and every launcher icon layer,
+## including the monochrome one (Android 13 themed icons; unset, Godot ships its own logo).
+func test_android_preset_is_branded() -> void:
+	var cfg := ConfigFile.new()
+	eq(cfg.load("res://export_presets.cfg"), OK, "export_presets.cfg loads")
+	eq(String(cfg.get_value("preset.0.options", "package/unique_name", "")), "com.iiakshat.sirensquad", "package ID")
+	eq(String(cfg.get_value("preset.0.options", "package/name", "")), "Siren Squad", "app name")
+	var sizes := {"launcher_icons/main_192x192": 192, "launcher_icons/adaptive_foreground_432x432": 432,
+		"launcher_icons/adaptive_background_432x432": 432, "launcher_icons/adaptive_monochrome_432x432": 432}
+	for key in sizes:
+		var path := String(cfg.get_value("preset.0.options", key, ""))
+		check(path.begins_with("res://assets/brand/"), "%s is a brand icon (got '%s')" % [key, path])
+		if ResourceLoader.exists(path):
+			var tex := load(path) as Texture2D
+			eq(tex.get_width(), int(sizes[key]), "%s is %d px" % [key, sizes[key]])
+		else:
+			check(false, "%s exists" % path)
