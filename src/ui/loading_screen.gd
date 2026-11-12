@@ -87,18 +87,21 @@ func _draw_tip(view: Vector2) -> void:
 
 
 ## A tapping hand: it presses in (moves along its finger and shrinks a little), and on each
-## press a ring ripples out from the fingertip (Tutorial.TIP, the same spot the tutorials use).
-func _draw_tap(tex: Texture2D, r: Rect2, a: float) -> void:
+## press a ring ripples out from the fingertip (PointerHand's art and fingertip, the same hand
+## the tutorials and menus use).
+func _draw_tap(_tex: Texture2D, r: Rect2, a: float) -> void:
+	var tex := PointerHand.texture()
+	var tip := PointerHand.tip_share()
 	var ph := fmod(t, TAP_PERIOD) / TAP_PERIOD
 	var press := sin(clampf(ph / 0.35, 0.0, 1.0) * PI)  # 0 -> 1 -> 0 over the first 35%
-	var tip_at := r.position + r.size * Tutorial.TIP
+	var tip_at := r.position + r.size * tip
 	for k in 2:
 		var age := fmod(t + k * TAP_PERIOD * 0.5, TAP_PERIOD) / TAP_PERIOD
 		var rr := r.size.x * (0.08 + 0.32 * age)
 		draw_arc(tip_at, rr, 0.0, TAU, 32, Color(1, 1, 1, (1.0 - age) * 0.7 * a), maxf(2.0, r.size.x * 0.035), true)
 	var s := 1.0 - 0.08 * press
-	var hr := Rect2(tip_at - r.size * Tutorial.TIP * s, r.size * s)
-	hr.position += Vector2(1, 1) * press * r.size.x * 0.06
+	var hr := Rect2(tip_at - r.size * tip * s, r.size * s)
+	hr.position += (tip - Vector2(0.5, 0.5)).normalized() * press * r.size.x * 0.06  # along the finger
 	draw_texture_rect(tex, hr, false, Color(1, 1, 1, a))
 
 
