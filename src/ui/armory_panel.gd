@@ -393,7 +393,7 @@ func refresh() -> void:
 		var cost: int = Game.weapon_cost(id)
 		# Lightning gain = level-start firepower (spec v2 section 12.4): a rank that joins during the
 		# level shows its step in the stat bars only.
-		var gain: float = 0.0 if maxed or locked else Game.weapon_power_gain(id)
+		var gain: float = 0.0 if maxed or locked or Armory.next_tier_lock(Game.save, id) > 0 else Game.weapon_power_gain(id)
 		(c["gain"] as Label).text = "+" + Economy.fmt_power(gain)
 		(c["gain_row"] as Control).modulate.a = 1.0 if gain >= 0.05 else 0.0
 		if maxed:
@@ -402,6 +402,11 @@ func refresh() -> void:
 		elif locked:
 			buy.disabled = true
 			UiKit.button_row(buy, ["lock"], "", 34)
+		elif Armory.next_tier_lock(Game.save, id) > 0:
+			# Spec v2.1 section 3.2: the bar is full, the evolution waits for a level: the lock,
+			# the level pin and that level (as on a locked card).
+			buy.disabled = true
+			UiKit.button_row(buy, ["lock", "map_pin"], str(Armory.next_tier_lock(Game.save, id)), 34)
 		else:
 			buy.disabled = coins < cost
 			# The buy that fills the bar evolves the weapon: the upgrade arrow joins the price.
@@ -524,6 +529,15 @@ func lock_icon_visible(id: String) -> bool:
 	return (_cards[id]["lock"] as Control).visible and (_cards[id]["lock_ic"] as Control).visible
 
 
+## The buy button as shown: {icons, text, disabled} (tests).
+func buy_face(id: String) -> Dictionary:
+	var b: Button = _cards[id]["buy"]
+	var row: HBoxContainer = b.get_meta("row") if b.has_meta("row") else null
+	if row == null:
+		return {"icons": [], "text": b.text, "disabled": b.disabled}
+	return {"icons": row.get_meta("names", []), "text": (row.get_meta("label") as Label).text, "disabled": b.disabled}
+
+
 func lock_text(id: String) -> String:
 	return (_cards[id]["lock_label"] as Label).text
 
@@ -553,7 +567,7 @@ func art_path(id: String) -> String:
 static func anything_affordable() -> bool:
 	var coins := int(Game.save["coins"])
 	for id in Armory.ids():
-		if Game.weapon_locked(String(id)):
+		if Game.weapon_locked(String(id)) or Armory.next_tier_lock(Game.save, String(id)) > 0:
 			continue
 		var c: int = Game.weapon_cost(String(id))
 		if c >= 0 and c <= coins:

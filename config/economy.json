@@ -7,7 +7,7 @@
   },
 
   "level_coins": {
-    "_note": "Win coins = finale coins (config/finale.json, incl. evidence room) x mult(L). mult(L) = base + per_level x (L-1), x boss_mult on every boss_every-th level, x replay_mult when the level was already beaten. x2 rewarded ad doubles the final number.",
+    "_note": "The level curve mult(L) = base + per_level x (L-1), x boss_mult on every boss_every-th level. It scales the win's payout (below) and the coins in daily, mission, spin and chest rewards (no boss factor there). A replay pays replay_mult of the payout. x2 rewarded ad doubles the final number.",
     "base": 1.0,
     "per_level": 0.04,
     "boss_every": 10,
@@ -15,9 +15,19 @@
     "replay_mult": 0.5
   },
 
-  "_station_note": "Cost of level k = base x growth^(k-1), rounded (price_round). req[k-1] = district that must be liberated before level k can be bought (0 = open from the start). Effects: squad +per starting constables, capacity +per percent of the district's squad cap (units.json world.squad_cap), coins +per finale coin bonus. v2: the knife and speed rooms moved to the Armory (config/armory.json) and the garage's charges to `powers`.",
+  "payout": {
+    "_note": "Spec v2.1 section 3.1, the one payout function (Economy.level_coins; Bottle Shot, the result screen and tests/econ_model.gd use it): coins = base x mult(L) x (1 + troops x min(finish / the stored route's finish, 1)) x (1 + hit x min(bottles, max_hits) + gold x gold bottle) x (1 + heat x the level's mean tap heat) x (1 + the evidence room's coin bonus). Every bottle and the gold make the 1.7x cap of a plain win (owner, 2026-11-12). base is fitted with tests/econ_sim.gd so the no-ad pace makes 1-3 meaningful buys per win.",
+    "base": 100,
+    "troops": 0.3,
+    "hit": 0.1,
+    "max_hits": 4,
+    "gold": 0.3,
+    "heat": 0.1
+  },
+
+  "_station_note": "Cost of level k = base x growth^(k-1), rounded (price_round). req[k-1] = district that must be liberated before level k can be bought (0 = open from the start). from_level[k-1] (spec v2.1 section 3.3) = the furthest level the player must have reached to buy level k, and the first level it joins (a level gets only the room levels its number allows, so L1-L3 stay hero-alone tap lessons). Effects: squad +per starting constables, capacity +per percent of the district's squad cap (units.json world.squad_cap), coins +per finale coin bonus. v2: the knife and speed rooms moved to the Armory (config/armory.json) and the garage's charges to `powers`.",
   "station": {
-    "training": { "icon": "badge",      "max": 10, "base": 110, "growth": 1.45, "req": [0, 0, 0, 1, 1, 2, 2, 3, 4, 4], "effect": "squad",    "per": 1 },
+    "training": { "icon": "badge",      "max": 10, "base": 110, "growth": 1.45, "req": [0, 0, 0, 1, 1, 2, 2, 3, 4, 4], "from_level": [4, 6, 8], "effect": "squad",    "per": 1 },
     "barracks": { "icon": "station",    "max": 6,  "base": 150, "growth": 1.6,  "req": [0, 1, 2, 3, 4, 4],             "effect": "capacity", "per": 25 },
     "evidence": { "icon": "money",      "max": 6,  "base": 200, "growth": 1.6,  "req": [0, 1, 2, 3, 4, 4],             "effect": "coins",    "per": 0.1 }
   },
@@ -38,15 +48,15 @@
   },
 
   "power": {
-    "_note": "Squad Power (spec v2 section 12.4; lobby top bar, level nodes, Armory and Station pills, lightning icon) = the HUD's firepower unit: nominal damage per second against an unarmoured target of the squad a level starts with = the hero at full tap rate (dmg x rate) + the starting constables (station training) x constable dmg x rate, each times its Armory dmg_mult x rate_mult (config/armory.json). The squad cap and the coin bonus are not firepower and add nothing. The pointer (best purchase, loss tip) weighs a room or weapon step by the firepower it adds to the squad a level builds: the starting squad plus ref_troops of each unlocked rank, plus cap_value per troop of extra squad cap and coin_value per percent of coin bonus (never shown). recommended = [[level, power], ...], linear between anchors, fitted with tests/econ_sim.gd to what a player who spends their coins has at that level. More than 15% below it, the current or next node shows a warning tint (never under the first-build pointer).",
+    "_note": "Squad Power (spec v2 section 12.4; lobby top bar, level nodes, Armory and Station pills, lightning icon) = the HUD's firepower unit: nominal damage per second against an unarmoured target of the squad a level starts with = the hero at full tap rate (dmg x rate) + the starting constables (station training) x constable dmg x rate, each times its Armory dmg_mult x rate_mult (config/armory.json). The squad cap and the coin bonus are not firepower and add nothing. The pointer (best purchase, loss tip) weighs a room or weapon step by the firepower it adds to the squad a level builds: the starting squad plus ref_troops of each unlocked rank, plus cap_value per troop of extra squad cap and coin_value per percent of coin bonus (never shown). recommended = [[level, power], ...], linear between anchors, fitted with tests/econ_sim.gd to what the no-ad pace (tests/econ_model.gd DEFAULTS, spec v2.1 section 3.5) brings into that level (the pointer reads it, so refit until it stops moving; the engaged no-ad player stays within 1.6x of it). More than 15% below it, the current or next node shows a warning tint (never under the first-build pointer).",
     "ref_troops": { "constable": 20, "sergeant": 4, "inspector": 3, "swat": 3, "sniper": 2, "commando": 2 },
     "cap_value": 0.05,
     "coin_value": 0.3,
-    "recommended": [[1, 3], [3, 3.1], [5, 3.1], [7, 3.1], [9, 9.1], [11, 9.3], [13, 12.4], [15, 15.1], [17, 21.2], [20, 25.3], [22, 28.6], [25, 28.6], [28, 29.6], [30, 34.5], [33, 45.5], [35, 52.7], [38, 52.7], [40, 52.7], [43, 63.2], [45, 63.2], [48, 64], [50, 64.8]]
+    "recommended": [[1, 3.0], [2, 3.18], [3, 3.36], [4, 3.36], [5, 3.36], [6, 3.55], [7, 5.55], [8, 5.55], [9, 9.58], [10, 10.87], [11, 10.87], [13, 13.79], [15, 14.5], [17, 23.39], [20, 27.93], [22, 28.41], [25, 28.84], [28, 34.56], [30, 34.57], [33, 48.82], [35, 48.82], [38, 55.3], [40, 62.52], [43, 65.1], [45, 65.36], [48, 73.62], [50, 73.62]]
   },
 
   "city": {
-    "_note": "5 districts x 5 buildings. lv 0 = ruin, 1 = rebuilt, 2-4 = upgrades. cost/time/income are for lv 1; level k costs cost x upgrade_cost_mult[k-1], takes time x upgrade_time_mult[k-1] seconds (capped at max_build_seconds) and earns income x income_mult^(k-1) coins per hour. A district's buildings can be rebuilt once the district is reached; upgrades up to pre_liberation_max_level are open while you fight there, higher ones need it liberated (its boss beaten). Liberating district d pays liberation_bonus[d-1] coins once (not doubled by the x2 ad). Storage holds storage.base_hours of income, +hours_per_level per City Hall level. While a building upgrades it keeps earning at its old level.",
+    "_note": "5 districts x 5 buildings. lv 0 = ruin, 1 = rebuilt, 2-4 = upgrades. cost/time/income are for lv 1; build timers by district (spec v2.1 section 3.4, so a build finishes between sessions, not while the app sits open): district 1 2-10 min, 2 10-30 min, 3 30-90 min, 4 1-3 h, 5 2-4 h for every level; level k costs cost x upgrade_cost_mult[k-1], takes time x upgrade_time_mult[k-1] seconds (capped at max_build_seconds) and earns income x income_mult^(k-1) coins per hour. A district's buildings can be rebuilt once the district is reached; upgrades up to pre_liberation_max_level are open while you fight there, higher ones need it liberated (its boss beaten). Liberating district d pays liberation_bonus[d-1] coins once (not doubled by the x2 ad). Storage holds storage.base_hours of income, +hours_per_level per City Hall level. While a building upgrades it keeps earning at its old level.",
     "district_levels": 10,
     "max_level": 4,
     "upgrade_cost_mult": [1.0, 2.2, 4.0, 7.0],
@@ -68,31 +78,31 @@
       { "id": 5, "name": "Uptown",     "buildings": ["hotel", "bank", "museum", "fountain_park", "city_hall"] }
     ],
     "buildings": {
-      "cafe":          { "district": 1, "cost": 100,  "time": 30,   "income": 12 },
-      "newsstand":     { "district": 1, "cost": 110,  "time": 40,   "income": 13 },
-      "pharmacy":      { "district": 1, "cost": 130,  "time": 50,   "income": 15 },
-      "bus_stop":      { "district": 1, "cost": 150,  "time": 60,   "income": 17 },
-      "police_post":   { "district": 1, "cost": 170,  "time": 75,   "income": 19 },
-      "fruit_market":  { "district": 2, "cost": 200,  "time": 90,   "income": 22 },
-      "bakery":        { "district": 2, "cost": 230,  "time": 120,  "income": 24 },
-      "barber":        { "district": 2, "cost": 270,  "time": 150,  "income": 28 },
-      "cinema":        { "district": 2, "cost": 310,  "time": 180,  "income": 31 },
-      "clinic":        { "district": 2, "cost": 350,  "time": 240,  "income": 34 },
-      "fish_market":   { "district": 3, "cost": 400,  "time": 300,  "income": 37 },
-      "warehouse":     { "district": 3, "cost": 470,  "time": 360,  "income": 43 },
-      "lighthouse":    { "district": 3, "cost": 540,  "time": 450,  "income": 48 },
-      "diner":         { "district": 3, "cost": 620,  "time": 570,  "income": 53 },
-      "ferry":         { "district": 3, "cost": 710,  "time": 720,  "income": 59 },
-      "factory":       { "district": 4, "cost": 810,  "time": 900,  "income": 66 },
-      "power_station": { "district": 4, "cost": 940,  "time": 1140, "income": 74 },
-      "garage":        { "district": 4, "cost": 1100, "time": 1440, "income": 67 },
-      "train_station": { "district": 4, "cost": 1250, "time": 1800, "income": 74 },
-      "fire_station":  { "district": 4, "cost": 1400, "time": 2280, "income": 81 },
-      "hotel":         { "district": 5, "cost": 1650, "time": 2880, "income": 84 },
-      "bank":          { "district": 5, "cost": 1900, "time": 3600, "income": 93 },
-      "museum":        { "district": 5, "cost": 2150, "time": 4500, "income": 102 },
-      "fountain_park": { "district": 5, "cost": 2500, "time": 5700, "income": 116 },
-      "city_hall":     { "district": 5, "cost": 2850, "time": 7200, "income": 128 }
+      "cafe":          { "district": 1, "cost": 100,  "time": 120,  "income": 12 },
+      "newsstand":     { "district": 1, "cost": 110,  "time": 150,  "income": 13 },
+      "pharmacy":      { "district": 1, "cost": 130,  "time": 180,  "income": 15 },
+      "bus_stop":      { "district": 1, "cost": 150,  "time": 210,  "income": 17 },
+      "police_post":   { "district": 1, "cost": 170,  "time": 240,  "income": 19 },
+      "fruit_market":  { "district": 2, "cost": 200,  "time": 600,  "income": 22 },
+      "bakery":        { "district": 2, "cost": 230,  "time": 630,  "income": 24 },
+      "barber":        { "district": 2, "cost": 270,  "time": 660,  "income": 28 },
+      "cinema":        { "district": 2, "cost": 310,  "time": 690,  "income": 31 },
+      "clinic":        { "district": 2, "cost": 350,  "time": 720,  "income": 34 },
+      "fish_market":   { "district": 3, "cost": 400,  "time": 1800, "income": 37 },
+      "warehouse":     { "district": 3, "cost": 470,  "time": 1890, "income": 43 },
+      "lighthouse":    { "district": 3, "cost": 540,  "time": 1980, "income": 48 },
+      "diner":         { "district": 3, "cost": 620,  "time": 2070, "income": 53 },
+      "ferry":         { "district": 3, "cost": 710,  "time": 2160, "income": 59 },
+      "factory":       { "district": 4, "cost": 810,  "time": 3600, "income": 66 },
+      "power_station": { "district": 4, "cost": 940,  "time": 3780, "income": 74 },
+      "garage":        { "district": 4, "cost": 1100, "time": 3960, "income": 67 },
+      "train_station": { "district": 4, "cost": 1250, "time": 4140, "income": 74 },
+      "fire_station":  { "district": 4, "cost": 1400, "time": 4320, "income": 81 },
+      "hotel":         { "district": 5, "cost": 1650, "time": 7200, "income": 84 },
+      "bank":          { "district": 5, "cost": 1900, "time": 7560, "income": 93 },
+      "museum":        { "district": 5, "cost": 2150, "time": 7920, "income": 102 },
+      "fountain_park": { "district": 5, "cost": 2500, "time": 8280, "income": 116 },
+      "city_hall":     { "district": 5, "cost": 2850, "time": 8640, "income": 128 }
     }
   },
 

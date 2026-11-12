@@ -64,12 +64,54 @@ static func level_coin_mult(level: int, economy: Dictionary = {}) -> float:
 	return m
 
 
-## Coins a win pays: finale coins x curve, x replay_mult if the level was already beaten.
-static func level_reward(level: int, finale_coins: int, replay: bool, economy: Dictionary = {}) -> int:
-	var m := level_coin_mult(level, economy)
+## Coins a win pays from Bottle Shot's coins (level_coins, the level's curve already in them):
+## all of them on a first clear, x replay_mult when the level was already beaten.
+static func level_reward(_level: int, finale_coins: int, replay: bool, economy: Dictionary = {}) -> int:
+	var m := 1.0
 	if replay:
-		m *= float(cfg(economy)["level_coins"].get("replay_mult", 1.0))
+		m = float(cfg(economy)["level_coins"].get("replay_mult", 1.0))
 	return maxi(int(round(maxi(finale_coins, 0) * m)), 0)
+
+
+# ---------------------------------------------------------------- the payout (spec v2.1 §3.1)
+
+## The one payout function (Bottle Shot's coins, the result screen's multiplier and
+## tests/econ_model.gd all use it). economy.json "payout":
+##   coins = base x mult(L) x (1 + troops x min(troops / coin_ref, 1))
+##           x bottle_factor(hits, gold) x (1 + heat x heat) x station
+## `troops` / `coin_ref`: the finishing squad over the level's stored route finish (coin_ref <= 0
+## counts as a full finish); `hits`: normal bottles broken; `gold`: the gold bottle broke; `heat`:
+## the level's mean tap heat (0..1); `station`: the coin bonus as a multiplier (1.0 = none, 1.2 =
+## the evidence room's +20%). A first clear; level_reward applies the replay rate.
+static func level_coins(level: int, troops: int, coin_ref: int, hits: int, gold: bool, heat: float, station: float, economy: Dictionary = {}) -> int:
+	var p: Dictionary = cfg(economy).get("payout", {})
+	var share := 1.0 if coin_ref <= 0 else clampf(float(maxi(troops, 0)) / float(coin_ref), 0.0, 1.0)
+	var c := float(p.get("base", 100.0)) * level_coin_mult(level, economy)
+	c *= 1.0 + float(p.get("troops", 0.0)) * share
+	c *= bottle_factor(hits, gold, economy)
+	c *= 1.0 + float(p.get("heat", 0.0)) * clampf(heat, 0.0, 1.0)
+	c *= maxf(station, 0.0)
+	return maxi(int(round(c)), 0)
+
+
+## Bottle Shot's multiplier: 1 + hit x min(hits, max_hits) + gold x (gold bottle broke). Every
+## bottle and the gold make the payout's cap (1.7, owner decision 2026-11-12).
+static func bottle_factor(hits: int, gold: bool, economy: Dictionary = {}) -> float:
+	var p: Dictionary = cfg(economy).get("payout", {})
+	var n := clampi(hits, 0, int(p.get("max_hits", 4)))
+	return 1.0 + float(p.get("hit", 0.0)) * n + (float(p.get("gold", 0.0)) if gold else 0.0)
+
+
+## The tap term as the whole percent the result screen shows (+0..10 %).
+static func heat_pct(heat: float, economy: Dictionary = {}) -> int:
+	return int(round(100.0 * float(cfg(economy).get("payout", {}).get("heat", 0.0)) * clampf(heat, 0.0, 1.0)))
+
+
+## The finish Bottle Shot is handed as "troops" (LevelSim.coin_troops, district-1 troops) that
+## counts as the stored route's: a full district-1 squad (units.json world.squad_cap[0]).
+static func full_coin_troops(units: Dictionary = {}) -> int:
+	var caps: Array = _units(units).get("world", {}).get("squad_cap", [300])
+	return maxi(int(caps[0]) if not caps.is_empty() else 300, 1)
 
 
 # ---------------------------------------------------------------- police station
@@ -102,6 +144,38 @@ static func station_requirement(name: String, lv: int, economy: Dictionary = {})
 		var req: Array = r["req"]
 		return int(req[clampi(lv - 1, 0, req.size() - 1)])
 	return maxi(ceili((lv - 2) / 2.0), 0)
+
+
+## Spec v2.1 §3.3: the level from which level `lv` of a room opens, for buying and in the levels
+## (the room's "from_level" list: training 1 from L4, 2 from L6, 3 from L8); 0 = no level gate.
+static func room_level_gate(name: String, lv: int, economy: Dictionary = {}) -> int:
+	var gates: Array = room(name, economy).get("from_level", [])
+	if lv < 1 or lv > gates.size():
+		return 0
+	return int(gates[lv - 1])
+
+
+## The level the next level of `name` waits for (the player's furthest level is below it), or 0.
+static func room_lock_level(save: Dictionary, name: String, economy: Dictionary = {}) -> int:
+	var lv := int(save.get("station", {}).get(name, 0)) + 1
+	if lv > room_max(name, economy):
+		return 0
+	var need := room_level_gate(name, lv, economy)
+	return need if need > int(save.get("unlocked", 1)) else 0
+
+
+## The station a level gets: a room's levels count only from their level gate (so L1-L3 stay
+## the hero-alone tap lessons whatever training is owned); rooms without gates come whole.
+static func level_station(station: Dictionary, level: int, economy: Dictionary = {}) -> Dictionary:
+	var out := station.duplicate()
+	for name in out:
+		var n := 0
+		for k in range(1, int(out[name]) + 1):
+			if room_level_gate(String(name), k, economy) > level:
+				break
+			n = k
+		out[name] = n
+	return out
 
 
 # ---------------------------------------------------------------- stars
@@ -302,8 +376,9 @@ static func recommended_power(level: int, economy: Dictionary = {}) -> float:
 # ---------------------------------------------------------------- what to buy (v1.1 item 5)
 
 ## Everything the player could spend coins on right now (coins aside): the next level of each
-## station room that is not locked or maxed, the next step of each Armory track that is open
-## and not maxed, the next build of each building that can start (district reached, a builder
+## station room that is not locked (district or v2.1 level gate) or maxed, the next step of each
+## Armory track that is open, not maxed and not an evolution into a tier the player's level has
+## not opened (v2.1), the next build of each building that can start (district reached, a builder
 ## free), and each cosmetic not owned yet. Each entry: {kind: room|weapon|building|cosmetic, id,
 ## cost, gain, value}; gain = Squad Power added (room, weapon: level-start firepower, so 0 for a
 ## rank that joins mid-level, the cap, the coin bonus and a Bottle Shot track), coins per hour
@@ -317,13 +392,13 @@ static func purchases(save: Dictionary, now: int, economy: Dictionary = {}, unit
 	var station: Dictionary = save.get("station", {})
 	for room in eco.get("station_order", []):
 		var c := SaveData.room_cost(eco, station, String(room), liberated)
-		if c >= 0:
+		if c >= 0 and room_lock_level(save, String(room), eco) == 0:
 			out.append({"kind": "room", "id": String(room), "cost": c, "gain": room_power_gain(station, String(room), units, eco),
 				"value": room_value(save, String(room), units, eco)})
 	var unlocked := int(save.get("unlocked", 1))
 	for id in Armory.ids():
 		var c := Armory.next_cost(save, String(id))
-		if c >= 0 and not Armory.is_locked(String(id), unlocked):
+		if c >= 0 and not Armory.is_locked(String(id), unlocked) and Armory.next_tier_lock(save, String(id)) == 0:
 			out.append({"kind": "weapon", "id": String(id), "cost": c, "gain": weapon_power_gain(save, String(id), units, eco),
 				"value": weapon_value(save, String(id), units, eco)})
 	for id in City.ids(eco):

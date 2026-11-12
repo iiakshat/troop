@@ -9,7 +9,8 @@ extends RefCounted
 ## Knives fly straight (`throw`); everything else is a ballistic shot (`fire`): constant speed
 ## along the range, gravity down, wind sideways, hitting what is under the crossing point when
 ## it arrives. A star that crosses a steel plate ricochets along its row and can break more.
-## Combo: hits in a row raise a factor; each hit adds bonus_per_bottle x combo to the multiplier.
+## Combo: hits in a row raise a streak factor (the HUD's flame). Coins (spec v2.1 section 3.1)
+## count the bottles broken and the gold one through Economy.level_coins, capped at 1.7x.
 
 var cfg: Dictionary
 var level := 1
@@ -27,7 +28,7 @@ var mag_left := 0
 var shots_fired := 0
 var streak := 0                # hits in a row
 var best_streak := 0
-var bonus := 0.0               # sum of bonus_per_bottle x combo over the hits
+var heat := 0.0                # the level's mean tap heat (0..1): the payout's tap term
 
 ## Old name, kept for callers that count knives.
 var knives_left: int:
@@ -360,8 +361,6 @@ func _register(hits: Array) -> void:
 			continue
 		streak += 1
 		best_streak = maxi(best_streak, streak)
-		if not is_gold(i):
-			bonus += float(cfg["bonus_per_bottle"]) * combo_for(streak)
 
 
 ## The combo factor of the `n`-th hit in a row.
@@ -384,14 +383,15 @@ func broken_count(gold := false) -> int:
 	return n
 
 
-## Multiplier from broken bottles: 1 + the combo-weighted bonus, x gold_mult for gold.
+## Multiplier from broken bottles (spec v2.1 section 3.1): Economy.bottle_factor, 1 + 0.1 per
+## bottle (up to 4) + 0.3 for the gold one, so a perfect run pays at most 1.7x a plain win.
 func multiplier() -> float:
-	var m := 1.0 + bonus
-	if broken_count(true) > 0:
-		m *= float(cfg["gold_mult"])
-	return m
+	return Economy.bottle_factor(broken_count(), broken_count(true) > 0)
 
 
+## What the win pays (Economy.level_coins, the one payout function): `troops` = the finish as
+## district-1 troops (LevelSim.coin_troops, a full squad = the stored route's finish),
+## `station_bonus` = the evidence room's coin bonus (0.2 = +20%), `heat` = the level's taps.
 func coins(troops: int, station_bonus := 0.0) -> int:
-	var base := float(cfg["clear_bonus"]) + troops * float(cfg["per_troop"])
-	return int(round(base * multiplier() * (1.0 + station_bonus)))
+	return Economy.level_coins(level, troops, Economy.full_coin_troops(), broken_count(), broken_count(true) > 0,
+		heat, 1.0 + station_bonus)

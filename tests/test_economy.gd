@@ -45,11 +45,14 @@ func test_level_coin_curve() -> void:
 
 
 func test_level_reward() -> void:
+	# v2.1: Bottle Shot's coins (Economy.level_coins) already carry the curve and the boss bonus.
 	eq(Economy.level_reward(1, 200, false, eco), 200, "L1 first clear = finale coins")
-	var r2 := Economy.level_reward(2, 200, false, eco)
-	eq(r2, int(round(200 * Economy.level_coin_mult(2, eco))), "L2 curve")
-	eq(Economy.level_reward(2, 200, true, eco), int(round(200 * Economy.level_coin_mult(2, eco) * float(eco["level_coins"]["replay_mult"]))), "replay pays less")
-	eq(Economy.level_reward(10, 100, false, eco), int(round(100 * Economy.reward_scale(10, eco) * float(eco["level_coins"]["boss_mult"]))), "boss bonus")
+	eq(Economy.level_reward(2, 200, false, eco), 200, "L2 first clear = finale coins")
+	eq(Economy.level_reward(2, 200, true, eco), int(round(200 * float(eco["level_coins"]["replay_mult"]))), "replay pays less")
+	var plain := Economy.level_coins(2, 300, 300, 0, false, 0.0, 1.0, eco)
+	eq(plain, int(round(float(eco["payout"]["base"]) * Economy.level_coin_mult(2, eco) * (1.0 + float(eco["payout"]["troops"])))), "L2 curve")
+	eq(Economy.level_coins(10, 300, 300, 0, false, 0.0, 1.0, eco), int(round(float(eco["payout"]["base"]) * Economy.reward_scale(10, eco)
+		* float(eco["level_coins"]["boss_mult"]) * (1.0 + float(eco["payout"]["troops"])))), "boss bonus")
 	eq(Economy.level_reward(5, -40, false, eco), 0, "never negative")
 
 
@@ -96,7 +99,7 @@ func test_city_config_matches_spec() -> void:
 			seen[id] = true
 			eq(int(city["buildings"][id]["district"]), d + 1, id + " district field")
 	eq(city["buildings"].size(), 25, "25 buildings")
-	eq(City.build_time("cafe", 1, eco), 30, "first build is 30 s")
+	eq(City.build_time("cafe", 1, eco), 120, "first build is 2 min (spec v2.1 section 3.4)")
 	var last := City.build_time("city_hall", 1, eco)
 	check(last >= 5400 and last <= 9000, "last rebuild about 2 h")
 	eq((city["upgrade_cost_mult"] as Array).size(), City.max_level(eco), "a cost multiplier per level")
@@ -346,3 +349,232 @@ func test_loss_tip_points_at_weapon_when_it_helps_most() -> void:
 			Armory.set_index(s, String(id), Armory.total_buys(String(id)))
 	tip = Economy.best_upgrade_after_loss(s, eco, units)
 	eq(String(tip.get("kind", "")), "room", "a room when no weapon step is left")
+
+
+# ---------------------------------------------------------------- v2.1: steady progress (spec §3)
+
+const GameScript := preload("res://src/autoload/game.gd")
+const T0 := 1_800_000_000
+const BUILD_MINUTES := [[2, 10], [10, 30], [30, 90], [60, 180], [120, 240]]
+
+
+## Spec v2.1 §3.1 and owner decision 1: a perfect Bottle Shot pays at most about 1.7x a plain win
+## (same squad, same taps, no bottle broken), through the one payout function; Bottle Shot's coins
+## are that function, and a replay pays the replay rate of it.
+func test_perfect_run_at_most_1_7x() -> void:
+	for L in [1, 5, 10, 23, 50]:
+		for sq in [[300, 300], [150, 300], [40, 53], [9000, 4000]]:
+			for heat in [0.0, 0.6, 1.0]:
+				var plain := Economy.level_coins(L, sq[0], sq[1], 0, false, heat, 1.0, eco)
+				var perfect := Economy.level_coins(L, sq[0], sq[1], 99, true, heat, 1.0, eco)
+				check(plain > 0, "a win pays (L%d)" % L)
+				check(perfect <= int(ceil(plain * 1.7)) + 1, "L%d perfect %d <= 1.7 x plain %d" % [L, perfect, plain])
+				check(perfect >= int(plain * 1.6), "L%d a perfect run is still worth about 1.7x (%d vs %d)" % [L, perfect, plain])
+	near(Economy.bottle_factor(0, false, eco), 1.0, "no bottle: x1")
+	near(Economy.bottle_factor(99, true, eco), 1.7, "every bottle and the gold: x1.7")
+	near(Economy.bottle_factor(2, false, eco), 1.2, "two bottles: x1.2")
+	# The other terms are small and bounded: the finish (up to +30%) and the taps (up to +10%).
+	var cold := Economy.level_coins(7, 300, 300, 0, false, 0.0, 1.0, eco)
+	check(Economy.level_coins(7, 300, 300, 0, false, 1.0, 1.0, eco) <= int(ceil(cold * 1.1)) + 1, "tapping adds at most +10%")
+	check(Economy.level_coins(7, 300, 300, 0, false, 1.0, 1.0, eco) > cold, "tapping adds something")
+	var thin := Economy.level_coins(7, 1, 300, 0, false, 0.0, 1.0, eco)
+	check(cold <= int(ceil(thin * 1.3)) + 1 and cold > thin, "a full finish adds at most +30%")
+	eq(Economy.level_coins(7, 600, 300, 0, false, 0.0, 1.0, eco), cold, "more than the stored route's finish adds nothing")
+	eq(Economy.level_coins(7, 300, 300, 0, false, 0.0, 1.2, eco), int(round(cold * 1.2)), "the station's coin bonus multiplies")
+	check(Economy.level_coins(10, 300, 300, 0, false, 0.0, 1.0, eco) > Economy.level_coins(11, 300, 300, 0, false, 0.0, 1.0, eco), "a boss pays more")
+	eq(Economy.heat_pct(1.0, eco), 10, "the tap term shows as +10%")
+	eq(Economy.heat_pct(0.0, eco), 0, "no taps: +0%")
+	# Bottle Shot's coins are the payout function (full district-1 squad = the stored route's finish).
+	var finale: Dictionary = Config.load_json("res://config/finale.json")
+	for L in [1, 4, 13, 27, 50]:
+		var b := BottleLogic.new(finale, L)
+		var none := b.coins(300)
+		eq(none, Economy.level_coins(L, 300, Economy.full_coin_troops(), 0, false, 0.0, 1.0, eco), "L%d no bottles" % L)
+		near(b.multiplier(), 1.0, "L%d no bottles: x1" % L)
+		for i in b.count():
+			b.broken[i] = not b.is_decoy(i)
+		b.heat = 1.0
+		var all := b.coins(300, 0.2)
+		eq(all, Economy.level_coins(L, 300, Economy.full_coin_troops(), b.broken_count(), true, 1.0, 1.2, eco), "L%d perfect run" % L)
+		near(b.multiplier(), Economy.bottle_factor(b.broken_count(), true, eco), "L%d the shown multiplier is the payout's" % L)
+		check(b.coins(300) <= int(ceil(Economy.level_coins(L, 300, 300, 0, false, 1.0, 1.0, eco) * 1.7)) + 1, "L%d Bottle Shot pays <= 1.7x" % L)
+	eq(Economy.level_reward(12, 500, false, eco), 500, "a first clear pays the finale's coins (the curve is in them)")
+	eq(Economy.level_reward(12, 500, true, eco), int(round(500 * float(eco["level_coins"]["replay_mult"]))), "a replay pays the replay rate")
+
+
+## Spec v2.1 §3.2: Armory tiers open by level (tier 2 from L9, tier 3 from L15, tier 4 from L31).
+## The bar fills, but the buy that evolves the weapon waits for the level, in Armory.buy and in
+## the economy's list of purchases.
+func test_tier_unlock_levels() -> void:
+	var units := Config.units()
+	check(Armory.tier_unlocked(1, 1), "tier 1 from the start")
+	check(not Armory.tier_unlocked(2, 8) and Armory.tier_unlocked(2, 9), "tier 2 from L9")
+	check(not Armory.tier_unlocked(3, 14) and Armory.tier_unlocked(3, 15), "tier 3 from L15")
+	check(not Armory.tier_unlocked(4, 30) and Armory.tier_unlocked(4, 31), "tier 4 from L31")
+	var s := _armory_save(10000000, 8)
+	for i in 4:
+		check(bool(Armory.buy(s, "service_pistol")["ok"]), "tier 1 step %d is open at L8" % (i + 1))
+	eq(Armory.next_tier_lock(s, "service_pistol"), 9, "the evolving buy shows L9")
+	check(not bool(Armory.buy(s, "service_pistol")["ok"]), "no evolution into tier 2 before L9")
+	eq(Armory.level(s, "service_pistol"), Vector2i(1, 4), "the bar stays full")
+	check(_purchase(s, "weapon", "service_pistol", units).is_empty(), "the locked evolution is not for sale")
+	check(not _purchase(s, "weapon", "knives", units).is_empty(), "other open steps are")
+	s["unlocked"] = 9
+	eq(Armory.next_tier_lock(s, "service_pistol"), 0, "open at L9")
+	check(bool(Armory.buy(s, "service_pistol")["evolved"]), "L9: it evolves into tier 2")
+	for i in 4:
+		Armory.buy(s, "service_pistol")
+	eq(Armory.next_tier_lock(s, "service_pistol"), 15, "tier 3 waits for L15")
+	check(not bool(Armory.buy(s, "service_pistol")["ok"]), "no tier 3 before L15")
+	s["unlocked"] = 15
+	check(bool(Armory.buy(s, "service_pistol")["evolved"]), "L15: tier 3")
+	for i in 4:
+		Armory.buy(s, "service_pistol")
+	eq(Armory.next_tier_lock(s, "service_pistol"), 31, "tier 4 waits for L31")
+	s["unlocked"] = 30
+	check(not bool(Armory.buy(s, "service_pistol")["ok"]), "no tier 4 before L31")
+	s["unlocked"] = 31
+	check(bool(Armory.buy(s, "service_pistol")["evolved"]), "L31: tier 4")
+	eq(Armory.next_tier_lock(s, "service_pistol"), 0, "the last tier's bar is open")
+
+
+## Spec v2.1 §3.3: training level 1 opens at L4, level 2 at L6, level 3 at L8, for buying and in
+## the levels (a level gets only the training its number allows). So the hero-alone openings of
+## L2-L3 stay tap lessons: their stored routes at tap 0 lose with any training 1-3 owned.
+func test_training_gated_l2_l3_tap_check() -> void:
+	var units := Config.units()
+	eq(Economy.room_level_gate("training", 1, eco), 4, "training 1 from L4")
+	eq(Economy.room_level_gate("training", 2, eco), 6, "training 2 from L6")
+	eq(Economy.room_level_gate("training", 3, eco), 8, "training 3 from L8")
+	eq(Economy.room_level_gate("training", 4, eco), 0, "training 4 has no level gate")
+	eq(Economy.room_level_gate("barracks", 1, eco), 0, "other rooms have none")
+	for u in [1, 2, 3]:
+		var s := _armory_save(100000, u)
+		check(_purchase(s, "room", "training", units).is_empty(), "no training for sale at L%d" % u)
+		eq(Economy.room_lock_level(s, "training", eco), 4, "the lock shows L4 at L%d" % u)
+	var s4 := _armory_save(100000, 4)
+	check(not _purchase(s4, "room", "training", units).is_empty(), "training 1 at L4")
+	s4["station"]["training"] = 1
+	check(_purchase(s4, "room", "training", units).is_empty(), "training 2 waits for L6")
+	eq(Economy.room_lock_level(s4, "training", eco), 6, "the lock shows L6")
+	eq(int(Economy.level_station({"training": 5}, 3, eco)["training"]), 0, "L3: no training joins")
+	eq(int(Economy.level_station({"training": 5}, 5, eco)["training"]), 1, "L5: training 1")
+	eq(int(Economy.level_station({"training": 5}, 7, eco)["training"]), 2, "L7: training 2")
+	eq(int(Economy.level_station({"training": 5, "barracks": 2}, 8, eco)["training"]), 5, "L8: all of it")
+	eq(int(Economy.level_station({"training": 5, "barracks": 2}, 3, eco)["barracks"]), 2, "other rooms always join")
+	for n in [2, 3]:
+		var lv := Config.level(n)
+		for owned in [0, 1, 2, 3]:
+			var fx := SaveData.effects(eco, Economy.level_station({"training": owned}, n, eco))
+			var r := Autopilot.run(lv, units, lv["route"], fx, false, 1.0 / 30.0, false, 0.0)
+			check(String(r["state"]) != "strike", "L%d stored route, tap 0, training %d owned: loses (%s)" % [n, owned, r["state"]])
+	# Through Game: the lock in the station and the squad a level gets.
+	var g := _game()
+	g.save["coins"] = 100000
+	g.save["unlocked"] = 3
+	var st: Dictionary = g.room_state("training")
+	eq(int(st["level_lock"]), 4, "Game: training shows the L4 lock")
+	check(not bool(st["can_buy"]) and g.room_cost("training") < 0 and not g.buy_room("training"), "Game: not for sale at L3")
+	g.save["unlocked"] = 9
+	check(g.buy_room("training") and g.buy_room("training") and g.buy_room("training"), "Game: three levels at L9")
+	eq(int(g.level_upgrades({}, 2)["squad"]), 0, "Game: L2 starts with the hero alone")
+	eq(int(g.level_upgrades({}, 6)["squad"]), 2, "Game: L6 brings training 2")
+	eq(int(g.level_upgrades({}, 9)["squad"]), 3, "Game: L9 brings all three")
+	eq(int(g.level_upgrades({})["squad"]), 3, "Game: no level given = everything owned")
+	g.free()
+	# The station shows the lock, the level pin and the level on training's button.
+	var tree := Engine.get_main_loop() as SceneTree
+	var game: Node = tree.root.get_node_or_null("Game")
+	if game == null:
+		return
+	var keep: Dictionary = game.save.duplicate(true)
+	var keep_path: String = game.save_path
+	game.save_path = ""
+	game.boot({})
+	game.save["unlocked"] = 3
+	game.save["coins"] = 5000
+	var sp := StationPanel.new()
+	tree.root.add_child(sp)
+	if not sp.is_node_ready():
+		sp._ready()
+	sp.refresh()
+	var face: Dictionary = sp.buy_face("training")
+	check(bool(face["disabled"]) and (face["icons"] as Array).has("lock") and String(face["text"]) == "4", "station: training shows the lock and L4 (%s)" % str(face))
+	game.save["unlocked"] = 4
+	sp.refresh()
+	face = sp.buy_face("training")
+	check(not bool(face["disabled"]) and (face["icons"] as Array).has("coin"), "station: training 1 for sale at L4 (%s)" % str(face))
+	tree.root.remove_child(sp)
+	sp.free()
+	game.save = keep
+	game.save_path = keep_path
+
+
+## Spec v2.1 §3.4: builds take long enough to finish between sessions, by district: 2-10 min,
+## 10-30 min, 30-90 min, 1-3 h, 2-4 h (every level of every building).
+func test_build_timers_by_district() -> void:
+	for d in 5:
+		var lo: int = BUILD_MINUTES[d][0] * 60
+		var hi: int = BUILD_MINUTES[d][1] * 60
+		var prev := 0
+		for id in City.buildings_in(d + 1, eco):
+			var t1 := City.build_time(id, 1, eco)
+			check(t1 >= prev, "%s: later buildings take at least as long" % id)
+			prev = t1
+			for lv in range(1, City.max_level(eco) + 1):
+				var t := City.build_time(id, lv, eco)
+				check(t >= lo and t <= hi, "%s level %d: %d s in district %d's %d-%d min" % [id, lv, t, d + 1, lo / 60, hi / 60])
+
+
+## Spec v2.1 §3.4: the welcome-back popup measures "away" from when the app went to the
+## background, not from the last collection, so a resume after the map sat open with full storage
+## does not offer the x2 popup again; a real absence still does, also across a restart.
+func test_welcome_back_from_background_time() -> void:
+	var g := _game()
+	var wb: Dictionary = g.economy["city"]["welcome_back"]
+	var away := int(wb["min_away_seconds"])
+	g.save["city"] = {"cafe": {"lv": 1, "built_at": T0 - 600, "ready_at": T0 - 300}}
+	g.save["city_collected_at"] = T0
+	var t := T0 + 3 * 3600   # the map sat open for 3 h: storage is full
+	g.clock_override = t
+	check(g.city_pending(t) >= int(wb["min_coins"]), "storage filled while the map was open")
+	g.notification(Node.NOTIFICATION_APPLICATION_PAUSED)
+	eq(int(g.save.get("left_at", 0)), t, "going to the background is recorded")
+	g.clock_override = t + 30
+	eq(g.welcome_back(), 0, "30 s in another app: no popup")
+	g.notification(Node.NOTIFICATION_APPLICATION_RESUMED)
+	g.clock_override = t + 600
+	eq(g.welcome_back(), 0, "still in the foreground: no popup")
+	g.notification(Node.NOTIFICATION_APPLICATION_PAUSED)
+	g.clock_override = t + 600 + away
+	eq(g.welcome_back(), g.city_pending(), "a real absence: the popup with the stored coins")
+	# Across a restart: the background time is in the save.
+	var raw: Dictionary = g.save.duplicate(true)
+	g.free()
+	var g2 := _game(raw)
+	g2.clock_override = t + 600 + away
+	eq(g2.welcome_back(), g2.city_pending(), "after a restart the absence still counts")
+	g2.clock_override = t + 600 + away - 5
+	eq(g2.welcome_back(), 0, "but not before min_away_seconds")
+	g2.free()
+
+
+## Spec v2.1 §3.5: the engaged no-ad player (tests/econ_model.gd PROFILES.engaged: longer sessions,
+## all bottles, the gold most times, tapping) stays within 1.6x the recommended power, and the
+## pace the levels are calibrated on meets it (test_purchase_curve_holds).
+func test_engaged_power_ceiling() -> void:
+	var Model = load("res://tests/econ_model.gd")
+	var rows: Array = Model.run(eco, Config.load_json("res://config/finale.json"), Config.units(), Model.PROFILES["engaged"])
+	eq(rows.size(), Config.LEVEL_COUNT, "one row per level")
+	for r in rows:
+		var rec := Economy.recommended_power(int(r["level"]) + 1, eco)
+		check(float(r["power"]) <= 1.6 * rec + 0.001, "engaged no-ad power %.1f <= 1.6 x recommended %.1f at L%d" % [float(r["power"]), rec, int(r["level"]) + 1])
+
+
+func _game(raw: Variant = {}) -> Node:
+	var g: Node = GameScript.new()
+	g.save_path = ""
+	g.clock_override = T0
+	g.date_override = "2026-11-08"
+	g.boot(raw)
+	return g
