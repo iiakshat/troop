@@ -36,6 +36,17 @@ def key_green(c):
     # De-spill: green-tinted edge pixels lose their extra green.
     out = c.copy()
     out[..., 1] = np.where(green > 0, g - green * (1.0 - alpha * 0.6), g)
+    # Dark green pixels are the art's drop shadow on the green backdrop (nothing in the
+    # brand art is green): turn them into a navy shadow whose opacity is how much darker
+    # than the backdrop they are.
+    back = np.median(g[green >= 95]) if (green >= 95).any() else 255.0
+    shade = (green > 8) & (g < back * 0.85)
+    alpha = np.where(shade, np.minimum(alpha, np.clip(1.0 - g / back, 0.0, 1.0)), alpha)
+    out = np.where(shade[..., None], np.array([6.0, 12.0, 30.0]), out)
+    # The dark navy outline picked up a teal cast from the backdrop (green ~ blue): dark
+    # pixels keep green at most 0.7 of blue, like the rest of the outline.
+    dark = out.max(axis=-1) < 120
+    out[..., 1] = np.where(dark, np.minimum(out[..., 1], out[..., 2] * 0.7), out[..., 1])
     return np.clip(out, 0, 255), alpha
 
 
@@ -62,14 +73,16 @@ def cut(c, alpha, box, pad=8):
     y0, x0 = max(0, y0 - pad), max(0, x0 - pad)
     y1, x1 = min(alpha.shape[0], y1 + pad), min(alpha.shape[1], x1 + pad)
     a = alpha[y0:y1, x0:x1].copy()
-    # Keep only the shapes of this item (drop specks from neighbours).
+    rgb = c[y0:y1, x0:x1]
+    # Keep only the shapes of this item: drop specks from neighbours and the faint keying
+    # noise in the clear area (even when the item is a single shape).
     lab, n = ndimage.label(a > 0.5)
-    if n > 1:
-        sizes = ndimage.sum(np.ones_like(a), lab, range(1, n + 1))
-        keep = np.zeros(n + 1, bool)
-        keep[1:] = sizes > sizes.max() * 0.02
-        a = a * ndimage.binary_dilation(keep[lab], iterations=3)
-    return Image.fromarray(np.dstack([c[y0:y1, x0:x1], a * 255]).astype(np.uint8), "RGBA")
+    sizes = ndimage.sum(np.ones_like(a), lab, range(1, n + 1))
+    keep = np.zeros(n + 1, bool)
+    keep[1:] = sizes > sizes.max() * 0.02
+    solid = keep[lab]
+    a = a * ndimage.binary_dilation(solid, iterations=3)
+    return Image.fromarray(np.dstack([rgb, a * 255]).astype(np.uint8), "RGBA")
 
 
 def fit_width(img, w):
