@@ -718,3 +718,74 @@ func test_standoff_stops_the_street() -> void:
 	check(slid < 1.5, "traveled stops during a standoff (only the brake: %.2f m)" % slid)
 	check(resumed, "the street rolls again once they fall")
 	eq(sim.state, "strike", "won")
+
+
+# ---------------------------------------------------------------- v2: tap heat, gang priority
+
+func _sim_l1() -> LevelSim:
+	return LevelSim.new(Config.level(1), units)
+
+
+func test_hero_rate_rises_with_taps_and_decays() -> void:
+	var sim := _sim_l1()
+	eq(sim.hero_rate_mult(), 0.4, "idle hero fires at auto_rate")
+	for i in 8:
+		sim.tap()
+		sim.step(0.25)  # 4 taps/s
+	check(sim.hero_rate_mult() > 0.95, "steady 4/s tapping holds full rate (%.2f)" % sim.hero_rate_mult())
+	check(sim.tap_heat > 0.9 and sim.tap_heat <= 1.0, "heat stays in 0..1 (%.2f)" % sim.tap_heat)
+	for i in 8:
+		sim.step(0.25)  # 2 s idle
+	eq(sim.hero_rate_mult(), 0.4, "back to auto_rate after decay")
+	eq(sim.tap_heat, 0.0, "heat is cold again")
+	sim.tap()
+	var c := sim.clone()
+	eq(c.tap_heat, sim.tap_heat, "clone copies the heat")
+
+
+func test_followers_ignore_tap_heat() -> void:
+	# A constable-only squad deals the same dps with and without taps.
+	var sim := _sim_l1()
+	sim.squad.counts["hero"] = 0
+	sim.squad.add("constable", 10)
+	var cold := sim.squad.dps(sim.stats, sim.weapons, 0)
+	for i in 4:
+		sim.tap()
+	sim.step(1.0 / 30.0)
+	eq(sim.squad.dps(sim.stats, sim.weapons, 0), cold, "followers fire at full rate either way")
+	# The hero alone scales with the heat, and so does a held PISTOL.
+	var hero := _sim_l1()
+	hero.squad.hero_weapon = "pistol"
+	var idle := hero.squad.dps(hero.stats, hero.weapons, 0)
+	var full := idle / 0.4
+	for i in 4:
+		hero.tap()
+	hero.step(1.0 / 30.0)
+	var hot := hero.squad.dps(hero.stats, hero.weapons, 0)
+	check(absf(hot - full) < 0.001, "a hot hero (knife + pistol) fires at full rate (%.2f vs %.2f)" % [hot, full])
+
+
+func _priority_sim(gang_front_z: float) -> LevelSim:
+	var lvl := {"events": [
+		{"at": 120, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": -3, "step": 1, "max": 4}]},
+		{"at": 121, "type": "wave", "groups": [{"enemy": "thug", "n": 4}]},
+		{"at": 200, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	_step_until(sim, func(): return not sim.rows.is_empty() and not sim.hordes.is_empty())
+	sim.rows[0]["z"] = -10.0
+	for g in sim.rows[0]["gates"]:
+		g["z"] = -10.0
+	var h: Dictionary = sim.hordes[0]
+	h["z"] = gang_front_z + LevelSim.killed_rows(h) * float(h["row_gap"])
+	return sim
+
+
+func test_gang_within_priority_takes_fire_before_red_gate() -> void:
+	eq(float(units["world"].get("gang_priority_m", 0.0)), 15.0, "priority reach is in config")
+	var near := _priority_sim(-14.0)
+	check(not near.rows.is_empty() and not near.hordes.is_empty(), "gate and gang on screen")
+	near._shoot(1.0 / 30.0)
+	eq(near.target_kind, "horde", "a gang inside 15 m is shot before the nearer red gate")
+	var far := _priority_sim(-25.0)
+	far._shoot(1.0 / 30.0)
+	eq(far.target_kind, "gate", "a gang outside 15 m: the nearer red gate is shot first")

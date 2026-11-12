@@ -7,6 +7,8 @@ extends SceneTree
 ##       [list=1,5,9] [routes=100] [beam=6] [upgrades=k,s,q] [out=path.json] [calibrate=1] [verbose=1]
 ##       [k=0.5 kf=2 (evaluate with every gang scaled, the last wave kf times more)]
 ##       [ratio=0 (calibrate the win rate only; keep the last wave's current scale)]
+##       [tap_rate=4 (the autopilot's taps per second; 0 = a non-tapper)]
+##       [powers=0 (no shield/bomb anywhere: sampled routes, the best route and calibration)]
 ##
 ## calibrate=1 searches, per level, the scale for every gang's size (bosses: hp) that makes
 ## the sampled win rate match the level's `target_win`, while the best route still wins
@@ -26,6 +28,8 @@ var n_routes := 100
 var beam := 6
 var verbose := false
 var fit_ratio := true
+var tap_rate := 4.0      # autopilot taps per second (spec v2 section 2)
+var use_powers := true   # powers=0: every run plays without shield/bomb
 
 
 func _initialize() -> void:
@@ -62,6 +66,10 @@ func _initialize() -> void:
 			verbose = true
 		elif a == "ratio=0":
 			fit_ratio = false
+		elif a.begins_with("tap_rate="):
+			tap_rate = float(a.substr(9))
+		elif a == "powers=0":
+			use_powers = false
 		elif a.begins_with("k="):
 			k_eval = float(a.substr(2))
 		elif a.begins_with("kf="):
@@ -69,6 +77,7 @@ func _initialize() -> void:
 	units = Config.units()
 	var t0 := Time.get_ticks_msec()
 	var report: Array = []
+	print("tap_rate %.1f, powers %s" % [tap_rate, "on" if use_powers else "off"])
 	print("level | rows | wins/total | target | no-pow best | best troops/peak | stars | time s | k / kf")
 	if only.is_empty():
 		only = range(lo, hi + 1)
@@ -98,14 +107,14 @@ func evaluate(n: int, base: Dictionary, k: float, kf := 1.0, samples := -1) -> D
 	var wins := 0
 	var causes := {}
 	for route in routes:
-		var r := Autopilot.run(level, units, route, upgrades, true, DT)
+		var r := Autopilot.run(level, units, route, upgrades, use_powers, DT, false, tap_rate)
 		if r["state"] == "strike":
 			wins += 1
 		else:
 			causes[r["cause"]] = int(causes.get(r["cause"], 0)) + 1
 	if verbose:
 		print("      loss causes ", causes)
-	var best := best_route(level, true)
+	var best := best_route(level, use_powers)
 	var np := best_route(level, false) if n <= 10 else {"result": {"state": "?"}}
 	var br: Dictionary = best["result"]
 	if verbose:
@@ -149,7 +158,7 @@ func calibrate_level(n: int, base: Dictionary) -> Dictionary:
 			k = _fit_win(base, routes, target, kf)
 	for i in 14:
 		var lv := scaled_level(base, k, kf)
-		var b: Dictionary = best_route(lv, true)["result"]
+		var b: Dictionary = best_route(lv, use_powers)["result"]
 		var won: bool = b["state"] == "strike"
 		var ok: bool = won and float(b["time"]) <= MAX_TIME
 		if ok and n <= 10:
@@ -172,7 +181,7 @@ func _fit_win(base: Dictionary, routes: Array, target: float, kf: float) -> floa
 		var lv := scaled_level(base, exp(mid), kf)
 		var wins := 0
 		for route in routes:
-			if Autopilot.run(lv, units, route, upgrades, true, DT)["state"] == "strike":
+			if Autopilot.run(lv, units, route, upgrades, use_powers, DT, false, tap_rate)["state"] == "strike":
 				wins += 1
 		if float(wins) / routes.size() > target:
 			lo = mid
@@ -187,7 +196,7 @@ func _fit_ratio(base: Dictionary, k: float, want: float) -> float:
 	var hi := log(KF_MAX)
 	for i in 8:
 		var mid := (lo + hi) * 0.5
-		var r := _ratio(best_route(scaled_level(base, k, exp(mid)), true)["result"])
+		var r := _ratio(best_route(scaled_level(base, k, exp(mid)), use_powers)["result"])
 		if r > want:
 			lo = mid
 		else:
@@ -262,7 +271,7 @@ func best_route(level: Dictionary, powers: bool) -> Dictionary:
 				var s2: LevelSim = (st["sim"] as LevelSim).clone()
 				var route: Array = (st["route"] as Array).duplicate()
 				route.append(l)
-				Autopilot.play(s2, Autopilot.new(route, powers), DT, r + 1)
+				Autopilot.play(s2, Autopilot.new(route, powers, false, tap_rate), DT, r + 1)
 				if s2.state == "lost":
 					if dead.is_empty() or s2.traveled > float(dead["sim"].traveled):
 						dead = {"sim": s2, "route": route}
@@ -275,7 +284,7 @@ func best_route(level: Dictionary, powers: bool) -> Dictionary:
 	var best: Dictionary = {}
 	for st in states:
 		var sim: LevelSim = st["sim"]
-		var res := Autopilot.play(sim, Autopilot.new(st["route"], powers), DT)
+		var res := Autopilot.play(sim, Autopilot.new(st["route"], powers, false, tap_rate), DT)
 		var s := (100000.0 if res["state"] == "strike" else 0.0) + float(res["troops"])
 		if best.is_empty() or s > float(best["s"]):
 			best = {"route": st["route"], "result": res, "s": s}

@@ -48,6 +48,15 @@ var form_half := 1.25      # widest a formation gets either side of its centre
 var fig_cap := 72          # figures a formation is drawn with (each carries total/figures troops)
 var fig_r := 0.2           # figure radius for footprint overlap
 var gate_clear_s := 2.5    # a committed squad shoots a red gate up to 0 within this many seconds
+var gang_priority := 0.0   # a gang front this close takes the fire before nearer lane objects
+
+## Tap-to-fire: the hero fires at lerp(tap_auto, 1, tap_heat) of his rate (units.hero.tap).
+var tap_heat := 0.0        # 0..1; each tap() adds tap_per, held tap_hold_s, then drains over tap_decay_s
+var tap_auto := 1.0
+var tap_per := 1.0
+var tap_hold_s := 0.0
+var tap_decay_s := 1.0
+var _tap_hold := 0.0       # seconds left before the heat starts to drain
 
 var stats: Dictionary   # effective ally stats after upgrades
 var weapons: Dictionary
@@ -113,6 +122,12 @@ func _init(level: Dictionary = {}, units_cfg: Dictionary = {}, upgrades: Diction
 	fig_cap = int(w.get("formation_figures", fig_cap))
 	fig_r = float(w.get("figure_radius", fig_r))
 	gate_clear_s = float(w.get("red_gate_clear_s", gate_clear_s))
+	gang_priority = float(w.get("gang_priority_m", gang_priority))
+	var tap: Dictionary = units_cfg.get("hero", {}).get("tap", {})
+	tap_auto = float(tap.get("auto_rate", tap_auto))
+	tap_per = float(tap.get("per_tap", tap_per))
+	tap_hold_s = float(tap.get("hold_s", tap_hold_s))
+	tap_decay_s = maxf(float(tap.get("decay_s", tap_decay_s)), 0.001)
 	stats = units_cfg["allies"].duplicate(true)
 	weapons = units_cfg["hero_weapons"]
 	enemy_defs = units_cfg["enemies"]
@@ -138,6 +153,28 @@ func _init(level: Dictionary = {}, units_cfg: Dictionary = {}, upgrades: Diction
 	charges["bomb"] = int(charges["bomb"]) + int(upgrades.get("bomb", 0))
 	_build_spawns(level.get("events", []))
 	peak_squad = squad.total()
+	squad.hero_rate = hero_rate_mult()
+
+
+# ---------------------------------------------------------------- tap heat
+
+## One tap on the fire zone: the hero heats up (spec v2 section 2).
+func tap() -> void:
+	tap_heat = minf(tap_heat + tap_per, 1.0)
+	_tap_hold = tap_hold_s
+	squad.hero_rate = hero_rate_mult()
+
+
+## Share of the hero's base rate he fires at now: tap_auto when cold, 1.0 when hot.
+func hero_rate_mult() -> float:
+	return lerpf(tap_auto, 1.0, tap_heat)
+
+
+func _cool(dt: float) -> void:
+	var held := minf(dt, _tap_hold)
+	_tap_hold -= held
+	tap_heat = maxf(tap_heat - (dt - held) / tap_decay_s, 0.0)
+	squad.hero_rate = hero_rate_mult()
 
 
 ## A gang's numbers: the enemy type, with any per-group overrides (boss variants etc.).
@@ -301,6 +338,7 @@ func step(dt: float) -> void:
 	_update_speed(dt)
 	traveled += S * dt
 	shield_t = maxf(shield_t - dt, 0.0)
+	_cool(dt)
 	_armour_note_t = maxf(_armour_note_t - dt, 0.0)
 	_spawn_due()
 	_move(dt)
@@ -511,8 +549,10 @@ func _shoot(dt: float) -> void:
 			_damage_horde(tough, sd, sp)
 	var h = _front_horde(fire_range)
 	var t = _lane_target()
-	# Bullets hit whichever is nearer in the lane: the gang's front or a lane object.
-	if t != null and (h == null or float(t["z"]) > front_z(h)):
+	# Bullets hit whichever is nearer in the lane: the gang's front or a lane object. A gang
+	# within gang_priority metres comes first, so the squad never shoots a gate while it walks in.
+	var gang_first: bool = h != null and front_z(h) >= -gang_priority
+	if t != null and (h == null or (float(t["z"]) > front_z(h) and not gang_first)):
 		_shoot_lane(t, dt, which)
 		return
 	if h == null:
@@ -1007,7 +1047,8 @@ func clone() -> LevelSim:
 	for p in ["S", "S_base", "accel", "fire_range", "spawn_dist", "contact_z", "melee_tick",
 			"boss_halt", "finish_hold", "boss_hit_every", "weapons", "enemy_defs", "obstacle_defs",
 			"powers", "revive_cfg", "star_cfg", "lane", "squad_x", "_x_driven", "lane_w", "form_half",
-			"fig_cap", "fig_r", "gate_clear_s", "traveled", "time", "state", "lose_cause",
+			"fig_cap", "fig_r", "gate_clear_s", "gang_priority", "tap_heat", "tap_auto", "tap_per",
+			"tap_hold_s", "tap_decay_s", "_tap_hold", "traveled", "time", "state", "lose_cause",
 			"finish_at", "halted", "peak_squad", "revived", "shield_t", "kills", "rows_passed",
 			"_spawns", "_next_spawn", "_pending_hordes", "_wave_ats", "_next_id", "_armour_note_t"]:
 		c.set(p, get(p))
