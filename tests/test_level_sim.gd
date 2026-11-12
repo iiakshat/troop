@@ -1048,6 +1048,13 @@ func test_live_firepower_rises_with_troops_and_taps() -> void:
 	check(sim.firepower() < joined, "the pothole's losses drop it (%d < %d)" % [sim.firepower(), joined])
 
 
+func test_start_firepower_is_the_hud_unit_with_a_hot_hero() -> void:
+	eq(LevelSim.start_firepower(units), 3, "the hero alone at full tap rate: 1 x 3/s")
+	var up := {"squad": 4}
+	eq(LevelSim.start_firepower(units, up), int(round(3.0 + 4 * 1.6)), "+4 starting constables")
+	check(LevelSim.start_firepower(units, {"headstart": 1}) > LevelSim.start_firepower(units), "a head start raises it")
+
+
 func test_coin_troops_are_district_one_equivalents() -> void:
 	var sim := LevelSim.new({"district": 3, "events": []}, units)
 	sim.squad.add("constable", 4999)

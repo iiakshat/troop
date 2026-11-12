@@ -198,6 +198,17 @@ func firepower() -> int:
 	return int(round(squad.firepower(stats, weapons)))
 
 
+## Firepower at the start of a level with these upgrades and the hero at full tap rate: the
+## same unit as the HUD's lightning number, for the lobby's Squad Power and each level's
+## recommended power (spec v2 §12.4, "same unit everywhere").
+static func start_firepower(units_cfg: Dictionary, upgrades: Dictionary = {}, level: Dictionary = {}) -> int:
+	var lv := level.duplicate()
+	lv["events"] = []
+	var sim := LevelSim.new(lv, units_cfg, upgrades)
+	sim.squad.hero_rate = 1.0
+	return sim.firepower()
+
+
 ## Share of the hero's base rate he fires at now: tap_auto when cold, 1.0 when hot.
 func hero_rate_mult() -> float:
 	return lerpf(tap_auto, 1.0, tap_heat)
