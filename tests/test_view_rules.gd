@@ -117,6 +117,23 @@ func test_heat_arc_follows_taps() -> void:
 	_drop(parts)
 
 
+## Spec v2 §3 (no join hitch): a level with a new-item hint draws the card once, nearly
+## transparent, while it loads (L13's first SWAT card was a 99 ms canvas-compile frame), then
+## the card is hidden and fully opaque again for the real hint.
+func test_new_item_card_is_prewarmed_at_load() -> void:
+	var parts := _view(13)
+	var view: LevelView = parts[0]
+	check(view.item_card != null, "the card exists from level load")
+	if view.item_card:
+		check(view.item_card._card.visible and view.item_card._card.modulate.a < 0.1, "drawn nearly transparent while loading")
+		for i in 6:
+			view.item_card.tick(1.0 / 60.0)
+		check(not view.item_card._card.visible, "hidden after the warm frames")
+		eq(view.item_card._card.modulate.a, 1.0, "opaque again for the real card")
+		check(not view.item_card.showing(), "no card is showing")
+	_drop(parts)
+
+
 ## Spec v2 §2 analytics: every hero tap is counted (taps per minute on level_end) and feeds the
 ## 10 s tap_rate buckets (tap fatigue), which close at the level end.
 func test_taps_feed_the_tap_rate_analytics() -> void:

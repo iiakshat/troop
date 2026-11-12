@@ -31,6 +31,7 @@ var _target: Control = null    # ... or a HUD control
 var _pos := Vector2(-1, -1)    # outline centre on screen
 var _rad := Vector2.ZERO       # outline radii
 
+var _warm := 0                # prewarm(): frames left to draw nearly transparent
 var _root: Control = null
 var _card: PanelContainer
 var _row: HBoxContainer
@@ -109,6 +110,26 @@ func show_item(ev: Dictionary, target: Control = null, by_tutor := false) -> boo
 	if OS.get_cmdline_user_args().has("tutor=auto"):
 		print("CARD %d %s" % [Engine.get_process_frames(), id])  # screenshot timing, like Tutorial's TUT
 	return true
+
+
+## Level load (LevelView._prewarm): the card (with the icons and numbers of every hint in
+## `ids`), the outline and the "!" badge draw for `frames` frames, nearly transparent, so their
+## canvas pipelines, textures and glyphs are ready before the first new item shows up (that
+## was a 99 ms frame at L13's first SWAT; spec v2 §3).
+func prewarm(ids: Array = [], frames := 4) -> void:
+	build()
+	_warm = frames
+	var fx: Array = [{"icon": "thug", "text": "-40"}]
+	for id in ids:
+		var it := item(String(id))
+		if not it.is_empty():
+			fx.append({"icon": String(it.get("icon", id)), "text": ""})
+			fx.append_array(effects(String(id), {}, view.sim.stats if view != null and view.sim != null else {}))
+	_icon_name = "thug"
+	_fill(fx)
+	_card.modulate.a = 0.02
+	_card.visible = true
+	_canvas.queue_redraw()
 
 
 func showing() -> bool:
@@ -199,6 +220,13 @@ func _process(delta: float) -> void:
 
 
 func tick(delta: float) -> void:
+	if _warm > 0:
+		_warm -= 1
+		_canvas.queue_redraw()
+		if _warm == 0:
+			_card.modulate.a = 1.0
+			_card.visible = _card_t > 0.0
+		return
 	if _card_t <= 0.0 and _out_t <= 0.0:
 		return
 	_age += delta
@@ -310,10 +338,14 @@ func _cam() -> Camera3D:
 # ---------------------------------------------------------------- drawing
 
 func _draw_outline() -> void:
-	if _out_t <= 0.0 or _pos.x < 0.0:
+	var warming := _warm > 0 and _out_t <= 0.0
+	if warming:
+		_pos = _root.size * 0.5
+		_rad = Vector2(60, 40)
+	elif _out_t <= 0.0 or _pos.x < 0.0:
 		return
 	var t := _age
-	var fade := minf(_out_t / 0.4, 1.0)
+	var fade := 0.02 if warming else minf(_out_t / 0.4, 1.0)
 	var pulse := 0.5 + 0.5 * sin(t * 7.0)
 	var r := _rad * (1.0 + 0.06 * pulse)
 	_ellipse(_pos, r * 1.08, Color(GOLD, 0.25 * fade), 18.0)

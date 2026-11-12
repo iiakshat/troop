@@ -2081,6 +2081,14 @@ func _prewarm() -> void:
 	(bv["bar"] as Node3D).position = _warm_at + Vector3(0, 1.0, -2.0)
 	(bv["bar_num"] as Label3D).text = "1,234K"
 	_warm.append_array([bv["bar"], boss_lab])
+	# The new-item card (v2 §11): its card, outline and badge first drew when the first new
+	# item came, a 99 ms frame at L13's first SWAT with a cold canvas pipeline cache.
+	var hint_ids: Array = []
+	for e in _level.get("events", []):
+		if String(e.get("type", "")) == "hint":
+			hint_ids.append(String(e.get("id", "")))
+	if not hint_ids.is_empty():
+		new_item_card().prewarm(hint_ids)
 	# Every icon this level shows (UiKit caches them), and every glyph at every label size and
 	# outline the street uses (the font is rasterised per size on first draw).
 	for e in _level.get("events", []):
