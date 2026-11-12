@@ -1,5 +1,5 @@
 {
-  "_note": "All combat numbers. dmg = damage per hit, rate = hits per second. Armour halves every hit per point unless the attacker pierces. multi = enemies hit per shot (only vs one-hit kills); splash = enemies each shot hits (never more than the gang holds). target toughest = shoots the toughest gang in range (bosses first) instead of the nearest; one_per_shot = a shot never kills more than the one enemy it hits (damage capped at that enemy's hp). unlock = first level where the rank/enemy appears (tools/gen_levels.py reads it). shield = riot-shield hp per unit, soaked before any kill (piercing fire passes). cols/row_gap = gang formation. stop_at = holds that distance and attacks (first_shot s after stopping, then every shoot_every / throw_every s); shoot_range = attacks while still walking (bosses). Gunfire: every shoot_every s each living shooter kills shot_dmg troops. Molotov: every throw_every s the group lobs a firebomb into the lane the squad is in; it lands flight s later and burns `burn` troops per living thrower if the squad is still in that lane. Sniper foe: every shoot_every s, after an `aim` s laser, each living sniper kills shot_dmg. SHIELD blocks all ranged hits and melee. world: lane_width = metres between lane centres; formation_half_width caps how wide the squad's formation gets (spec v2 §4: about one lane wide at full size, so a full squad's outer figures can brush an obstacle in the next lane; steering matters); formation_figures = most figures a formation has (each carries total/figures troops); figure_radius for obstacle overlap; red_gate_clear_s = a red gate's tick never needs more than this many seconds of the squad's fire to reach 0; gang_priority_m = a gang whose front is within this many metres takes the fire before any nearer gate or obstacle.",
+  "_note": "All combat numbers. dmg = damage per hit, rate = hits per second. Armour halves every hit per point unless the attacker pierces. multi = enemies hit per shot (only vs one-hit kills); splash = enemies each shot hits (never more than the gang holds). target toughest = shoots the toughest gang in range (bosses first) instead of the nearest; one_per_shot = a shot never kills more than the one enemy it hits (damage capped at that enemy's hp). unlock = first level where the rank/enemy appears (tools/gen_levels.py reads it). shield = riot-shield hp per unit, soaked before any kill (piercing fire passes). cols/row_gap = gang formation. stop_at = holds that distance and attacks (first_shot s after stopping, then every shoot_every / throw_every s); shoot_range = attacks while still walking (bosses). Gunfire: every shoot_every s each living shooter kills shot_dmg troops. Molotov: every throw_every s the group lobs a firebomb into the lane the squad is in; it lands flight s later and burns `burn` troops per living thrower if the squad is still in that lane. Sniper foe: every shoot_every s, after an `aim` s laser, each living sniper kills shot_dmg. SHIELD blocks all ranged hits and melee. world: lane_width = metres between lane centres; formation_half_width caps how wide the squad's formation gets (spec v2 §4: about one lane wide at full size, so a full squad's outer figures can brush an obstacle in the next lane; steering matters); formation_figures = most figures a formation has (each carries total/figures troops); figure_radius for obstacle overlap; red_gate_clear_s = a red gate's tick never needs more than this many seconds of the squad's fire to reach 0; gang_priority_m = a gang whose front is within this many metres takes the fire before any nearer gate or obstacle. squad_cap = the most troops a squad can hold, per district (1-5; spec v2 section 12.4); Police Station barracks add a percentage of it (upgrades.capacity = percent). Every count is an exact 64-bit integer; only the display shortens (NumFormat). gang_figures = most figures a gang is drawn with: a gang of n stands in figures of per = ceil(n / gang_figures) people, a row of cols figures is cols x per people, so a huge gang is never more than gang_figures / cols rows deep and its front row fights (and dies) per row.",
   "world": {
     "scroll_speed": 8.0,
     "scroll_accel": 12.0,
@@ -7,7 +7,7 @@
     "spawn_distance": 95.0,
     "contact_z": -1.2,
     "melee_tick": 0.22,
-    "max_squad": 150,
+    "squad_cap": [300, 1000, 5000, 25000, 100000],
     "boss_halt": 40.0,
     "finish_hold": 14.0,
     "boss_hit_every": 0.1,
@@ -16,7 +16,8 @@
     "formation_figures": 72,
     "figure_radius": 0.2,
     "red_gate_clear_s": 2.5,
-    "gang_priority_m": 15.0
+    "gang_priority_m": 15.0,
+    "gang_figures": 180
   },
   "hero": {
     "_note": "Tap-to-fire (spec v2 section 2): the hero's knife (and a held PISTOL/SMG) fires at lerp(auto_rate, 1, heat) of its rate. Each tap adds per_tap heat (max 1); heat holds for hold_s after a tap, then drains to 0 over decay_s. Followers always fire at full rate.",

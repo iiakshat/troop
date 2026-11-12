@@ -792,3 +792,71 @@ func test_gang_within_priority_takes_fire_before_red_gate() -> void:
 	var far := _priority_sim(-25.0)
 	far._shoot(1.0 / 30.0)
 	eq(far.target_kind, "gate", "a gang outside 15 m: the nearer red gate is shot first")
+
+
+# ---------------------------------------------------------------- v2 §12.4: squad cap, big numbers
+
+func test_squad_cap_grows_by_district() -> void:
+	var caps: Array = units["world"]["squad_cap"]
+	eq(caps.size(), 5, "one cap per district")
+	eq(int(caps[0]), 300, "district 1 starts at 300")
+	eq(int(caps[4]), 100000, "district 5 starts at 100K")
+	for d in range(1, 6):
+		var sim := LevelSim.new({"district": d, "events": []}, units)
+		eq(sim.squad.cap, int(caps[d - 1]), "district %d cap" % d)
+	eq(LevelSim.new({"events": []}, units).squad.cap, 300, "no district: district 1")
+	# Barracks: a percentage of the district cap (exact integers).
+	eq(LevelSim.new({"district": 2, "events": []}, units, {"capacity": 50}).squad.cap, 1500, "d2 +50%")
+	eq(LevelSim.squad_cap_for(units, 5, 25), 125000, "d5 +25%")
+
+
+func test_big_numbers_stay_exact() -> void:
+	var lvl := {"district": 5, "events": [
+		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 19999}]},
+		{"at": 20, "type": "gates", "gates": [{"lane": 1, "op": "mul", "k": 5}]},
+		{"at": 30, "type": "gates", "gates": [{"lane": 1, "op": "pct", "v": -33}]},
+		{"at": 40, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": -12345}]},
+		{"at": 50, "type": "gates", "gates": [{"lane": 1, "op": "mul", "k": 5}]},
+		{"at": 80, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	var totals: Array = []
+	for e in _step_until(sim, func(): return sim.state != "run"):
+		if e["type"] == "row_pass":
+			totals.append(int(e["after"]))
+	eq(totals, [20000, 100000, 67000, 54655, 100000], "+19999, x5, -33%, -12345, x5 (capped at 100K)")
+	eq(sim.state, "strike", "won")
+
+
+func test_huge_gang_is_drawn_and_fought_in_capped_rows() -> void:
+	# 18,000 thugs: each of the gang's 180 figures carries 100 people, a row is 900, and
+	# the gang is 20 rows deep (not 2,000), so the squad's fire never outruns its front.
+	var figs := int(units["world"]["gang_figures"])
+	eq(figs, 180, "gang figure cap in config")
+	var lvl := {"district": 4, "events": [
+		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 24999}]},
+		{"at": 120, "type": "wave", "groups": [{"enemy": "thug", "n": 18000}]},
+		{"at": 160, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	_step_until(sim, func(): return not sim.hordes.is_empty())
+	var h: Dictionary = sim.hordes[0]
+	eq(int(h.get("per", 0)), 100, "100 people per figure")
+	var z0 := LevelSim.front_z(h)
+	sim._kill(h, 900)
+	check(absf(LevelSim.front_z(h) - (z0 - float(h["row_gap"]))) < 0.001, "900 down = one row back")
+	sim._kill(h, 899)
+	check(absf(LevelSim.front_z(h) - (z0 - float(h["row_gap"]))) < 0.001, "a part row keeps the front")
+	_step_until(sim, func(): return sim.state != "run")
+	eq(sim.state, "strike", "25K troops beat 18K thugs")
+	check(sim.squad.total() > 10000, "and keep most of the squad (%d)" % sim.squad.total())
+
+
+func test_coin_troops_are_district_one_equivalents() -> void:
+	var sim := LevelSim.new({"district": 3, "events": []}, units)
+	sim.squad.add("constable", 4999)
+	eq(sim.squad.total(), 5000, "a full district-3 squad")
+	eq(sim.coin_troops(), 300, "pays like a full district-1 squad")
+	var d1 := LevelSim.new({"district": 1, "events": []}, units)
+	d1.squad.add("constable", 41)
+	eq(d1.coin_troops(), 42, "district 1 unchanged")

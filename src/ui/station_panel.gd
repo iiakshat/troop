@@ -156,7 +156,7 @@ static func value_text(room: String, lv: int) -> String:
 		"squad":
 			return str(1 + int(lv * per))
 		"capacity":
-			return str(int(units["world"].get("max_squad", 0)) + int(lv * per))
+			return "+%d%%" % int(lv * per)  # barracks: percent of the district's squad cap
 		"coins":
 			return "+%d%%" % int(round(lv * per * 100))
 		"charges":

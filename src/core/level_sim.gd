@@ -49,6 +49,9 @@ var fig_cap := 72          # figures a formation is drawn with (each carries tot
 var fig_r := 0.2           # figure radius for footprint overlap
 var gate_clear_s := 2.5    # a committed squad shoots a red gate up to 0 within this many seconds
 var gang_priority := 0.0   # a gang front this close takes the fire before nearer lane objects
+var gang_figs := 180       # a gang stands in at most this many figures (per = people per figure)
+var district := 1          # 1-5: the squad cap and return fire depend on it
+var caps: Array = []       # world.squad_cap, per district
 
 ## Tap-to-fire: the hero fires at lerp(tap_auto, 1, tap_heat) of his rate (units.hero.tap).
 var tap_heat := 0.0        # 0..1; each tap() adds tap_per, held tap_hold_s, then drains over tap_decay_s
@@ -123,6 +126,9 @@ func _init(level: Dictionary = {}, units_cfg: Dictionary = {}, upgrades: Diction
 	fig_r = float(w.get("figure_radius", fig_r))
 	gate_clear_s = float(w.get("red_gate_clear_s", gate_clear_s))
 	gang_priority = float(w.get("gang_priority_m", gang_priority))
+	gang_figs = maxi(int(w.get("gang_figures", gang_figs)), 1)
+	district = clampi(int(level.get("district", 1)), 1, 5)
+	caps = w.get("squad_cap", [])
 	var tap: Dictionary = units_cfg.get("hero", {}).get("tap", {})
 	tap_auto = float(tap.get("auto_rate", tap_auto))
 	tap_per = float(tap.get("per_tap", tap_per))
@@ -139,7 +145,7 @@ func _init(level: Dictionary = {}, units_cfg: Dictionary = {}, upgrades: Diction
 	var hero: Dictionary = stats["hero"]
 	hero["dmg"] = float(hero["dmg"]) + float(upgrades.get("knife", 0))
 	hero["rate"] = float(hero["rate"]) + 0.5 * float(upgrades.get("speed", 0))
-	squad.cap = int(w.get("max_squad", 0)) + int(upgrades.get("capacity", 0))
+	squad.cap = squad_cap_for(units_cfg, district, int(upgrades.get("capacity", 0)))
 	squad.add("constable", int(upgrades.get("squad", 0)))
 	# Pre-level booster: each head-start token brings a few constables.
 	var per_token := int(units_cfg.get("boosters", {}).get("headstart", 5))
@@ -154,6 +160,24 @@ func _init(level: Dictionary = {}, units_cfg: Dictionary = {}, upgrades: Diction
 	_build_spawns(level.get("events", []))
 	peak_squad = squad.total()
 	squad.hero_rate = hero_rate_mult()
+
+
+## The most troops a squad holds in `district` (1-5): world.squad_cap, plus the barracks'
+## `capacity_pct` percent of it. Exact integers.
+static func squad_cap_for(units_cfg: Dictionary, d: int, capacity_pct := 0) -> int:
+	var caps: Array = units_cfg["world"].get("squad_cap", [])
+	if caps.is_empty():
+		return 0
+	var base := int(caps[clampi(d, 1, caps.size()) - 1])
+	return base + base * maxi(capacity_pct, 0) / 100
+
+
+## The squad as district-1 troops (what the finale's coins count): a full district-5 squad
+## pays like a full district-1 squad, so rewards stay on the economy's curve as caps grow.
+func coin_troops() -> int:
+	if caps.size() < district:
+		return squad.total()
+	return squad.total() * int(caps[0]) / maxi(int(caps[district - 1]), 1)
 
 
 # ---------------------------------------------------------------- tap heat
@@ -309,7 +333,7 @@ func revive(troops: int) -> bool:
 
 ## How many troops a revive brings back: `pct` % of the peak squad, at least 1.
 func revive_troops() -> int:
-	var n := int(ceil(peak_squad * float(revive_cfg.get("pct", 50)) / 100.0))
+	var n := (peak_squad * int(revive_cfg.get("pct", 50)) + 99) / 100
 	if squad.cap > 0:
 		n = mini(n, squad.cap)
 	return maxi(n, 1)
@@ -500,6 +524,9 @@ func _spawn_horde(sp: Dictionary, early := false) -> void:
 		mods["turncoat"] = int(mods["turncoat"]) - take
 		_turn(h, take)
 	h["shield"] = float(def.get("shield", 0.0)) * int(h["count"])
+	# A huge gang stands in at most gang_figs figures: each carries `per` people, a row is
+	# cols x per of them (killed_rows), and its front row strikes together (_contacts).
+	h["per"] = maxi((int(h["start"]) + gang_figs - 1) / gang_figs, 1)
 	if h["boss"]:
 		h["max_hp"] = float(h["hp"]) * int(h["count"])
 	if h["count"] <= 0:
@@ -721,9 +748,14 @@ func _toughest_horde(reach: float):
 	return best
 
 
-## How many whole rows have been shot away from the front.
+## How many whole rows have been shot away from the front (a row = cols figures of `per`).
 static func killed_rows(h: Dictionary) -> int:
-	return int((int(h["start"]) - int(h["count"])) / maxi(int(h["cols"]), 1))
+	return (int(h["start"]) - int(h["count"])) / row_size(h)
+
+
+## People in one of the gang's rows: cols figures, each carrying `per` people.
+static func row_size(h: Dictionary) -> int:
+	return maxi(int(h["cols"]), 1) * maxi(int(h.get("per", 1)), 1)
 
 
 ## Position of the frontmost living row.
@@ -825,7 +857,7 @@ func _contacts(dt: float) -> void:
 			continue
 		h["melee_t"] = melee_tick
 		# The front row strikes: each enemy takes `power` troops and falls.
-		var row := mini(int(h["cols"]), int(h["count"]))
+		var row := mini(row_size(h), int(h["count"]))
 		var power := row * int(h["power"])
 		var lost := 0
 		if shield_t <= 0.0:
@@ -999,10 +1031,10 @@ func _pass_obstacles() -> void:
 func obstacle_cost(ob: Dictionary) -> int:
 	if String(ob.get("kind", "")) == "pothole":
 		if ob.has("fall_pct"):
-			return int(floor(squad.total() * int(ob["fall_pct"]) / 100.0))
+			return squad.total() * int(ob["fall_pct"]) / 100
 		return int(ob.get("fall", 0))
 	if ob.has("dmg_pct"):
-		return int(floor(squad.total() * int(ob["dmg_pct"]) / 100.0))
+		return squad.total() * int(ob["dmg_pct"]) / 100
 	return int(ob.get("dmg", 5))
 
 
@@ -1047,7 +1079,8 @@ func clone() -> LevelSim:
 	for p in ["S", "S_base", "accel", "fire_range", "spawn_dist", "contact_z", "melee_tick",
 			"boss_halt", "finish_hold", "boss_hit_every", "weapons", "enemy_defs", "obstacle_defs",
 			"powers", "revive_cfg", "star_cfg", "lane", "squad_x", "_x_driven", "lane_w", "form_half",
-			"fig_cap", "fig_r", "gate_clear_s", "gang_priority", "tap_heat", "tap_auto", "tap_per",
+			"fig_cap", "fig_r", "gate_clear_s", "gang_priority", "gang_figs", "district", "caps",
+			"tap_heat", "tap_auto", "tap_per",
 			"tap_hold_s", "tap_decay_s", "_tap_hold", "traveled", "time", "state", "lose_cause",
 			"finish_at", "halted", "peak_squad", "revived", "shield_t", "kills", "rows_passed",
 			"_spawns", "_next_spawn", "_pending_hordes", "_wave_ats", "_next_id", "_armour_note_t"]:

@@ -90,7 +90,7 @@ func _loss_order() -> Array:
 
 ## Percent change of the whole squad, rounded down. Gains arrive as constables.
 func apply_percent(pct: int) -> int:
-	var amount := int(floor(total() * absi(pct) / 100.0))
+	var amount := total() * absi(pct) / 100  # exact 64-bit integers, rounded down
 	if pct >= 0:
 		return add("constable", amount)
 	return -lose(amount)
@@ -100,7 +100,7 @@ func apply_percent(pct: int) -> int:
 func divide(k: int) -> int:
 	if k <= 1:
 		return 0
-	var target := maxi(int(floor(total() / float(k))), 1)
+	var target := maxi(total() / k, 1)
 	return -lose(total() - target)
 
 
