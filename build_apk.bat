@@ -9,10 +9,13 @@ cd /d "%~dp0"
 set "TOOLS=%~dp0..\_tools"
 rem From a git worktree (.claude\worktrees\x) the tools sit four folders up.
 if not exist "%TOOLS%\godot" set "TOOLS=%~dp0..\..\..\..\_tools"
+for %%I in ("%TOOLS%") do set "TOOLS=%%~fI"
 set "G=%TOOLS%\godot\Godot_v4.7.2-stable_win64_console.exe"
 set "JAVA_HOME=%TOOLS%\jdk-17"
+rem Godot hands Gradle ANDROID_HOME from its editor settings. A second SDK variable that spells
+rem the same folder differently makes Gradle refuse to build, so ANDROID_SDK_ROOT is cleared.
 set "ANDROID_HOME=%TOOLS%\android-sdk"
-set "ANDROID_SDK_ROOT=%TOOLS%\android-sdk"
+set "ANDROID_SDK_ROOT="
 set "PATH=%JAVA_HOME%\bin;%PATH%"
 set "ADB=%TOOLS%\android-sdk\platform-tools\adb.exe"
 if not exist "%JAVA_HOME%\bin\javac.exe" (echo Run setup first: python -I tools\setup_android.py & exit /b 1)
