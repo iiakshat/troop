@@ -140,3 +140,31 @@ func test_world_look_has_every_district() -> void:
 		for k in ["fog", "fog_density", "sun_color", "exposure", "saturation", "contrast", "tint"]:
 			check(t.has(k), "district %d look has %s" % [d, k])
 	eq(World.look_count(), 5, "districts with a look")
+
+
+## Spec v2 §4 smudge: a full squad's shown figures stand on the sim's x places (obstacle hits
+## stay true) but their rows open up in depth, so the centre is not one blob of caps; the
+## hero stays in front of everyone.
+func test_big_squad_keeps_sim_x_and_opens_in_depth() -> void:
+	var parts := _view(21)
+	var view: LevelView = parts[0]
+	var n := int(Config.units()["world"]["formation_figures"])
+	var half: float = view.sim.form_half
+	var xs_sim: Array = []
+	var xs_view: Array = []
+	var z_sim := [INF, -INF]
+	var z_view := [INF, -INF]
+	for i in range(1, n):
+		var o := Squad.slot_offset(i, n, half)
+		xs_sim.append(snappedf(o.x, 0.0001))
+		z_sim = [minf(z_sim[0], o.y), maxf(z_sim[1], o.y)]
+		var p: Vector3 = view._slot_pos(i, n)
+		xs_view.append(snappedf(p.x - view._squad_x, 0.0001))
+		z_view = [minf(z_view[0], p.z), maxf(z_view[1], p.z)]
+	xs_sim.sort()
+	xs_view.sort()
+	eq(xs_view, xs_sim, "the shown figures stand on exactly the sim's x places")
+	check(z_view[1] - z_view[0] > (z_sim[1] - z_sim[0]) * 1.2, "rows open up in depth (%.2f m vs %.2f m)" % [z_view[1] - z_view[0], z_sim[1] - z_sim[0]])
+	check(view._slot_pos(0, n).z < z_view[0], "the hero stays in front of every follower")
+	eq(LevelView.depth_spread(10), 1.0, "a small squad keeps the sim's rows")
+	_drop(parts)
