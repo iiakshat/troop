@@ -10,6 +10,9 @@ signal pause_pressed
 var _progress: ProgressBar
 var _troops: HBoxContainer
 var _troops_pop := 0.0
+var _power: HBoxContainer
+var _power_shown := -1
+var _power_pop := 0.0
 var _cap_bar: ProgressBar
 var _power_buttons: Dictionary = {}
 var _banner: Label
@@ -70,13 +73,20 @@ func _ready() -> void:
 	goal.offset_bottom = 22
 	_progress.add_child(goal)
 	_troops = UiKit.pill("person", "1", Color("8fd0ff"))
-	# Troop counter with the squad's capacity bar under it.
+	# Spec v2 §12.4: live firepower (lightning + number, no words) next to the troop count.
+	_power = UiKit.pill("power", "1", UiKit.YELLOW)
+	# Troop counter and firepower with the squad's capacity bar under them.
 	var tcol := VBoxContainer.new()
 	tcol.add_theme_constant_override("separation", 4)
 	tcol.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	tcol.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top.add_child(tcol)
-	tcol.add_child(_troops)
+	var pills := HBoxContainer.new()
+	pills.add_theme_constant_override("separation", 8)
+	pills.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tcol.add_child(pills)
+	pills.add_child(_troops)
+	pills.add_child(_power)
 	_cap_bar = ProgressBar.new()
 	_cap_bar.show_percentage = false
 	_cap_bar.custom_minimum_size = Vector2(0, 16)
@@ -147,11 +157,26 @@ func set_progress(p: float) -> void:
 
 
 func set_troops(n: int) -> void:
-	UiKit.pill_set(_troops, str(n))
+	UiKit.pill_set(_troops, NumFormat.fmt(n))
 	_troops_pop = 1.0
 	_cap_bar.value = n
 	# Full squad: the bar turns gold.
 	(_cap_bar.get_theme_stylebox("fill") as StyleBoxFlat).bg_color = UiKit.GOLD if n >= _cap_bar.max_value else Color("8fd0ff")
+
+
+## Live firepower (LevelSim.firepower), called every frame: the label only changes when the
+## number does, and a gain (troops joining, tapping) pops it.
+func set_firepower(n: int) -> void:
+	if n == _power_shown:
+		return
+	if n > _power_shown and _power_shown >= 0:
+		_power_pop = 1.0
+	_power_shown = n
+	UiKit.pill_set(_power, NumFormat.fmt(n))
+
+
+func firepower_text() -> String:
+	return (_power.get_meta("label") as Label).text
 
 
 func set_capacity(cap: int) -> void:
@@ -215,6 +240,10 @@ func _process(delta: float) -> void:
 		_troops_pop = maxf(_troops_pop - delta * 4.0, 0.0)
 		_troops.pivot_offset = _troops.size * 0.5
 		_troops.scale = Vector2.ONE * (1.0 + 0.3 * _troops_pop)
+	if _power_pop > 0.0:
+		_power_pop = maxf(_power_pop - delta * 5.0, 0.0)
+		_power.pivot_offset = _power.size * 0.5
+		_power.scale = Vector2.ONE * (1.0 + 0.18 * _power_pop)
 	if _banner_t > 0.0:
 		_banner_t -= delta
 		if _banner_t <= 0.0:

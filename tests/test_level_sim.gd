@@ -929,6 +929,24 @@ func test_return_fire_from_district_two_and_gunmen_everywhere() -> void:
 		check(String(e["cause"]) != "gunman", "no old volley from the gunmen")
 
 
+func test_live_firepower_rises_with_troops_and_taps() -> void:
+	var lvl := _gate_level([{"lane": 1, "op": "num", "v": 20}],
+		[{"at": 40, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 10}])
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	var cold := sim.firepower()
+	eq(cold, int(round(sim.squad.firepower(sim.stats, sim.weapons))), "int of Squad.firepower")
+	eq(cold, 1, "a cold hero: 3 x 0.4 = 1.2 -> 1")
+	for i in 4:
+		sim.tap()
+	eq(sim.firepower(), 3, "tapping heats him up to 3")
+	_step_until(sim, func(): return sim.rows.is_empty() and sim.rows_passed == 1)
+	var joined := sim.firepower()
+	check(joined >= 20 * 1.6, "20 constables joined (%d)" % joined)
+	_step_until(sim, func(): return sim.obstacles.is_empty())
+	check(sim.firepower() < joined, "the pothole's losses drop it (%d < %d)" % [sim.firepower(), joined])
+
+
 func test_coin_troops_are_district_one_equivalents() -> void:
 	var sim := LevelSim.new({"district": 3, "events": []}, units)
 	sim.squad.add("constable", 4999)

@@ -122,6 +122,20 @@ func dps(stats: Dictionary, weapons: Dictionary, armour: int, hp := 1.0, enemies
 	return sum
 
 
+## Live firepower (spec v2 §12.4, the HUD's lightning number): damage per second against a
+## plain unarmoured crowd, every rank at its best (bursts, splash and a sniper round's full
+## damage count), the hero and a held weapon at the current tap rate (hero_rate).
+func firepower(stats: Dictionary, weapons: Dictionary) -> float:
+	var sum := 0.0
+	for rank in counts:
+		var n := count(rank)
+		if n > 0 and stats.has(rank):
+			sum += n * hit_value(stats[rank], 0, 1.0, 1 << 30, true) * _rate_of(rank)
+	if hero_weapon != "" and hero_alive() and weapons.has(hero_weapon):
+		sum += hit_value(weapons[hero_weapon], 0, 1.0, 1 << 30, true) * hero_rate
+	return sum
+
+
 ## The part of dps() that comes from piercing attackers (passes riot shields).
 func pierce_dps(stats: Dictionary, weapons: Dictionary, hp := 1.0, enemies := 1 << 30, which := Fire.ALL) -> float:
 	var sum := 0.0

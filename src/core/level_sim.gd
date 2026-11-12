@@ -191,6 +191,12 @@ func tap() -> void:
 	squad.hero_rate = hero_rate_mult()
 
 
+## The squad's live firepower (Squad.firepower with the current upgrades and tap heat), as
+## the whole number the HUD shows next to the troop count.
+func firepower() -> int:
+	return int(round(squad.firepower(stats, weapons)))
+
+
 ## Share of the hero's base rate he fires at now: tap_auto when cold, 1.0 when hot.
 func hero_rate_mult() -> float:
 	return lerpf(tap_auto, 1.0, tap_heat)
