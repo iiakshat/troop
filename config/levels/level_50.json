@@ -9,6 +9,7 @@
   "stars": {"star2": 40, "star3": 77},
   "charges": {"shield": 1, "bomb": 2},
   "need_upgrades": true,
+  "coin_ref": 41544,
   "route": [1, 0, 2, 0, 1, 1, 1, 1, 2, 2],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "pct", "v": 30}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 5}, {"lane": 2, "op": "turncoat", "n": 565}]},

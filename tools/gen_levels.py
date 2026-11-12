@@ -1098,6 +1098,8 @@ def build(level: int, seen: set, cal_all: dict) -> dict:
     }
     if need_upgrades(level):
         out["need_upgrades"] = True
+    if cal.get("coin_ref"):
+        out["coin_ref"] = int(cal["coin_ref"])
     # A lane route tests/tune.gd found to win (route_np: without powers, levels 1-10).
     for key in ("route", "route_np"):
         if cal.get(key):
@@ -1137,6 +1139,10 @@ def merge(paths: list[str]) -> None:
                 for rk in ("route", "route_np"):
                     if r.get(rk):
                         entry[rk] = [int(x) for x in r[rk]]
+                # The stored route's finishing squad: LevelSim.coin_troops pays it like a full
+                # district-1 squad (most levels end far below their district's cap).
+                if r.get("route") and int(r.get("best_troops", 0)) > 0:
+                    entry["coin_ref"] = int(r["best_troops"])
             cal[key] = entry
     ordered = {k: cal[k] for k in sorted(cal, key=int)}
     CAL_PATH.write_text(json.dumps(ordered, indent=1) + "\n", encoding="utf-8", newline="\n")

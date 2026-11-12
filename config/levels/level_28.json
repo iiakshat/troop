@@ -9,6 +9,7 @@
   "stars": {"star2": 45, "star3": 85},
   "charges": {"shield": 1, "bomb": 1},
   "need_upgrades": true,
+  "coin_ref": 1445,
   "route": [1, 1, 2, 2, 1, 1, 1, 0, 1],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "swat", "n": 5}, {"lane": 1, "op": "num", "v": 24}, {"lane": 2, "op": "num", "v": -1, "step": 0.5, "max": 6}]},

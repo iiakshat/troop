@@ -8,6 +8,7 @@
   "target_ratio": -1.0,
   "stars": {"star2": 45, "star3": 85},
   "charges": {"shield": 1},
+  "coin_ref": 300,
   "route": [1, 1, 2, 2, 0, 0, 0, 0, 1, 0],
   "events": [
     {"at": 6, "type": "hint", "id": "sergeant", "icon": "sergeant"},

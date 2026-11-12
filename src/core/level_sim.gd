@@ -55,6 +55,7 @@ var gang_priority := 0.0   # a gang front this close takes the fire before neare
 var gang_figs := 180       # a gang stands in at most this many figures (per = people per figure)
 var district := 1          # 1-5: the squad cap and return fire depend on it
 var caps: Array = []       # world.squad_cap, per district
+var coin_ref := 0          # the level's stored route's finishing squad (coin_troops), 0 = none
 
 ## Tap-to-fire: the hero fires at lerp(tap_auto, 1, tap_heat) of his rate (units.hero.tap).
 var tap_heat := 0.0        # 0..1; each tap() adds tap_per, held tap_hold_s, then drains over tap_decay_s
@@ -134,6 +135,7 @@ func _init(level: Dictionary = {}, units_cfg: Dictionary = {}, upgrades: Diction
 	gang_figs = maxi(int(w.get("gang_figures", gang_figs)), 1)
 	district = clampi(int(level.get("district", 1)), 1, 5)
 	caps = w.get("squad_cap", [])
+	coin_ref = maxi(int(level.get("coin_ref", 0)), 0)
 	var tap: Dictionary = units_cfg.get("hero", {}).get("tap", {})
 	tap_auto = float(tap.get("auto_rate", tap_auto))
 	tap_per = float(tap.get("per_tap", tap_per))
@@ -188,10 +190,16 @@ static func squad_cap_for(units_cfg: Dictionary, d: int, capacity_pct := 0) -> i
 
 ## The squad as district-1 troops (what the finale's coins count): a full district-5 squad
 ## pays like a full district-1 squad, so rewards stay on the economy's curve as caps grow.
+## A calibrated level carries `coin_ref` (its stored route's finishing squad): finishing with
+## that many pays like a full district-1 squad, because most levels end far below the cap
+## (never more than the cap rule's most, a full squad with the barracks' extra).
 func coin_troops() -> int:
 	if caps.size() < district:
 		return squad.total()
-	return squad.total() * int(caps[0]) / maxi(int(caps[district - 1]), 1)
+	var dcap := maxi(int(caps[district - 1]), 1)
+	if coin_ref <= 0:
+		return squad.total() * int(caps[0]) / dcap
+	return mini(squad.total() * int(caps[0]) / coin_ref, int(caps[0]) * squad.cap / dcap)
 
 
 # ---------------------------------------------------------------- tap heat
@@ -1255,7 +1263,7 @@ func clone() -> LevelSim:
 			"boss_halt", "finish_hold", "boss_hit_every", "weapons", "enemy_defs", "obstacle_defs",
 			"powers", "rf_cfg", "revive_cfg", "star_cfg", "lane", "squad_x", "_x_driven", "lane_w", "form_half",
 			"fig_cap", "fig_r", "gate_clear_s", "gang_priority", "gang_figs", "district", "caps",
-			"tap_heat", "tap_auto", "tap_per",
+			"coin_ref", "tap_heat", "tap_auto", "tap_per",
 			"tap_hold_s", "tap_decay_s", "_tap_hold", "traveled", "time", "state", "lose_cause",
 			"finish_at", "halted", "peak_squad", "revived", "shield_t", "kills", "rows_passed",
 			"_spawns", "_next_spawn", "_pending_hordes", "_wave_ats", "_next_id", "_armour_note_t"]:

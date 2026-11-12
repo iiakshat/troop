@@ -8,6 +8,7 @@
   "target_ratio": 0.52,
   "stars": {"star2": 41, "star3": 78},
   "charges": {"shield": 1, "bomb": 2},
+  "coin_ref": 966,
   "route": [0, 2, 1, 0, 0, 1, 1, 0, 2],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 11}, {"lane": 1, "op": "num", "v": -2, "step": 0.5, "max": 5}, {"lane": 2, "op": "num", "v": 11}]},

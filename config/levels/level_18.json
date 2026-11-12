@@ -9,6 +9,7 @@
   "stars": {"star2": 45, "star3": 85},
   "charges": {"shield": 1, "bomb": 1},
   "need_upgrades": true,
+  "coin_ref": 460,
   "route": [1, 0, 1, 2, 2, 2, 0, 2, 2],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "inspector", "n": 3}, {"lane": 1, "op": "num", "v": -2, "step": 0.5, "max": 4}, {"lane": 2, "op": "weapon", "id": "smg"}]},

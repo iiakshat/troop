@@ -1121,3 +1121,20 @@ func test_coin_troops_are_district_one_equivalents() -> void:
 	var d1 := LevelSim.new({"district": 1, "events": []}, units)
 	d1.squad.add("constable", 41)
 	eq(d1.coin_troops(), 42, "district 1 unchanged")
+
+
+## Integration (Task 13): calibrated levels finish far below their district's cap (L40's best
+## route ends with about 1K of 25K), so the cap rule paid late levels a fraction of what the
+## economy model assumes. A level's `coin_ref` (its stored route's finishing squad, written by
+## tools/gen_levels.py) is the full district-1 squad instead; never more than the cap rule's most.
+func test_coin_troops_follow_the_level_reference() -> void:
+	var sim := LevelSim.new({"district": 4, "coin_ref": 1000, "events": []}, units)
+	sim.squad.add("constable", 499)
+	eq(sim.coin_troops(), 150, "half the stored route's finish pays like 150 district-1 troops")
+	sim.squad.add("constable", 500)
+	eq(sim.coin_troops(), 300, "the stored route's finish pays like a full district-1 squad")
+	sim.squad.add("constable", 24000)
+	eq(sim.coin_troops(), 300, "never more than a full district-1 squad (no barracks)")
+	var plain := LevelSim.new({"district": 4, "events": []}, units)
+	plain.squad.add("constable", 999)
+	eq(plain.coin_troops(), 12, "no coin_ref: the district cap rule (1000 of 25000)")
