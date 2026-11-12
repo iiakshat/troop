@@ -49,8 +49,9 @@ const MINUS_HOLD := 0.9
 const MINUS_RED := Color("ff3b3b")
 ## Spec v2.1 §1.2-1.3: a telegraph marks its lane where the squad stands, in its kind's colour,
 ## while its countdown sweeps towards the squad (on the street's clock, so it is honest).
-const ZONE_SIZE := Vector2(2.4, 4.8)
-const ZONE_Z := 1.3
+const ZONE_SIZE := Vector2(2.4, 7.0)
+const ZONE_Z := -0.4             # from 3.9 m ahead of the hero back under the squad
+const SPOT_Z := -2.0             # where a grenade, bottle or sniper round lands: just ahead of the hero
 const THREAT_TINT := {"snipe": Color(1.0, 0.1, 0.1), "grenade": Color(1.0, 0.4, 0.06),
 	"firebomb": Color(1.0, 0.58, 0.05), "barrage": Color(1.0, 0.06, 0.18), "lt_barrage": Color(1.0, 0.16, 0.5)}
 const SHELLS := {"barrage": 5, "lt_barrage": 3}
@@ -61,16 +62,16 @@ uniform vec4 tint : source_color = vec4(1.0, 0.2, 0.1, 1.0);
 uniform float fill = 0.0;    // share of the warning gone: the honest countdown
 uniform float pulse = 0.0;
 uniform float flash = 0.0;   // the landing
-uniform vec2 size = vec2(2.4, 4.8);
+uniform vec2 size = vec2(2.4, 7.0);
 void fragment() {
 	vec2 m = UV * size;
 	float e = min(min(m.x, size.x - m.x), min(m.y, size.y - m.y));
 	float border = 1.0 - smoothstep(0.12, 0.2, e);
 	float stripe = step(0.5, fract((m.x + m.y) * 1.1));
-	float swept = step(1.0 - fill, UV.y);
+	float swept = step(UV.y, fill);   // from the far end towards the squad
 	float inner = (0.1 + 0.22 * stripe) * (0.35 + 0.65 * swept);
-	ALBEDO = mix(tint.rgb, vec3(1.0), flash);
-	ALPHA = clamp(max(border * (0.65 + 0.35 * pulse), inner) + flash * 0.6, 0.0, 1.0) * tint.a;
+	ALBEDO = mix(tint.rgb, vec3(1.0, 0.92, 0.75), flash * 0.7);
+	ALPHA = clamp(max(border * (0.65 + 0.35 * pulse), inner) + flash * 0.3, 0.0, 1.0) * tint.a;
 }
 """
 const INK_W := 0.028            # crowd ink outline width (crowd_outline.gdshader default)
@@ -1223,7 +1224,7 @@ func _on_telegraph(e: Dictionary) -> void:
 		elif not (hv["offs"] as Array).is_empty():
 			from = _fig_pos(hv, hv["offs"][randi() % mini((hv["offs"] as Array).size(), 6)]) + Vector3(0, 1.9, 0.3)
 	var dur := maxf(_land_time(e) - sim.time, 0.2)
-	var spot := Vector3(LANE_X[lane], 0.25, ZONE_Z - 0.6)
+	var spot := Vector3(LANE_X[lane], 0.25, SPOT_Z)
 	var th := {"kind": kind, "lane": lane, "src": src, "from": from, "start": sim.time, "land": sim.time + dur,
 		"points": [spot]}
 	match kind:
@@ -1238,7 +1239,7 @@ func _on_telegraph(e: Dictionary) -> void:
 		"barrage", "lt_barrage":
 			var pts: Array = []
 			for i in int(SHELLS.get(kind, 3)):
-				var p := Vector3(LANE_X[lane] + randf_range(-0.9, 0.9), 0.3, ZONE_Z + randf_range(-1.8, 1.8))
+				var p := Vector3(LANE_X[lane] + randf_range(-0.9, 0.9), 0.3, ZONE_Z + randf_range(-3.0, 1.2))
 				pts.append(p)
 				fx.enemy_lob("shell", from + Vector3(randf_range(-0.4, 0.4), 0, 0), p, dur, randf_range(6.0, 9.0))
 			th["points"] = pts
@@ -1259,7 +1260,7 @@ func _on_attack_land(e: Dictionary) -> void:
 			th = t
 	if th.is_empty():
 		th = {"kind": kind, "lane": lane, "src": -1, "from": Vector3(LANE_X[lane], 2.0, -45.0),
-			"points": [Vector3(LANE_X[lane], 0.25, ZONE_Z - 0.6)]}
+			"points": [Vector3(LANE_X[lane], 0.25, SPOT_Z)]}
 	else:
 		_threats.erase(th)
 	(_zones[lane] as Dictionary)["flash"] = 0.18

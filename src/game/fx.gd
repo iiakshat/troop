@@ -339,8 +339,8 @@ func _process(delta: float) -> void:
 
 func _tick_proj(delta: float) -> void:
 	_n.fill(0)
-	_tick_list(_proj, delta)
-	_tick_list(_eproj, delta)
+	_tick_list(_proj, delta, false)
+	_tick_list(_eproj, delta, true)
 	if held_bomb_on and _n[3] < MAX_BOMBS:
 		_bomb_fuse(held_bomb, Basis(), BOMB_HAND_SCALE, false)
 		_bomb_mm.set_instance_transform(_n[3], Transform3D(Basis().scaled(Vector3.ONE * BOMB_HAND_SCALE), held_bomb))
@@ -354,7 +354,8 @@ func _tick_proj(delta: float) -> void:
 
 
 ## Moves and draws one projectile list (the squad's or the incoming pool), counting into _n.
-func _tick_list(list: Array, delta: float) -> void:
+## Incoming fire (`grow`) is drawn bigger far up the street, so it reads from where it is fired.
+func _tick_list(list: Array, delta: float, grow: bool) -> void:
 	var i := 0
 	while i < list.size():
 		var p: Dictionary = list[i]
@@ -377,23 +378,24 @@ func _tick_list(list: Array, delta: float) -> void:
 			p["vel"] = vel
 		p["pos"] = (p["pos"] as Vector3) + vel * delta
 		var basis := Basis.looking_at(vel.normalized(), Vector3.UP) if vel.length() > 0.01 else Basis()
+		var far := clampf(-(p["pos"] as Vector3).z / 16.0, 1.0, 2.2) if grow else 1.0
 		if kind == "lob":
 			p["spin"] = float(p["spin"]) + delta * 12.0
 			if randf() < 0.7:
 				burst(p["pos"], Color(1.0, 0.5 + randf() * 0.3, 0.1), 2, 0.8, 0.55, 0.45, 1.0, -2.0)
 			if _n[2] < MAX_LOB:
-				_lob_mm.set_instance_transform(_n[2], Transform3D(Basis(Vector3.RIGHT, float(p["spin"])).scaled(Vector3.ONE * 1.8), p["pos"]))
+				_lob_mm.set_instance_transform(_n[2], Transform3D(Basis(Vector3.RIGHT, float(p["spin"])).scaled(Vector3.ONE * 1.8 * far), p["pos"]))
 				_n[2] += 1
 		elif kind == "grenade" or kind == "shell":
 			# Grenades tumble with a blinking red cap; the boss's shells are bigger, with smoke.
 			var shell := kind == "shell"
 			p["spin"] = float(p["spin"]) + delta * (6.0 if shell else 14.0)
-			if randf() < (0.6 if shell else 0.35):
-				burst(p["pos"], Color(0.35, 0.33, 0.33) if shell else Color(0.6, 0.6, 0.6), 1, 0.4, 0.42 if shell else 0.22, 0.5, 0.3, -1.0)
-			if shell and randf() < 0.5:
-				burst(p["pos"], Color(1.0, 0.55, 0.1), 1, 0.6, 0.3, 0.2, 0.0, 0.0)
+			if randf() < 0.6:
+				burst(p["pos"], Color(0.35, 0.33, 0.33) if shell else Color(0.62, 0.62, 0.6), 1, 0.4, (0.42 if shell else 0.26) * far, 0.5, 0.3, -1.0)
+			if randf() < 0.5:
+				burst(p["pos"], Color(1.0, 0.55, 0.1) if shell else Color(1.0, 0.2, 0.12), 1, 0.6, 0.3 * far, 0.2, 0.0, 0.0)
 			if _n[5] < MAX_LOB:
-				var gs := 2.4 if shell else 1.6
+				var gs := (2.4 if shell else 2.0) * far
 				_gren_mm.set_instance_transform(_n[5], Transform3D(Basis(Vector3.RIGHT, float(p["spin"])).scaled(Vector3.ONE * gs), p["pos"]))
 				_n[5] += 1
 		elif kind == "bomb":
@@ -415,7 +417,8 @@ func _tick_list(list: Array, delta: float) -> void:
 			_n[0] += 1
 		elif ENEMY_SCALE.has(kind):
 			if _n[4] < MAX_ENEMY_PROJ:
-				_etracer_mm.set_instance_transform(_n[4], Transform3D(basis.scaled_local(ENEMY_SCALE[kind]), p["pos"]))
+				var es: Vector3 = ENEMY_SCALE[kind]
+				_etracer_mm.set_instance_transform(_n[4], Transform3D(basis.scaled_local(es * Vector3(far, far, sqrt(far))), p["pos"]))
 				_n[4] += 1
 		else:
 			if kind == "rocket" and randf() < 0.3:
