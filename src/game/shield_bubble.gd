@@ -6,7 +6,8 @@ extends MeshInstance3D
 ## where blocked fire, firebombs and charging gangs hit it, blinks in its last second (the
 ## sim's own timer: honest), and bursts away the moment the shield ends.
 ## Sized to the formation's real figures every frame (feet and heads inside), so it grows
-## with the squad. One unit hemisphere scaled to the bubble's radii: one draw.
+## with the squad. One unit sphere scaled to the bubble's radii and sitting on the road (the
+## road hides the rest): one draw, no screen reads.
 ## LevelView keeps a small hook: update() each frame, hit() for blocked shots.
 ## Numbers: config/world_look.json "shield_bubble".
 
@@ -26,6 +27,7 @@ var _age := 0.0                 # seconds in the current state
 var _prev_shield := 0.0
 var _hits := PackedVector4Array()
 var _sized := false
+var _last_hit_t := -INF
 
 
 ## config/world_look.json "shield_bubble", loaded once.
@@ -37,15 +39,19 @@ static func look() -> Dictionary:
 	return _look
 
 
-## The smallest dome that holds every figure, head to toe. `points` are figures as
-## Vector3(x, height, z) on the road. The ground ellipse holds every figure's feet (padded by
-## cfg.pad); it widens until the tallest figure near its edge is inside too; the dome stands
-## cfg.head above the tallest figure. A lone hero gets cfg.min_r.
-## Returns {"centre": Vector3(x, 0, z), "radii": Vector3(half width, height, half depth)}.
+## The smallest bubble that holds every figure, head to toe. `points` are figures as
+## Vector3(x, top, z) on the road. A bubble sitting on the road: an ellipsoid whose centre is
+## cfg.lift of the tallest top up (its widest girth around the figures' bodies, so a tall
+## figure near the edge still fits), reaching cfg.head above the tallest top. Its girth ellipse
+## holds every figure's feet (padded by cfg.pad), then widens until each figure's feet and top
+## are inside too. A lone hero gets cfg.min_r. The road cuts off what is below it.
+## Returns {"centre": Vector3(x, lift height, z), "radii": Vector3(half width, half height,
+## half depth)}.
 static func fit(points: Array, cfg: Dictionary) -> Dictionary:
 	var pad := float(cfg.get("pad", 0.3))
 	var min_r := float(cfg.get("min_r", 1.0))
 	var head := float(cfg.get("head", 0.45))
+	var lift := float(cfg.get("lift", 0.5))
 	if points.is_empty():
 		return {"centre": Vector3.ZERO, "radii": Vector3(min_r, min_r + head, min_r)}
 	var lo := Vector3(INF, 0.0, INF)
@@ -55,7 +61,8 @@ static func fit(points: Array, cfg: Dictionary) -> Dictionary:
 		lo = Vector3(minf(lo.x, p.x), 0.0, minf(lo.z, p.z))
 		hi = Vector3(maxf(hi.x, p.x), 0.0, maxf(hi.z, p.z))
 		top = maxf(top, p.y)
-	var c := Vector3((lo.x + hi.x) * 0.5, 0.0, (lo.z + hi.z) * 0.5)
+	var cy := top * lift
+	var c := Vector3((lo.x + hi.x) * 0.5, cy, (lo.z + hi.z) * 0.5)
 	var hx := maxf((hi.x - lo.x) * 0.5, 0.001)
 	var hz := maxf((hi.z - lo.z) * 0.5, 0.001)
 	# The ground ellipse with the box's proportions that holds every centre, then the pad.
@@ -64,14 +71,23 @@ static func fit(points: Array, cfg: Dictionary) -> Dictionary:
 		s = maxf(s, Vector2((p.x - c.x) / hx, (p.z - c.z) / hz).length())
 	var a := hx * s + pad
 	var b := hz * s + pad
-	var ry := top + head
-	# Widen until each head is inside: (q/u)^2 + (h/ry)^2 <= 1 for a figure at ground radius q.
+	var ry := top - cy + head
+	# Widen until each figure is inside at its feet and its top: (q/u)^2 + (dy/ry)^2 <= 1 for a
+	# figure at girth radius q whose feet are cy below the centre and its top p.y - cy above it.
 	var u := 1.0
 	for p in points:
-		var q := Vector2((p.x - c.x) / a, (p.z - c.z) / b).length()
-		var room := sqrt(maxf(1.0 - pow(p.y / ry, 2.0), 0.0001))
+		# A figure is `pad` wide either side: its outermost side in the girth ellipse.
+		var dx := absf(p.x - c.x)
+		var dz := absf(p.z - c.z)
+		var q := maxf(Vector2((dx + pad) / a, dz / b).length(), Vector2(dx / a, (dz + pad) / b).length())
+		var dy := maxf(cy, absf(p.y - cy))
+		var room := sqrt(maxf(1.0 - pow(dy / ry, 2.0), 0.0001))
 		u = maxf(u, q / room)
-	return {"centre": c, "radii": Vector3(maxf(a * u, min_r), ry, maxf(b * u, min_r))}
+	var rx := maxf(a * u, min_r)
+	var rz := maxf(b * u, min_r)
+	# A bubble, not a capsule: neither half axis below `round` of the other (only ever grows).
+	var k := float(cfg.get("round", 0.0))
+	return {"centre": c, "radii": Vector3(maxf(rx, rz * k), ry, maxf(rz, rx * k))}
 
 
 ## Where the line from `from` to `to` enters the dome (centre c, radii r), as a fraction of
@@ -116,8 +132,7 @@ func setup(fx_node: Node = null) -> ShieldBubble:
 	_fx = fx_node
 	var sm := SphereMesh.new()
 	sm.radius = 1.0
-	sm.height = 1.0
-	sm.is_hemisphere = true
+	sm.height = 2.0
 	sm.radial_segments = int(_cfg.get("segments", 40))
 	sm.rings = int(_cfg.get("rings", 12))
 	mesh = sm
@@ -125,8 +140,8 @@ func setup(fx_node: Node = null) -> ShieldBubble:
 	_mat.shader = SHADER
 	_mat.set_shader_parameter("rim_color", _col(_cfg.get("rim"), Color(0.5, 0.95, 1.0)))
 	_mat.set_shader_parameter("edge_color", _col(_cfg.get("edge"), Color.WHITE))
-	for k in ["rim_power", "rim_alpha", "base_alpha", "hex_cells", "hex_alpha", "scan_speed", "pulse_hz",
-			"pulse", "hit_reach", "hit_width"]:
+	for k in ["rim_power", "rim_alpha", "rim_top", "base_alpha", "contact", "contact_m", "hex_cells", "hex_alpha", "scan_speed", "pulse_hz",
+			"pulse", "hit_reach", "hit_width", "back_wall"]:
 		if _cfg.has(k):
 			_mat.set_shader_parameter(k, float(_cfg[k]))
 	material_override = _mat
@@ -178,9 +193,9 @@ func hit(from: Vector3, to: Vector3) -> Vector3:
 	var p: Vector3
 	if u < 0.0:
 		# Aimed past it: end on the surface towards the shooter.
-		var dir := (from - (centre + Vector3(0, r.y * 0.4, 0)))
+		var dir := from - centre
 		var k := 1.0 / maxf(Vector3(dir.x / r.x, dir.y / r.y, dir.z / r.z).length(), 0.0001)
-		p = centre + Vector3(0, r.y * 0.4, 0) + dir * k
+		p = centre + dir * k
 	else:
 		p = from.lerp(to, u)
 	p.y = maxf(p.y, 0.15)
@@ -189,6 +204,12 @@ func hit(from: Vector3, to: Vector3) -> Vector3:
 
 
 func _add_hit(p: Vector3, r: Vector3) -> void:
+	# A gang firing every frame would recycle the ripples before they spread: at most HITS
+	# new ripples per ripple life, so each one runs its whole course.
+	var hit_s := maxf(float(_cfg.get("hit_s", 0.45)), 0.01)
+	if _t - _last_hit_t < hit_s / HITS:
+		return
+	_last_hit_t = _t
 	var local := ((p - centre) / r).normalized()
 	var oldest := 0
 	for i in HITS:
@@ -231,18 +252,21 @@ func update(d: float, shield_t: float, allies: Array, hero_h: float, troop_h: fl
 		_state = "burst"
 		_age = 0.0
 		if _fx != null and _fx.has_method("burst"):
-			_fx.burst(centre + Vector3(0, radii.y * 0.5, 0), Color(String(_cfg.get("rim", "8ff4ff"))), 26, 7.0, 0.16, 0.4, 2.0, 6.0)
+			_fx.burst(centre, Color(String(_cfg.get("rim", "8ff4ff"))), 26, 7.0, 0.16, 0.4, 2.0, 6.0)
 	elif _state == "burst" and _age >= float(_cfg.get("burst_s", 0.3)):
 		_state = "off"
 	_prev_shield = shield_t
 	visible = _state != "off"
 	if not visible:
 		return
-	# Follow the formation the player sees: centre at once, size eased.
+	# Follow the formation the player sees: centre at once, size eased. A figure's top is its
+	# raised hand or gun (the hero throws overhead).
+	var top_hero := hero_h * float(_cfg.get("hero_top", 1.0))
+	var top_troop := troop_h * float(_cfg.get("troop_top", 1.0))
 	var pts: Array = []
 	for a in allies:
 		var p: Vector3 = a["pos"]
-		pts.append(Vector3(p.x, hero_h if a["kind"] == "hero" else troop_h, p.z))
+		pts.append(Vector3(p.x, top_hero if a["kind"] == "hero" else top_troop, p.z))
 	var f := fit(pts, _cfg)
 	var want: Vector3 = f["radii"]
 	if not _sized:
@@ -250,13 +274,14 @@ func update(d: float, shield_t: float, allies: Array, hero_h: float, troop_h: fl
 		centre = f["centre"]
 		_sized = true
 		if _fx != null and _fx.has_method("ring"):
-			_fx.ring(centre + Vector3(0, 0.2, 0), Color(String(_cfg.get("rim", "8ff4ff"))), 32, 6.0, 0.16)
+			_fx.ring(Vector3(centre.x, 0.2, centre.z), Color(String(_cfg.get("rim", "8ff4ff"))), 32, 6.0, 0.16)
 	else:
-		# Grows at once (a figure never pokes out), shrinks gently as the squad thins.
+		# Grows at once (a figure never pokes out), shrinks gently as the squad thins; an eased
+		# centre that lags behind the fit grows the bubble by the lag, so it still holds them.
 		var k := 1.0 - exp(-d * float(_cfg.get("ease", 6.0)))
-		radii = radii.lerp(want, k).max(want)
 		var fc: Vector3 = f["centre"]
-		centre = Vector3(fc.x, 0.0, lerpf(centre.z, fc.z, k))
+		centre = Vector3(fc.x, lerpf(centre.y, fc.y, k), lerpf(centre.z, fc.z, k))
+		radii = radii.lerp(want, k).max(want + Vector3(0.0, absf(centre.y - fc.y), absf(centre.z - fc.z)))
 	position = centre
 	scale = radii * scale_now()
 	# Ripples age; the look fades in, blinks in the last second, flashes on pop and burst.

@@ -29,7 +29,8 @@ func _formation(n: int, half: float, x := 0.0) -> Array:
 
 func test_config_has_the_bubble_look() -> void:
 	var c := _cfg()
-	for k in ["pad", "min_r", "head", "ease", "pop_s", "burst_s", "blink_s", "blink_hz", "rim", "hit_s"]:
+	for k in ["pad", "min_r", "head", "lift", "hero_top", "troop_top", "round", "ease", "pop_s", "burst_s",
+			"blink_s", "blink_hz", "rim", "hit_s"]:
 		check(c.has(k), "world_look.json shield_bubble has " + k)
 
 
@@ -38,10 +39,12 @@ func test_lone_hero_gets_the_smallest_bubble() -> void:
 	var f := ShieldBubble.fit([Vector3(2.8, 1.85, -0.5)], c)
 	near(f["radii"].x, float(c["min_r"]), "lone hero: smallest width")
 	near(f["radii"].z, float(c["min_r"]), "lone hero: smallest depth")
-	near(f["radii"].y, 1.85 + float(c["head"]), "headroom over the hero")
+	var cy := 1.85 * float(c["lift"])
+	near(f["centre"].y, cy, "sits on the road, widest around his body")
+	near(cy + f["radii"].y, 1.85 + float(c["head"]), "headroom over the hero")
 	near(f["centre"].x, 2.8, "centred on him (x)")
 	near(f["centre"].z, -0.5, "centred on him (z)")
-	near(f["centre"].y, 0.0, "a dome on the road")
+	check(f["radii"].y > cy, "it reaches below the road (cut off there)")
 
 
 func test_bubble_holds_every_figure_head_to_toe() -> void:
@@ -72,10 +75,10 @@ func test_bubble_grows_with_the_squad_but_stays_close() -> void:
 		var f := ShieldBubble.fit(pts, c)
 		var rx: float = f["radii"].x
 		check(rx >= w + float(c["pad"]) - 0.0001, "n=%d: wider than the formation (%.2f vs %.2f)" % [n, rx, w])
-		# A big squad packs a little narrower (Squad.slot_offset) and its troops are drawn
-		# smaller: the bubble follows the formation, so allow a few cm either way there.
+		# A big squad packs a little narrower and deeper (Squad.slot_offset) and its troops are
+		# drawn smaller: the bubble follows the formation's whole shape, so allow 10 cm there.
 		if w >= prev_w - 0.0001:
-			check(rx >= prev - 0.05, "n=%d: a wider formation never gets a narrower bubble (%.2f < %.2f)" % [n, rx, prev])
+			check(rx >= prev - 0.1, "n=%d: a wider formation never gets a clearly narrower bubble (%.2f < %.2f)" % [n, rx, prev])
 		prev = rx
 		prev_w = w
 	var small := ShieldBubble.fit(_formation(1, half), c)
@@ -83,6 +86,17 @@ func test_bubble_grows_with_the_squad_but_stays_close() -> void:
 	check(big["radii"].x > small["radii"].x + 0.6, "a full squad's bubble is clearly wider than the hero's")
 	# Sized to the formation: a full squad (about one lane wide) never sits in the old 3.4 m dome.
 	check(big["radii"].x < 3.0, "a full squad's bubble hugs it (%.2f m half width)" % big["radii"].x)
+
+
+func test_bubble_stays_round() -> void:
+	var c := _cfg()
+	var k := float(c["round"])
+	# A hero with a column of troops behind him: deep and narrow.
+	var pts: Array = [Vector3(0, 1.85, -0.5)]
+	for i in 6:
+		pts.append(Vector3(0.0, 1.3, 0.4 + 0.5 * i))
+	var f := ShieldBubble.fit(pts, c)
+	check(f["radii"].x >= k * f["radii"].z - 0.0001, "a deep squad gets a bubble, not a capsule (%.2f x %.2f)" % [f["radii"].x, f["radii"].z])
 
 
 func test_ray_entry_stops_fire_on_the_surface() -> void:
@@ -142,7 +156,8 @@ func test_level_view_bubble_follows_the_sim_shield() -> void:
 	var worst := 0.0
 	for a in view._allies:
 		var p: Vector3 = a["pos"]
-		var h := LevelView.CHAR_H * (1.0 if a["kind"] == "hero" else LevelView.crowd_scale(view._allies.size()))
+		var c := _cfg()
+		var h := LevelView.CHAR_H * (float(c["hero_top"]) if a["kind"] == "hero" 			else float(c["troop_top"]) * LevelView.crowd_scale(view._allies.size()))
 		worst = maxf(worst, _e(Vector3(p.x, h, p.z), f))
 	check(worst <= 1.0001, "every figure on screen is inside it (worst %.3f)" % worst)
 	var hit := b.hit(Vector3(b.centre.x, 1.2, -30.0), Vector3(b.centre.x, 1.2, b.centre.z))
