@@ -25,3 +25,6 @@ build/
 Thumbs.db
 .DS_Store
 .vscode/
+
+# Mixamo raw files (Adobe terms: no redistribution; repo is public)
+art_src/mixamo/
