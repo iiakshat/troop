@@ -16,6 +16,7 @@ var kick := 0.0                # recoil pitch on top of the aim (radians), recov
 var _touch := false
 var _last := Vector2.ZERO
 var _auto := false             # autoplay asked for a shot
+var input_while_busy := false  # true: also gets touches while a shot is out (to keep a held finger)
 var _fill: OmniLight3D
 
 
@@ -25,25 +26,31 @@ func setup(s: BottleShot) -> FinaleWeapon:
 	world = s.world
 	wcfg = logic.wcfg
 	# Start aimed at the middle of the bottle set.
-	var mid := Vector3(0, _mid_y(), -logic.distance)
-	var d := mid - eye_h()
-	yaw = atan2(-d.x, -d.z)
-	pitch = atan2(d.y, Vector2(d.x, d.z).length())
+	var r := rest_aim(logic)
+	yaw = r.x
+	pitch = r.y
 	return self
 
 
-func _mid_y() -> float:
+## (yaw, pitch) from the eye to the middle of the bottle set: where every weapon starts aimed.
+static func rest_aim(l: BottleLogic) -> Vector2:
 	var lo := INF
 	var hi := -INF
-	for b in logic.layout["bottles"]:
+	for b in l.layout["bottles"]:
 		lo = minf(lo, float(b["y"]))
 		hi = maxf(hi, float(b["y"]))
-	return (lo + hi) * 0.5
+	var d := Vector3(0, (lo + hi) * 0.5, -l.distance) - eye_point(l.wcfg)
+	return Vector2(atan2(-d.x, -d.z), atan2(d.y, Vector2(d.x, d.z).length()))
+
+
+## The eye in hero space for a weapon config.
+static func eye_point(w: Dictionary) -> Vector3:
+	return Vector3(0.0, float(w.get("eye_y", 1.6)), -0.35)
 
 
 ## The eye in hero space (a little ahead of the hero's face, so his head never fills the lens).
 func eye_h() -> Vector3:
-	return Vector3(0.0, float(wcfg.get("eye_y", 1.6)), -0.35)
+	return eye_point(wcfg)
 
 
 func eye() -> Vector3:
@@ -77,6 +84,13 @@ func look_along(v: Vector3, zero := 0.0) -> void:
 
 func rest_view() -> Transform3D:
 	return Transform3D(view_basis(), eye())
+
+
+## Puts the HUD reticle on the screen point of the current aim, seen from `cam` (world).
+func show_reticle(cam: Transform3D, kind: String, extra_yaw := 0.0, extra_pitch := 0.0) -> void:
+	var vp := shot.hud.get_viewport().get_visible_rect().size
+	var p := eye() + aim_dir(extra_yaw, extra_pitch) * 20.0
+	shot.hud.set_reticle(project_cam(cam.affine_inverse() * p, shot._fov, vp), kind)
 
 
 func rest_fov() -> float:
@@ -128,6 +142,40 @@ func auto_fire() -> void:
 
 func finish() -> void:
 	visible = false
+
+
+# ---------------------------------------------------------------- screen checks
+
+## Pixel position of camera-space point `q` for the game camera (KEEP_WIDTH: `fov_h` is the
+## horizontal field of view in degrees) on a viewport of `vp` pixels. Points at or behind the
+## lens are pushed onto a near plane so a part crossing it still gets a (huge) rect.
+static func project_cam(q: Vector3, fov_h: float, vp: Vector2) -> Vector2:
+	var f := vp.x * 0.5 / tan(deg_to_rad(fov_h) * 0.5)
+	var z := maxf(-q.z, 0.02)
+	return Vector2(vp.x * 0.5 + f * q.x / z, vp.y * 0.5 - f * q.y / z)
+
+
+## Screen rects of the bottles still standing at finale time `t`, seen from `cam` (hero space,
+## like BottleLogic), each a little larger than the glass itself.
+static func bottle_rects(l: BottleLogic, cam: Transform3D, fov_h: float, vp: Vector2, t: float) -> Array:
+	var out: Array = []
+	var inv := cam.affine_inverse()
+	var hw := 0.16 * l.size
+	for i in l.count():
+		if l.broken[i]:
+			continue
+		var p := l.position(i, t)
+		var r := Rect2()
+		var first := true
+		for c in [Vector3(-hw, -0.42 * l.size, 0), Vector3(hw, -0.42 * l.size, 0), Vector3(-hw, 0.44 * l.size, 0), Vector3(hw, 0.44 * l.size, 0)]:
+			var s := project_cam(inv * (Vector3(p.x, p.y, -l.distance) + c), fov_h, vp)
+			if first:
+				r = Rect2(s, Vector2.ZERO)
+				first = false
+			else:
+				r = r.expand(s)
+		out.append(r)
+	return out
 
 
 # ---------------------------------------------------------------- helpers

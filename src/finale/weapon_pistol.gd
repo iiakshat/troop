@@ -1,7 +1,8 @@
 class_name WeaponPistol
 extends FinaleWeapon
-## Pistol (district 2, carnival shooting gallery). First person down the iron sights: drag to
-## put the front post on a bottle, release to fire. Each shot kicks the muzzle up (it settles
+## Pistol (district 2, carnival shooting gallery). First person: drag to put the crosshair on a
+## bottle, release to fire. The gun rides low right in the view (never over a bottle) and turns
+## in a little towards the crosshair. Each shot kicks the muzzle up (it settles
 ## over recover_s; firing early goes high), cycles the slide, throws a brass casing and sends a
 ## tracer that takes time to arrive and drops a little. The magazine holds `mag` rounds; when
 ## it runs dry the slide locks back and a swipe down (or a tap) reloads: the empty magazine
@@ -10,8 +11,11 @@ extends FinaleWeapon
 const MUZZLE := Vector3(0, -0.026, -0.385)
 const PORT := Vector3(0.0145, -0.018, -0.25)
 const GRIP := Vector3(0, -0.1, -0.2)
-const HOLD := Vector3(0, 0, -0.52)       # arms fully out: the rear sight ~0.72 m from the eye, so
-                                          # the slide stays small under the shelf it aims at
+const HOLD := Vector3(0.14, -0.15, -0.36)   # the gun's sight line in camera space: low right, below
+                                            # every bottle and right of the ammo row
+const TOE_IN := 0.12                        # radians the muzzle turns in towards the crosshair
+const TILT := 0.05                          # radians the muzzle lifts towards it
+const CANT := -0.1                          # radians of roll (the top leans in a touch)
 
 var _gun: Node3D
 var _slide: Node3D
@@ -53,6 +57,11 @@ func _ready() -> void:
 	_light.light_energy = 0.0
 	_light.position = MUZZLE
 	_gun.get_node("Gun").add_child(_light)
+
+
+## The gun's resting pose in camera space (no recoil, no reload): low right, turned in.
+static func gun_pose() -> Transform3D:
+	return Transform3D(Basis.from_euler(Vector3(TILT, TOE_IN, CANT)), HOLD)
 
 
 func speed() -> float:
@@ -165,7 +174,7 @@ func tick(delta: float, d: float) -> void:
 	var r := _reload_pose()
 	var local := Transform3D(Basis(), GRIP) * Transform3D(Basis.from_euler(Vector3(deg_to_rad(9.0) * _snap + r.x, r.y, r.z)), -GRIP)
 	local.origin += Vector3(0, -0.12 * r.w, 0.045 * _snap + 0.05 * r.w)
-	_gun.global_transform = cam * Transform3D(Basis(), HOLD) * local
+	_gun.global_transform = cam * gun_pose() * local
 	var back := 0.035 * (sin(_slide_t * PI) if _slide_t < 1.0 else 0.0)
 	_slide.position.z = 0.035 if _locked else back
 	place_fill(cam)
@@ -173,6 +182,10 @@ func tick(delta: float, d: float) -> void:
 	shot._fov = float(wcfg.get("fov", 30.0))
 	shot._focus = -1.0
 	shot._roll = 0.0
+	if shot._state == "aim" and _bullet.is_empty() and _hold <= 0.0 and _reload_t < 0.0:
+		show_reticle(cam, "cross")
+	else:
+		shot.hud.hide_reticle()
 	if not _bullet.is_empty():
 		_tick_bullet(delta)
 	elif _hold > 0.0:
@@ -291,6 +304,8 @@ func _tick_reload(delta: float) -> void:
 
 func finish() -> void:
 	visible = false
+	if is_instance_valid(shot.hud):
+		shot.hud.hide_reticle()
 	for c in _casings:
 		(c["node"] as Node3D).queue_free()
 	_casings.clear()

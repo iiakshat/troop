@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode unshaded, blend_add, cull_disabled, depth_draw_never, shadows_disabled;
+render_mode unshaded, blend_add, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
 // Faint visible beam of a spotlight: brightest along the middle, fading at the silhouette
 // and towards the far end so it never shows a hard line where it meets the wall.
 

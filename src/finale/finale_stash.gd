@@ -73,6 +73,14 @@ static func neon_bottle(parent: Node3D, pos: Vector3, h: float, color: Color, li
 	return root
 
 
+## Height of the tallest bottle's top above the stand's floor.
+static func set_top(shot: BottleShot) -> float:
+	var top := 0.0
+	for b in shot.logic.layout["bottles"]:
+		top = maxf(top, float(b["y"]))
+	return top + 0.45 * shot.logic.size
+
+
 static func bulbs(parent: Node3D, from: Vector3, to: Vector3, n: int, sag: float, color := Color("ffd98a")) -> void:
 	var m := WeaponModels.mat(color, 0.0, 0.4, 4.0)
 	var sm := SphereMesh.new()
@@ -97,15 +105,25 @@ static func stripes(parent: Node3D, center: Vector3, size: Vector2, n: int, a: C
 # ---------------------------------------------------------------- shelves
 
 ## One shelf `width` metres wide in the stash's style, its top at local y = 0.
-static func shelf(theme: String, width: float, depth := 0.5) -> Node3D:
+## One shelf of the rack, its top at y = 0. `drop` = the height down to the shelf below (0 for the
+## lowest): anything under a shelf must fit in that gap, or it hides the row of bottles below.
+static func shelf(theme: String, width: float, depth := 0.5, drop := 0.0) -> Node3D:
 	var n := Node3D.new()
 	match theme:
 		"carnival":
-			# Plain dark boards (no stripes): the bottles must stand out from the striped booth.
-			box(n, Vector3(width, 0.08, depth), Vector3(0, -0.04, 0), Color("5a1a20"))
-			box(n, Vector3(width, 0.2, 0.04), Vector3(0, -0.14, depth * 0.5), Color("3a1216"))
+			# Plain dark boards (no stripes): the bottles must stand out from the striped booth. Thin,
+			# with the dark edge flush (a lip hanging below hid the necks of the row underneath).
+			box(n, Vector3(width, 0.025, depth), Vector3(0, -0.0125, 0), Color("5a1a20"))
+			box(n, Vector3(width, 0.025, 0.04), Vector3(0, -0.0125, depth * 0.5), Color("b0473a"))
 		"docks":
-			# A row of crates: the bottles stand on their lids.
+			if drop > 0.0:
+				# Upper rows: a pallet plank on two posts at the ends, clear of the row below
+				# (crates here used to swallow the lower bottles whole).
+				box(n, Vector3(width, 0.05, depth + 0.1), Vector3(0, -0.025, 0), Color("7a5530"))
+				for sx in [-1.0, 1.0]:
+					box(n, Vector3(0.1, drop, 0.1), Vector3(sx * (width * 0.5 - 0.05), -drop * 0.5, 0), Color("4d331b"))
+				return n
+			# The lowest row: a row of crates, the bottles stand on their lids.
 			var k := maxi(int(round(width / 0.9)), 1)
 			var cw := width / k
 			for i in k:
@@ -178,7 +196,8 @@ static func _bar(shot: BottleShot, c: Vector3) -> void:
 		# Side walls: we are inside the bar now.
 		box(shot, Vector3(0.2, 4.6, 6.0), c + Vector3(side * 3.5, 2.1, 3.0), Color("2a1a10"))
 	box(shot, Vector3(6.9, 0.32, 0.45), c + Vector3(0, 4.3, 0), Color("3b2414"))
-	bulbs(shot, c + Vector3(-3.0, 4.05, 0.3), c + Vector3(3.0, 4.05, 0.3), 13, 0.12)
+	var by := maxf(4.05, set_top(shot) + 0.26)   # string lights stay above the tallest bottle
+	bulbs(shot, c + Vector3(-3.0, by, 0.3), c + Vector3(3.0, by, 0.3), 13, 0.12)
 	neon_bottle(shot, c + Vector3(-2.55, 2.6, 0.06), 1.0, NEON["bar"])
 	_spots(shot, c, 4.6, 4.0, 1.8, 3.2, true)
 
@@ -261,7 +280,8 @@ static func _rooftop(shot: BottleShot, c: Vector3) -> void:
 	# bottle rows and covered the outer bottles in the scope).
 	neon_bottle(shot, c + Vector3(-2.9, 2.2, -0.04), 1.0, NEON["rooftop"])
 	neon_bottle(shot, c + Vector3(2.9, 2.2, -0.04), 1.0, Color("3fe0ff"))
-	bulbs(shot, c + Vector3(-4.0, 3.4, 1.0), c + Vector3(4.0, 3.4, 1.0), 15, 0.4, Color("ffcf7a"))
+	var ry := maxf(3.4, set_top(shot) + 0.55)    # string lights stay above the tallest bottle
+	bulbs(shot, c + Vector3(-4.0, ry, 1.0), c + Vector3(4.0, ry, 1.0), 15, 0.4, Color("ffcf7a"))
 	var umb := box(shot, Vector3(0.08, 2.4, 0.08), c + Vector3(3.6, 1.2, 1.6), Color("ddd"))
 	box(umb, Vector3(1.8, 0.1, 1.8), Vector3(0, 1.2, 0), Color("ff3bd5"))
 	_spots(shot, c, 4.0, 4.0, 1.4, 3.0, false)
