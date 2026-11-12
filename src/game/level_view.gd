@@ -33,6 +33,8 @@ const ALLY_SFX := {
 }
 const CHAR_H := 1.85            # baked character height (config/characters.json)
 const BOSS_SCALE := 2.6         # bosses are drawn this much bigger than a thug
+const BOSS_FAR_SCALE := 1.6     # a far boss is drawn up to this much bigger again (boss_grow)
+const BOSS_RIM := 0.3           # extra rim light on the boss: his dark suit never melts into the stash
 const INK_W := 0.028            # crowd ink outline width (crowd_outline.gdshader default)
 const INK_W_PACKED := 0.012     # a full squad's followers: thinner ink, no grey-purple smudge
 const DEPTH_SPREAD := 1.3       # a full squad's rows open up this much in depth (view only; smudge fix)
@@ -174,7 +176,7 @@ func _ready() -> void:
 		_crowds[k] = c
 		# Stronger rim light keeps figures off the road, more so at dusk and night.
 		(c.material_override as ShaderMaterial).set_shader_parameter("rim_strength",
-			(0.4 if k in ALLY_KINDS else 0.3) + (0.2 if district >= 4 else 0.0))
+			(0.4 if k in ALLY_KINDS else 0.3) + (0.2 if district >= 4 else 0.0) + (BOSS_RIM if k == "boss" else 0.0))
 	_build_lasers()
 	if district >= 4:
 		# Dusk and night: a soft key light rides with the squad so it never sinks into the road.
@@ -1131,7 +1133,7 @@ func _update_boss_bar(hv: Dictionary, d: float) -> void:
 	var h: Dictionary = hv["h"]
 	var bar: Node3D = hv["bar"]
 	var front := _horde_front(hv)
-	var k := BOSS_SCALE * crowd_scale((hv["offs"] as Array).size())
+	var k := BOSS_SCALE * boss_grow(front.z) * crowd_scale((hv["offs"] as Array).size())
 	# Always above the scaled model's head, never inside it.
 	# Faces the camera and grows with distance, so it reads the same far up the street;
 	# its bottom edge stays above the scaled model's head.
@@ -1348,6 +1350,12 @@ func _slot_pos(slot: int, n: int) -> Vector3:
 	return Vector3(_squad_x + o.x, 0.012 * (slot % 4), o.y + lift)
 
 
+## Spec v2 §5: a boss far up the street is drawn bigger (up to BOSS_FAR_SCALE at 70 m), easing
+## to his true size by 30 m, so he is never lost behind his escorts while he walks in.
+static func boss_grow(z: float) -> float:
+	return lerpf(1.0, BOSS_FAR_SCALE, clampf((-z - 30.0) / 40.0, 0.0, 1.0))
+
+
 ## Followers' ink outline width for a squad of n shown figures: full ink while the squad is
 ## small, thinner once heads overlap (the hero keeps full ink and stands out).
 static func ink_width(n: int) -> float:
@@ -1480,7 +1488,7 @@ func _update_visuals(d: float) -> void:
 		var h: Dictionary = hv["h"]
 		var want := int(ceil(int(h["count"]) / float(hv["per"])))
 		var offs: Array = hv["offs"]
-		var esc := ENEMY_SCALE if hv["kind"] != "boss" else BOSS_SCALE
+		var esc := ENEMY_SCALE if hv["kind"] != "boss" else BOSS_SCALE * boss_grow(float(h["z"]))
 		while offs.size() > want:
 			var o: Vector3 = offs.pop_front()
 			var p := _fig_pos(hv, o)
@@ -1520,11 +1528,17 @@ func _update_visuals(d: float) -> void:
 		lab.scale = Vector3.ONE * ls
 		var ly := (4.6 if hv["kind"] == "brute" else 3.6) * ENEMY_SCALE * 0.85 + 0.3 * (ls - 1.0)
 		# Escorts walking with a boss: their count sits above the boss's bar, never on his chest.
+		# A gang walking ahead of a boss keeps its count low, just over its own heads, so the
+		# boss behind it stays in sight (spec v2 §5).
 		for bid in _hordes:
 			var bv: Dictionary = _hordes[bid]
-			if bv.has("bar") and absf(float(bv["h"]["z"]) - lz) < 7.0 and (bv["bar"] as Node3D).visible:
+			if not bv.has("bar") or not (bv["bar"] as Node3D).visible:
+				continue
+			if absf(float(bv["h"]["z"]) - lz) < 7.0:
 				var bar_top: float = (bv["bar"] as Node3D).position.y + 0.4 * (bv["bar"] as Node3D).scale.y
 				ly = maxf(ly, bar_top + 0.7 * ls)
+			elif float(bv["h"]["z"]) < lz and int(bv["h"]["count"]) > 0:
+				ly = minf(ly, CHAR_H * ENEMY_SCALE * crowd_scale(offs.size()) + 0.45 * ls)
 		lab.position = Vector3(0, ly, lz)
 		if int(h["count"]) != int(hv["shown"]):
 			hv["shown"] = int(h["count"])

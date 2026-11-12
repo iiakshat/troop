@@ -7,7 +7,7 @@ var _keep: Array = []
 
 ## Builds a playing LevelView for level n with its own World and Fx under the root.
 ## Returns [view, world, fx]; free them with _drop.
-func _view(n: int) -> Array:
+func _view(n: Variant) -> Array:
 	var tree := Engine.get_main_loop() as SceneTree
 	var game: Node = tree.root.get_node("Game")
 	_keep = [game.save.duplicate(true), game.save_path]
@@ -21,7 +21,7 @@ func _view(n: int) -> Array:
 	for node in [world, fx]:
 		if not node.is_node_ready():
 			node._ready()   # a SceneTree script's root is not live yet: ready by hand
-	var view := LevelView.new().setup(Config.level(n), {}, world, fx, UiKit.FONT)
+	var view := LevelView.new().setup(n if n is Dictionary else Config.level(n), {}, world, fx, UiKit.FONT)
 	view.input_enabled = false
 	tree.root.add_child(view)
 	if not view.is_node_ready():
@@ -181,4 +181,46 @@ func test_packed_squad_draws_thin_ink() -> void:
 	c.set_ink_width(0.012)
 	var ink := (c.material_override as ShaderMaterial).next_pass as ShaderMaterial
 	check(is_equal_approx(float(ink.get_shader_parameter("width")), 0.012), "the crowd's ink pass takes the width")
+	_drop(parts)
+
+
+## Spec v2 §5: the boss is visible all fight. Far up the street he is drawn bigger (easing to
+## his true size by 30 m), and a gang walking ahead of him keeps its count low over its own
+## heads, below his head, instead of on his chest.
+func test_boss_towers_over_escorts_while_walking_in() -> void:
+	check(LevelView.boss_grow(-70.0) >= 1.4, "a boss 70 m away is drawn at least 1.4x bigger")
+	eq(LevelView.boss_grow(-30.0), 1.0, "a boss 30 m away is his true size")
+	var lvl := {"id": 10, "district": 1, "events": [
+		{"at": 90, "type": "wave", "groups": [{"enemy": "thug", "n": 60}, {"enemy": "boss", "n": 1, "gap": 22, "hp": 900}]},
+		{"at": 160, "type": "finish"}]}
+	var parts := _view(lvl)
+	var view: LevelView = parts[0]
+	var seen := 0
+	for f in 900:
+		if view.sim.state != "run":
+			break
+		view._process(1.0 / 60.0)
+		var boss: Dictionary = {}
+		for id in view._hordes:
+			if view._hordes[id].has("bar"):
+				boss = view._hordes[id]
+		if boss.is_empty():
+			continue
+		var bz := float(boss["h"]["z"])
+		var head := LevelView.CHAR_H * LevelView.BOSS_SCALE * LevelView.boss_grow(bz) * LevelView.crowd_scale(1)
+		for id in view._hordes:
+			var hv: Dictionary = view._hordes[id]
+			if hv.has("bar") or not hv.has("label"):
+				continue
+			var lab: Label3D = hv["label"]
+			if lab.position.z > bz + 7.0:
+				seen += 1
+				# The label's top edge (about 0.45 m per unit of scale above its centre) stays
+				# below the boss's shoulders, so his head and chest show above the count.
+				var top := lab.position.y + 0.45 * lab.scale.y
+				check(top < head * 0.75, "an escort count ahead of the boss stays below his shoulders (%.1f < %.1f m)" % [top, head * 0.75])
+				if top >= head * 0.75:
+					_drop(parts)
+					return
+	check(seen > 0, "an escort gang walked ahead of the boss")
 	_drop(parts)
