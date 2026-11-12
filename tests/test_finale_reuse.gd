@@ -262,3 +262,40 @@ func test_level_plays_the_finale_it_built_at_load() -> void:
 	eq(warm.hero_pos, view._slot_pos(0, view._allies.size()), "in front of the hero")
 	check(warm.visible and not warm.dormant, "playing")
 	_drop(parts)
+
+
+## The burst-in rushes the camera into the hero's head for the pistol, bow and sniper: his body
+## is hidden before the camera gets near his head, so his hair and its outline never sweep up
+## over the screen as a dark slab (they did for 2 frames at 60 fps). Knives and stars rest
+## behind him and keep him.
+func test_burst_in_never_flies_through_the_heros_head() -> void:
+	_boot()
+	var world := World.new()
+	_tree().root.add_child(world)
+	_ready_by_hand(world)
+	for lv in [11, 21, 41]:
+		var s := _dormant(lv, Vector3.ZERO, world)
+		s.rest()
+		var hero := Vector3(1.2, 0.0, 0.3)
+		s.wake(40, hero, 0.0)
+		var head := s.to_world(Vector3(0.0, float(s.logic.wcfg.get("eye_y", 1.6)), 0.0))
+		var near_head := 0
+		var bad := ""
+		eq(s._state, "intro", "L%d: bursting in" % lv)
+		for i in 101:  # along the rush's own path (as _process moves it), street to stash
+			s._cam = s._intro_from.interpolate_with(s._rest_view(), i / 100.0)
+			if s._cam.origin.distance_to(head) < 1.0:
+				near_head += 1
+				if not s.camera_in_head() and bad == "":
+					bad = "step %d, %.2f m from his head" % [i, s._cam.origin.distance_to(head)]
+		check(near_head > 0, "L%d: the rush ends in his head" % lv)
+		eq(bad, "", "L%d: he is hidden whenever the rushing camera is within 1 m of his head" % lv)
+		_drop_node(s)
+	var k := _dormant(1, Vector3.ZERO, world)
+	k.rest()
+	k.wake(40, Vector3.ZERO, 0.0)
+	k._cam = k._rest_view()
+	check(not k.camera_in_head(), "the knife finale rests behind him: he stays drawn to the end of the rush")
+	_drop_node(k)
+	_drop_node(world)
+	_unboot()

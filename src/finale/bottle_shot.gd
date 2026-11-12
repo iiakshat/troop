@@ -36,6 +36,8 @@ const MISS_DIST := 0.75         # close-up distance from a knife stuck in the wo
 const BOTTLE_SCALE := 1.3
 const STAGE_KNIFE_IN := 0.04    # metres a stuck knife's tip sinks into the planks
 const INTRO := 0.75             # real seconds of the burst-in camera move
+const IN_HEAD_R := 0.6          # m from the eye: the camera is in the hero's head (his body is hidden)
+const INTRO_HEAD_R := 1.4       # the burst-in rushing into his head hides him from this far out
 
 ## LevelView's level-load prewarm (spec v2 §3): the finale is built while the level loads
 ## (`dormant`: stash, bottles, HUD, weapon), drawn out of sight for the first frames with one of
@@ -857,11 +859,16 @@ func _bottle_radius(i: int) -> float:
 
 
 ## World point of a hero-space point (BottleLogic's frame: hero at the origin, floor y = 0).
-## True while the camera sits in the hero's head (pistol sights, bow, scope): the hero's own
-## body must not be drawn then, or his shoulders and arms fill the screen as big slabs.
+## True while the camera sits in the hero's head (pistol sights, bow, scope), or is about to
+## on the burst-in: the hero's own body must not be drawn then, or his shoulders and arms
+## fill the screen as big slabs (and on the rush his hair and its outline sweep up over the
+## bottom of the screen as a dark slab for a couple of frames).
 func camera_in_head() -> bool:
 	var e := to_world(Vector3(0.0, float(logic.wcfg.get("eye_y", 1.6)), -0.35))
-	return _cam.origin.distance_to(e) < 0.6
+	var d := _cam.origin.distance_to(e)
+	if _state == "intro" and _rest_view().origin.distance_to(e) < IN_HEAD_R:
+		return d < INTRO_HEAD_R
+	return d < IN_HEAD_R
 
 
 func to_world(p: Vector3) -> Vector3:
