@@ -248,3 +248,71 @@ func test_pointer_hand_follows_the_price_inside_a_card() -> void:
 	var tip := pin.position + h.position + h.tip_offset()
 	check(tip.distance_to(Vector2(270, 40)) < 1.0, "fingertip on the price's middle (got %s)" % tip)
 	card.free()
+
+
+# ---------------------------------------------------------------- v2 §12.3: every hand explains itself
+
+## Every pointing hand under `n`: a PointerHand, or any TextureRect showing a hand texture.
+func _hands(n: Node) -> Array:
+	var out: Array = []
+	var olds := [UiKit.icon_texture("hand"), PointerHand.texture()]
+	if n is PointerHand or (n is TextureRect and olds.has((n as TextureRect).texture)):
+		return [n]
+	for c in n.get_children():
+		out.append_array(_hands(c))
+	return out
+
+
+func test_hud_has_no_hand() -> void:
+	# The HUD's old one-time hint hand pointed sideways beside an icon (and slid left-right for
+	# the legacy swipe freeze): §12.3 removes it. "New" goes to NewItemCard, gestures to Tutorial.
+	var keep := _fresh_hints(["tap", "swipe"])
+	var h := Hud.new()
+	h._ready()
+	h.show_hint({"id": "zz_unlisted", "icon": "sergeant"})
+	h.show_hint({"id": "zz_power", "icon": "shield", "power": "shield"})
+	h.set_tutorial(true)
+	h._process(0.1)
+	eq(_hands(h).size(), 0, "no hand anywhere in the HUD")
+	h.free()
+	Game.save["seen_hints"] = keep
+
+
+func test_legacy_swipe_row_never_freezes_once_swiping_is_taught() -> void:
+	# Level 1's old "tutorial": "swipe" gate row froze the street with the HUD's sliding hand
+	# whenever the squad sat in a lane without a gate, on every replay. Tutorial teaches the
+	# drag first now, so that row must not freeze any more.
+	var keep := _fresh_hints(["tap", "swipe"])
+	var v := _view(1)
+	var fired: Array = []
+	v.tutorial.connect(func(on: bool): fired.append(on))
+	var rv := GateRowView.new()   # the view's own row record (no visuals needed)
+	rv.row = {"id": 901, "z": -10.0, "tutorial": "swipe", "gates": [{"lane": 0, "op": "num", "v": 4}]}
+	v._rows[901] = rv
+	v.sim.lane = 2
+	v._update_time_scale(0.1)
+	check(not fired.has(true), "no legacy swipe freeze")
+	check(v._time_scale > 0.0, "the street keeps running")
+	v._rows.erase(901)
+	rv.free()
+	_free(v, null)
+	Game.save["seen_hints"] = keep
+
+
+func test_first_build_hand_only_on_a_live_build_button() -> void:
+	# The first-build hand taps the Build button (hammer + coin + price). On a locked or
+	# unaffordable building it would tap a dead grey button: it shows only on a live one.
+	_game()
+	var keep: Dictionary = Game.save.duplicate(true)
+	Game.save["seen_hints"] = []
+	Game.save["stars"] = {"1": 3}
+	Game.save["unlocked"] = 2
+	Game.save["city"] = {}
+	check(Game.first_build_pending(), "level 1 beaten, nothing built: first build pending")
+	var d1: String = City.buildings_in(1, Game.economy)[0]
+	var d3: String = City.buildings_in(3, Game.economy)[0]
+	for c in [[d1, 999999, true], [d1, 0, false], [d3, 999999, false]]:
+		Game.save["coins"] = int(c[1])
+		eq(BuildingPanel.first_hand_shows(Game.building_state(String(c[0])), int(c[1])), c[2],
+			"%s with %d coins: hand %s" % [c[0], c[1], "on Build" if c[2] else "hidden"])
+	Game.save = keep

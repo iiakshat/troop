@@ -211,6 +211,8 @@ func refresh() -> void:
 	else:
 		UiKit.button_row(_btn, ["hammer", "coin"], UiKit.fmt_coins(cost))
 		_paint(_btn, "green" if int(Game.save["coins"]) >= cost else "grey")
+	if is_instance_valid(_first_hand):
+		_first_hand.visible = first_hand_shows(st, int(Game.save["coins"]))
 
 	_ad.visible = building
 	if building:
@@ -220,6 +222,15 @@ func refresh() -> void:
 			Ads.note_offer("speed_up")
 	else:
 		_offered = false
+
+
+## Spec v2 §12.3: the first-build hand taps the Build button only while that button is live
+## (hammer + coin + a price the player can pay). Locked, maxed, busy or too dear: no hand.
+static func first_hand_shows(st: Dictionary, coins: int) -> bool:
+	var status := String(st.get("status", ""))
+	if status in ["locked", "upgrade_locked", "maxed", "building"] or String(st.get("reason", "")) == "builders":
+		return false
+	return int(st.get("lv", 0)) < int(st.get("max", 1)) and coins >= int(st.get("cost", 0))
 
 
 func _process(delta: float) -> void:

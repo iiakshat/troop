@@ -332,7 +332,8 @@ func _update_time_scale(delta: float) -> void:
 	for id in _rows:
 		var row: Dictionary = (_rows[id] as GateRowView).row
 		var z := float(row["z"])
-		if String(row.get("tutorial", "")) == "swipe" and not _tut_done.has(id) and z > -17.0:
+		# v2 §12.3: only until Tutorial has taught the drag (else: a freeze with no cue, every replay).
+		if String(row.get("tutorial", "")) == "swipe" and not _tut_done.has(id) and z > -17.0 and not Game.hint_seen("swipe"):
 			# Freeze only while the squad sits in a lane with no gate: "swipe to grab one".
 			var empty := true
 			for g in row["gates"]:

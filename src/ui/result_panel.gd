@@ -199,7 +199,7 @@ func show_loss(level: int, cause: String, progress := -1.0, peak := 0) -> void:
 		cause_row.add_child(pk)
 	col.add_child(UiKit.label(String(info[1]), 52, Color.WHITE, 14))
 	# v1.1: the single upgrade that would have helped most (Game.best_upgrade_after_loss), as
-	# room icon + its in-game number before > after; a hand bobs on the Station when affordable.
+	# room icon + its in-game number before > after; when affordable the menu hand taps its price (the card opens the Station).
 	var tip: Dictionary = Game.best_upgrade_after_loss()
 	tip_room = ""
 	var tip_card: Control = null

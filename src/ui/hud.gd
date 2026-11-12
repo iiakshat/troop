@@ -1,8 +1,8 @@
 class_name Hud
 extends Control
 ## In-level overlay: pause, progress, small troop counter, Shield/Bomb icon buttons, gang
-## banners and one-time icon hints (a pointing hand, no instructions). Each hint shows once
-## ever (save: seen_hints).
+## banners. No hint hand (spec v2 §11/§12.3): "this is new" is NewItemCard (LevelView opens it
+## on each level hint event), gestures are Tutorial's. A power hint here only pulses its button.
 
 signal power_pressed(id: String)
 signal pause_pressed
@@ -14,12 +14,6 @@ var _cap_bar: ProgressBar
 var _power_buttons: Dictionary = {}
 var _banner: Label
 var _banner_t := 0.0
-var _hint_root: Control
-var _hint_icon: TextureRect
-var _hand: TextureRect
-var _hint_t := 0.0
-var _hint_mode := ""
-var _hint_target: Control = null
 var _pulse: Dictionary = {}
 var tutor := false   # a Tutorial runs this level: it owns the hints in Tutorial.OWNS
 
@@ -102,16 +96,6 @@ func _ready() -> void:
 	_banner.visible = false
 	add_child(_banner)
 
-	_hint_root = Control.new()
-	UiKit.full_rect(_hint_root)
-	_hint_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_hint_root.visible = false
-	add_child(_hint_root)
-	_hint_icon = UiKit.icon("hand", 150)
-	_hint_root.add_child(_hint_icon)
-	_hand = UiKit.icon("hand", 130, Color.WHITE)
-	_hint_root.add_child(_hand)
-
 	_add_power("shield", "blue", true)
 	_add_power("bomb", "red", false)
 
@@ -168,23 +152,17 @@ func set_charges(charges: Dictionary) -> void:
 		UiKit.set_badge(b, n)
 
 
-## A one-time icon cue. `ev` = {"id", "icon", "power"?}.
+## A level hint event `ev` = {"id", "icon", "power"?}, after LevelView's NewItemCard (which
+## marks the ids it shows). What is left (an id the card does not list) is marked once; a
+## power hint pulses its own button. Never a hand (spec v2 §12.3).
 func show_hint(ev: Dictionary) -> void:
 	var id := String(ev.get("id", ev.get("icon", "")))
 	if id == "" or Game.hint_seen(id) or (tutor and Tutorial.OWNS.has(id)):
 		return
 	Game.mark_hint(id)
-	var icon_name := String(ev.get("icon", "hand"))
-	if icon_name == "swipe":
-		return  # the swipe tutorial (set_tutorial) handles it
-	_hint_icon.texture = UiKit.icon_texture(icon_name)
-	_hint_root.visible = true
-	_hint_t = 2.6
-	_hint_mode = "power" if ev.has("power") else "icon"
-	_hint_target = _power_buttons.get(String(ev.get("power", "")), null)
-	if _hint_target:
-		_pulse[String(ev["power"])] = 3.0
-	UiKit.pop(_hint_icon, 0.3)
+	var power := String(ev.get("power", ""))
+	if _power_buttons.has(power):
+		_pulse[power] = 3.0
 
 
 func show_banner(text: String, color: Color) -> void:
@@ -196,12 +174,10 @@ func show_banner(text: String, color: Color) -> void:
 	Sfx.play("banner")
 
 
-func set_tutorial(active: bool) -> void:
-	_hint_mode = "swipe" if active else ""
-	_hint_root.visible = active
-	_hint_t = 99.0 if active else 0.0
-	if active:
-		_hint_icon.texture = UiKit.icon_texture("swipe")
+## LevelView's legacy swipe-row signal. Tutorial teaches the drag (with the gesture hand) and
+## LevelView no longer freezes once it has: nothing to show here.
+func set_tutorial(_active: bool) -> void:
+	pass
 
 
 func enter_finale() -> void:
@@ -227,25 +203,3 @@ func _process(delta: float) -> void:
 		if float(_pulse[id]) <= 0.0:
 			b.scale = Vector2.ONE
 			_pulse.erase(id)
-	if _hint_root.visible:
-		_hint_t -= delta
-		var t := Time.get_ticks_msec() / 1000.0
-		var c := size * 0.5
-		match _hint_mode:
-			"swipe":
-				_hint_icon.visible = false
-				_hand.position = Vector2(c.x - 65 + sin(t * 5.0) * 150.0, size.y * 0.62)
-				_hand.rotation = 0.0
-			"power":
-				_hint_icon.visible = false
-				if _hint_target:
-					var tp := _hint_target.global_position + _hint_target.size * 0.5
-					_hand.position = tp + Vector2(-40, -200 + sin(t * 8.0) * 22.0)
-					_hand.rotation = PI
-			_:
-				_hint_icon.visible = true
-				_hint_icon.position = Vector2(c.x - 75, size.y * 0.2 + sin(t * 4.0) * 10.0)
-				_hand.position = Vector2(c.x + 40, size.y * 0.2 + 90 + sin(t * 6.0) * 14.0)
-				_hand.rotation = -0.6
-		if _hint_t <= 0.0:
-			_hint_root.visible = false
