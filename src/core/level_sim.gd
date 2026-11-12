@@ -30,8 +30,11 @@ extends RefCounted
 ## Gangs are blocks of rows. Bullets always kill from the front, so the gang's front is its
 ## frontmost *living* row. Nothing hurts the squad until that front physically reaches it;
 ## then the gang fights row by row (melee), each enemy taking `power` troops and dying.
-## Ranged gangs attack from a distance: gunmen/grenadiers shoot, molotovs lob firebombs
-## into the squad's lane (dodge by changing lane), sniper foes aim a laser then fire.
+## Ranged gangs attack from a distance: grenadiers shoot volleys, molotovs lob firebombs
+## into the squad's lane (dodge by changing lane), sniper foes aim a laser then fire. Gangs
+## with guns (gunmen always, thugs and bikers from district 2) keep firing back while in
+## range, one troop per hit (_return_fire). The player's bomb is thrown and lands later
+## (_throw_bomb, _land_bombs). Counts are exact ints; a huge gang fights in capped rows.
 
 var S: float            # current scroll speed, m/s
 var S_base: float       # running speed
