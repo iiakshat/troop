@@ -471,6 +471,9 @@ static func scaled_level(base: Dictionary, k: float, kf := 1.0) -> Dictionary:
 		for e in lv["events"]:
 			if e["type"] == "obstacle" and String(e.get("kind", "")) == "barrel" and e.has("kill"):
 				e["kill"] = maxi(5, int(floor(float(e["kill"]) * k + 0.5)))
+			elif e["type"] == "cage" and e.get("guards") is Dictionary:
+				# A rescue cage's guards are a gang like the others (gen_levels.py apply_scale).
+				e["guards"]["n"] = maxi(1, int(floor(float(e["guards"]["n"]) * k + 0.5)))
 	var last := -1
 	for i in lv["events"].size():
 		if lv["events"][i]["type"] == "wave":

@@ -855,8 +855,8 @@ def apply_scale(events: list[dict], k: float, kf: float = 1.0) -> None:
             if e["type"] == "obstacle" and e.get("kind") == "barrel" and "kill" in e:
                 e["kill"] = scaled(int(e["kill"]), k, 5)
             elif e["type"] == "cage":
-                # A cage's guards are a gang like the others (tests/tune.gd scaled_level should
-                # scale them the same way; followup for the TUNE task).
+                # A cage's guards are a gang like the others (tests/tune.gd scaled_level scales
+                # them the same way).
                 e["guards"]["n"] = scaled(int(e["guards"]["n"]), k, 1)
     waves = [e for e in events if e["type"] == "wave"]
     for e in waves:
