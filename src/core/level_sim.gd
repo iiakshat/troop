@@ -124,6 +124,14 @@ func _init(level: Dictionary = {}, units_cfg: Dictionary = {}, upgrades: Diction
 	var hero: Dictionary = stats["hero"]
 	hero["dmg"] = float(hero["dmg"]) + float(upgrades.get("knife", 0))
 	hero["rate"] = float(hero["rate"]) + 0.5 * float(upgrades.get("speed", 0))
+	# Armory (v2): each owner's weapon multiplies its dmg and rate (Armory.sim_upgrades);
+	# troop counts never change. The hero's PISTOL pickup (hero_weapons) is not on a track.
+	var wup: Dictionary = upgrades.get("weapons", {})
+	for owner in wup:
+		if stats.has(owner) and wup[owner] is Dictionary:
+			var u: Dictionary = stats[owner]
+			u["dmg"] = float(u["dmg"]) * float(wup[owner].get("dmg_mult", 1.0))
+			u["rate"] = float(u["rate"]) * float(wup[owner].get("rate_mult", 1.0))
 	squad.cap = int(w.get("max_squad", 0)) + int(upgrades.get("capacity", 0))
 	squad.add("constable", int(upgrades.get("squad", 0)))
 	# Pre-level booster: each head-start token brings a few constables.
