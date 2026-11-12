@@ -11,7 +11,7 @@ const BAR := preload("res://assets/brand/lightbar.png")
 const TIPS := [
 	["hand", ">", "speed"],          # tap: the hero throws faster
 	["coin", ">", "knife_power"],    # coins buy weapon power
-	["shield", "bomb"],              # two powers, ready between levels
+	["clock", ">", "shield", "bomb"],# time refills the free shield and bomb
 	["barrel", ">", "fire"],         # shoot a barrel: it blasts the gang
 	["star_icon", ">", "star_chest"],# stars fill the star chest
 	["hammer", ">", "city_hall"],    # rebuild the city
@@ -99,8 +99,9 @@ func _draw_bar(view: Vector2) -> void:
 			x += stripe
 			i += 1
 		draw_rect(Rect2(r.position + Vector2(0, 4), Vector2(fill, h * 0.22)), Color(1, 1, 1, 0.28))
-		# the light-bar rides the front edge
+		# the light-bar rides the front edge (kept inside the track, so a full bar ends flush)
 		var bh := h * 1.55
 		var bw := bh * float(BAR.get_width()) / float(BAR.get_height())
-		var front := Vector2(r.position.x + fill, r.get_center().y)
+		var fx := clampf(r.position.x + fill - bw * 0.35, r.position.x + bw * 0.5, r.end.x - bw * 0.5)
+		var front := Vector2(fx, r.get_center().y)
 		draw_texture_rect(BAR, Rect2(front - Vector2(bw / 2.0, bh / 2.0), Vector2(bw, bh)), false)
