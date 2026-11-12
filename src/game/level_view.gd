@@ -32,7 +32,7 @@ const ALLY_SFX := {
 	"sniper": ["shot_sniper", "shot_rifle", -6.0], "commando": ["launcher", "boom", -12.0],
 }
 const CHAR_H := 1.85            # baked character height (config/characters.json)
-const BOSS_SCALE := 2.6         # bosses are drawn this much bigger than a thug
+const BOSS_SCALE := 3.2         # bosses are drawn this much bigger than a thug (imposing at the 40 m halt)
 const BOSS_FAR_SCALE := 1.6     # a far boss is drawn up to this much bigger again (boss_grow)
 const BOSS_RIM := 0.3           # extra rim light on the boss: his dark suit never melts into the stash
 const INK_W := 0.028            # crowd ink outline width (crowd_outline.gdshader default)
@@ -1479,6 +1479,18 @@ func _slot_pos(slot: int, n: int) -> Vector3:
 
 ## Spec v2 §5: a boss far up the street is drawn bigger (up to BOSS_FAR_SCALE at 70 m), easing
 ## to his true size by 30 m, so he is never lost behind his escorts while he walks in.
+## True when a label at `at` would sit on the boss's body on screen (its feet to its head,
+## about its width either side, with a margin for the label itself).
+func _covers_boss(cam: Camera3D, at: Vector3, bv: Dictionary) -> bool:
+	var feet := _horde_front(bv)
+	var k := BOSS_SCALE * boss_grow(feet.z) * crowd_scale((bv["offs"] as Array).size())
+	var f2 := cam.unproject_position(feet)
+	var h2 := cam.unproject_position(feet + Vector3(0, CHAR_H * k, 0))
+	var w := absf(cam.unproject_position(feet + Vector3(CHAR_H * k * 0.3, 0, 0)).x - f2.x)
+	var p := cam.unproject_position(at)
+	return p.y > h2.y - 40.0 and p.y < f2.y + 40.0 and absf(p.x - f2.x) < w + 70.0
+
+
 static func boss_grow(z: float) -> float:
 	return lerpf(1.0, BOSS_FAR_SCALE, clampf((-z - 30.0) / 40.0, 0.0, 1.0))
 
@@ -1682,6 +1694,12 @@ func _update_visuals(d: float) -> void:
 				ly = maxf(ly, bar_top + 0.7 * ls)
 			elif float(bv["h"]["z"]) < lz and int(bv["h"]["count"]) > 0:
 				ly = minf(ly, CHAR_H * ENEMY_SCALE * crowd_scale(offs.size()) + 0.45 * ls)
+				# Seen from above and behind the squad, that can still land on the boss's
+				# body on screen: then the count goes above the boss's bar instead.
+				if cam and _covers_boss(cam, Vector3(0, ly, lz), bv):
+					var bar: Node3D = bv["bar"]
+					ly = bar.position.y + 0.4 * bar.scale.y + 0.7 * ls
+					lz = bar.position.z
 		lab.position = Vector3(0, ly, lz)
 		if int(h["count"]) != int(hv["shown"]):
 			hv["shown"] = int(h["count"])
