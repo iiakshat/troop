@@ -2056,6 +2056,15 @@ func _prewarm() -> void:
 	_warm.append(gv)
 	if fx.has_method("prewarm"):
 		fx.prewarm(_warm_at)
+	# The boss bar (see-through backing, crown sprite, big number): first drawn when the boss
+	# walked in, a 54 ms frame on L10 with a cold shader cache.
+	var boss_lab := Label3D.new()
+	add_child(boss_lab)
+	var bv := {"label": boss_lab}
+	_build_boss_bar(bv)
+	(bv["bar"] as Node3D).position = _warm_at + Vector3(0, 1.0, -2.0)
+	(bv["bar_num"] as Label3D).text = "1,234K"
+	_warm.append_array([bv["bar"], boss_lab])
 	# Every icon this level shows (UiKit caches them), and every glyph at every label size and
 	# outline the street uses (the font is rasterised per size on first draw).
 	for e in _level.get("events", []):
