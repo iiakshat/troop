@@ -166,9 +166,23 @@ static func screen_rects(model: Node3D, pose: Transform3D, fov_h: float, vp: Vec
 	return out
 
 
+const LINE_PIECES := 16
+
+
 static func _collect_rects(n: Node3D, xf: Transform3D, fov_h: float, vp: Vector2, out: Array, root: bool) -> void:
 	var here := xf if root else xf * n.transform
-	if n is MeshInstance3D and (n as MeshInstance3D).mesh and n.visible:
+	if n.has_meta("lines") and n.visible:
+		# A line mesh (the bow string): its box is far bigger than the thin line, so check the
+		# segments themselves, piece by piece, with a few pixels for the stroke.
+		var pts: PackedVector3Array = n.get_meta("lines")
+		for i in range(0, pts.size() - 1, 2):
+			for k in LINE_PIECES:
+				var a := FinaleWeapon.project_cam(here * pts[i].lerp(pts[i + 1], float(k) / LINE_PIECES), fov_h, vp)
+				var b := FinaleWeapon.project_cam(here * pts[i].lerp(pts[i + 1], float(k + 1) / LINE_PIECES), fov_h, vp)
+				var r := Rect2(a, Vector2.ZERO).expand(b).grow(3.0)
+				if r.intersects(Rect2(Vector2.ZERO, vp)):
+					out.append(r)
+	elif n is MeshInstance3D and (n as MeshInstance3D).mesh and n.visible:
 		var bb := _mesh_aabb((n as MeshInstance3D).mesh)
 		if bb.size.length() > 0.0:
 			var r := Rect2()
@@ -410,11 +424,14 @@ static func bow_string(bow_node: Node3D, nock: Vector3) -> void:
 	var im: ImmediateMesh = s.mesh
 	im.clear_surfaces()
 	im.surface_begin(Mesh.PRIMITIVE_LINES)
+	var lines := PackedVector3Array()
 	for tip in [Vector3(0, BOW_TIP_Y, BOW_TIP_Z), Vector3(0, -BOW_TIP_Y, BOW_TIP_Z)]:
 		for dx in [-0.002, -0.0007, 0.0007, 0.002]:
 			im.surface_add_vertex(tip + Vector3(dx, 0, 0))
 			im.surface_add_vertex(nock + Vector3(dx, 0, 0))
+		lines.append_array([tip, nock])
 	im.surface_end()
+	s.set_meta("lines", lines)   # for the screen checks (screen_rects)
 
 
 ## Arrow along -Z, origin at the nock (tail); the tip is ARROW_LEN ahead. Reads as an arrow at

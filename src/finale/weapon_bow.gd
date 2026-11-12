@@ -192,6 +192,8 @@ func tick(delta: float, _d: float) -> void:
 	shot._roll = 0.0
 	if shot._state == "aim" and _flight.is_empty() and _hold <= 0.0:
 		show_reticle(cam, "pin", _shake.x, _shake.y)
+	else:
+		shot.hud.hide_reticle()
 	if not _flight.is_empty():
 		_tick_flight(delta)
 	elif _hold > 0.0:
