@@ -36,7 +36,7 @@ const STATS := {
 	"steady_s": ["shield", false], "swipe_fast": ["swipe", true], "ricochet_len": ["broken_bottle", false],
 }
 const TIER_TINT := [Color("8a94a6"), Color("4f8de0"), Color("f2b73a"), Color("ffd75a")]
-const BAR_W := 118.0
+const BAR_W := 104.0
 
 
 func _ready() -> void:
@@ -48,10 +48,11 @@ func _ready() -> void:
 	add_child(dim)
 	var p := UiKit.panel()
 	p.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	p.offset_left = -350
-	p.offset_right = 350
+	p.offset_left = -340
+	p.offset_right = 340
 	p.offset_top = -600
 	p.offset_bottom = 600
+	p.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	add_child(p)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 12)
@@ -116,14 +117,14 @@ func _card(id: String) -> Control:
 
 	# Art with the tier diamonds under it; a locked card covers it with a lock.
 	var art_box := Control.new()
-	art_box.custom_minimum_size = Vector2(150, 150)
+	art_box.custom_minimum_size = Vector2(130, 150)
 	art_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(art_box)
 	var art := TextureRect.new()
 	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	art.size = Vector2(140, 140)
-	art.position = Vector2(5, 0)
+	art.size = Vector2(126, 126)
+	art.position = Vector2(2, 2)
 	art.pivot_offset = art.size * 0.5
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art_box.add_child(art)
@@ -131,7 +132,7 @@ func _card(id: String) -> Control:
 	tiers.alignment = BoxContainer.ALIGNMENT_CENTER
 	tiers.add_theme_constant_override("separation", 6)
 	tiers.position = Vector2(0, 128)
-	tiers.size = Vector2(150, 22)
+	tiers.size = Vector2(130, 22)
 	tiers.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art_box.add_child(tiers)
 	for t in Armory.tier_count(id):
@@ -176,12 +177,12 @@ func _card(id: String) -> Control:
 		fill.add_theme_stylebox_override("panel", UiKit.flat_box(UiKit.GREEN, 8, 3))
 		bar.add_child(fill)
 		srow.add_child(bar)
-		var txt := UiKit.label("", 26, Color.WHITE, 7)
+		var txt := UiKit.label("", 24, Color.WHITE, 7)
 		srow.add_child(txt)
 		var arrow := RetentionPanel.icon_safe("play", 20, UiKit.YELLOW)
 		arrow.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		srow.add_child(arrow)
-		var nxt := UiKit.label("", 26, UiKit.YELLOW, 7)
+		var nxt := UiKit.label("", 24, UiKit.YELLOW, 7)
 		srow.add_child(nxt)
 		stats.append({"key": key, "fill": fill, "ghost": ghost, "text": txt, "arrow": arrow, "next": nxt})
 	var pips := HBoxContainer.new()
@@ -195,7 +196,7 @@ func _card(id: String) -> Control:
 	var right := VBoxContainer.new()
 	right.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_child(right)
-	var buy := UiKit.button("", "green", 34, Vector2(150, 96))
+	var buy := UiKit.button("", "green", 34, Vector2(136, 92))
 	buy.pressed.connect(func(): buy(id))
 	right.add_child(buy)
 	var gain_row := HBoxContainer.new()
@@ -210,17 +211,17 @@ func _card(id: String) -> Control:
 	# Lock overlay: dark cover over the art, the lock, then a level pin and the unlock level.
 	var lock := Control.new()
 	lock.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	lock.size = Vector2(150, 150)
+	lock.size = Vector2(130, 150)
 	art_box.add_child(lock)
 	var lock_ic := RetentionPanel.icon_safe("lock", 84)
-	lock_ic.position = Vector2(33, 8)
+	lock_ic.position = Vector2(23, 8)
 	lock_ic.size = Vector2(84, 84)
 	lock.add_child(lock_ic)
 	var lock_row := HBoxContainer.new()
 	lock_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	lock_row.add_theme_constant_override("separation", 2)
 	lock_row.position = Vector2(0, 88)
-	lock_row.size = Vector2(150, 50)
+	lock_row.size = Vector2(130, 50)
 	lock_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	lock_row.add_child(RetentionPanel.icon_safe("play", 26, UiKit.YELLOW))
 	lock_row.add_child(RetentionPanel.icon_safe("map_pin", 44))
