@@ -44,21 +44,47 @@
     "smg":    { "name": "SMG",    "dmg": 1, "rate": 9.0, "pierce": false, "proj": "bullet" }
   },
   "enemies": {
-    "thug":       { "name": "Thugs",     "unlock": 1,  "hp": 1, "armour": 0, "speed": 2.5,  "power": 1, "cols": 9, "row_gap": 0.95, "return_fire": { "rate": 0.5, "share": 10 } },
+    "thug":       { "name": "Thugs",     "unlock": 1,  "hp": 1, "armour": 0, "speed": 2.5,  "power": 1, "cols": 9, "row_gap": 0.95, "return_fire": { "rate": 0.35, "share": 10 } },
     "knifer":     { "name": "Knifers",   "unlock": 2,  "hp": 1, "armour": 0, "speed": 5.0,  "power": 1, "cols": 9, "row_gap": 0.95 },
-    "gunman":     { "name": "Gunmen",    "unlock": 3,  "hp": 2, "armour": 0, "speed": 2.5,  "power": 1, "cols": 6, "row_gap": 1.1, "stop_at": 26.0, "return_fire": { "rate": 0.625, "share": 100, "range": 30.0, "from_district": 1 } },
+    "gunman":     { "name": "Gunmen",    "unlock": 3,  "hp": 2, "armour": 0, "speed": 2.5,  "power": 1, "cols": 6, "row_gap": 1.1, "stop_at": 26.0, "return_fire": { "rate": 0.5, "share": 100, "from_district": 1 } },
     "brute":      { "name": "Brutes",    "unlock": 5,  "hp": 8, "armour": 1, "speed": 1.2,  "power": 4, "cols": 5, "row_gap": 1.8 },
-    "biker":      { "name": "Bikers",    "unlock": 6,  "hp": 2, "armour": 0, "speed": 10.0, "power": 3, "cols": 5, "row_gap": 1.8, "return_fire": { "rate": 0.5, "share": 20 } },
+    "biker":      { "name": "Bikers",    "unlock": 6,  "hp": 2, "armour": 0, "speed": 10.0, "power": 3, "cols": 5, "row_gap": 1.8, "return_fire": { "rate": 0.35, "share": 20 } },
     "riot":       { "name": "Riot",      "unlock": 7,  "hp": 1, "armour": 0, "speed": 1.5,  "power": 2, "cols": 7, "row_gap": 1.2, "shield": 4 },
-    "molotov":    { "name": "Molotovs",  "unlock": 9,  "hp": 2, "armour": 0, "speed": 2.5,  "power": 1, "cols": 6, "row_gap": 1.1, "stop_at": 22.0, "throw_every": 2.5, "first_shot": 0.6, "flight": 1.1, "burn": 2 },
-    "boss":       { "name": "Kingpin",   "unlock": 10, "hp": 360, "armour": 1, "speed": 1.2, "power": 999, "cols": 1, "row_gap": 0.0, "boss": true, "shoot_range": 40.0, "shoot_every": 2.0, "shot_dmg": 4 },
-    "sniper_foe": { "name": "Snipers",   "unlock": 17, "hp": 3, "armour": 0, "speed": 2.5,  "power": 1, "cols": 5, "row_gap": 1.2, "stop_at": 40.0, "shoot_every": 1.8, "first_shot": 1.0, "aim": 0.7, "shot_dmg": 1 },
-    "grenadier":  { "name": "Grenadiers","unlock": 27, "hp": 3, "armour": 0, "speed": 2.5,  "power": 1, "cols": 6, "row_gap": 1.1, "stop_at": 26.0, "shoot_every": 2.0, "first_shot": 0.6, "shot_dmg": 3 }
+    "molotov":    { "name": "Molotovs",  "unlock": 9,  "hp": 2, "armour": 0, "speed": 2.5,  "power": 1, "cols": 6, "row_gap": 1.1, "stop_at": 22.0, "throw_every": 2.5, "first_shot": 0.3, "burn": 2, "attack": { "kind": "firebomb", "start_m": 50.0, "warn_s": 1.1, "cap_pct": 10 } },
+    "boss":       { "name": "Kingpin",   "unlock": 10, "hp": 360, "armour": 1, "speed": 1.2, "power": 999, "cols": 1, "row_gap": 0.0, "boss": true, "shoot_range": 40.0, "shoot_every": 2.0 },
+    "sniper_foe": { "name": "Snipers",   "unlock": 17, "hp": 3, "armour": 0, "speed": 2.5,  "power": 1, "cols": 5, "row_gap": 1.2, "stop_at": 40.0, "shoot_every": 1.8, "first_shot": 1.0, "aim": true, "shot_dmg": 1, "attack": { "kind": "snipe", "start_m": 60.0, "warn_s": 0.8, "cap_pct": 15 } },
+    "grenadier":  { "name": "Grenadiers","unlock": 27, "hp": 3, "armour": 0, "speed": 2.5,  "power": 1, "cols": 6, "row_gap": 1.1, "stop_at": 26.0, "shoot_every": 2.0, "first_shot": 0.6, "shot_dmg": 3, "attack": { "kind": "grenade", "start_m": 55.0, "warn_s": 1.0, "cap_pct": 12 } }
   },
+  "_attack_note": "Spec v2.1 section 1.2: the specials (enemies with `attack`) act before they die. From the moment their front is within attack.start_m (beyond the squad's fire_range) they mark the squad's lane (a `telegraph`: snipe = laser, grenade and firebomb = lane mark); first_shot s after that the first, then every shoot_every (snipers, grenadiers) or throw_every (molotovs) s. Each lands attack.warn_s later on the lane it marked: the squad is hit only if it still stands in that lane then (its real position), and the shield blocks it. A landed attack costs count x shot_dmg (or x burn) troops, but never more than cap_pct % of the squad right now (at least 1). They keep walking to stop_at; a gang stopped beyond fire_range rides the street in and never holds a standoff. aim: true marks a laser sniper (Codex).",
   "return_fire": {
-    "_note": "Spec v2 section 12.2: gangs with guns keep firing at the squad while their front is within `range` metres (and not in melee). Per enemy: return_fire = {rate: shots per second per shooter, share: percent of the gang that carries guns (rounded up, so any gang with share > 0 has at least one), optional range and from_district}. Each hit kills one troop, lowest rank first; the hero falls only when no followers are left. SHIELD blocks it. Gangs fire back from from_district on (district 1 keeps v1 rules); an enemy's own from_district overrides it (gunmen: 1, they always fire this way).",
+    "_note": "Spec v2.1 section 1.1 (v2 section 12.2): gangs with guns fire at the squad while their front is within `range` metres (more than fire_range: they outrange the squad) and not in melee. On first entering range a gang fires `open` shots at once (the opening volley); after that its shooters fire rate shots/s each. Shooters per gang = share % of it (rounded up) but at most max_shooters[district - 1]. Each hit takes one visible figure: max(1, ceil(squad / figures_shown)) troops, lowest rank first, and one volley (one event) takes at most volley_cap_pct % of the squad (at least one hit). The hero falls last: while the squad never had a follower this level (a hero-alone opening) return fire never takes him; once followers joined he falls when he is the only one left. SHIELD blocks it, a bomb kills shooters. Per enemy: return_fire = {rate, share, optional range and from_district}; gangs fire back from from_district on (an enemy's own from_district overrides it; gunmen: 1).",
     "from_district": 2,
-    "range": 32.0
+    "range": 50.0,
+    "open": 1,
+    "max_shooters": [3, 3, 4, 5, 6],
+    "volley_cap_pct": 5,
+    "figures_shown": 72
+  },
+  "boss": {
+    "_note": "Spec v2.1 section 1.3, the district boss (enemies.boss without `lieutenant`). HP: hp_secs[district - 1] s of the expected squad's damage per second at that level (tools/gen_levels.py; calibration.json boss_dps, measured by Autopilot.boss_dps), never scaled by the calibration k x kf; he halts the street (world.boss_halt) at least halt_min_s on the expected route. Barrage: barrage_first s after he halts, then every barrage_every s, he marks the squad's lane (telegraph `barrage`); warn_s later it lands there and takes barrage_pct[district - 1] % of the squad (at least 1); changing lane dodges it, the shield blocks it. His gun (every enemies.boss.shoot_every s within shoot_range) takes gun_pct % of the squad per shot (at least 1; never the hero of a squad that never had followers). barrage_every 0 = no barrage.",
+    "hp_secs": [12, 13, 13, 14, 15],
+    "halt_min_s": 6.0,
+    "barrage_every": 2.5,
+    "barrage_first": 1.0,
+    "warn_s": 1.0,
+    "barrage_pct": [12, 13, 15, 16, 18],
+    "gun_pct": 2
+  },
+  "lieutenant": {
+    "_note": "Spec v2.1 section 1.3: the mini-boss of slot 5 (L5, 15, 25, 35, 45; tools/gen_levels.py lieutenant_wave). A boss group with \"lieutenant\": true: he fights like the boss (halt, bar, gun, barrage `lt_barrage`) with these numbers, is drawn `scale` x a thug with his own tint and a smaller bar, and liberates nothing.",
+    "hp_secs": [6, 7, 7, 8, 8],
+    "halt_min_s": 4.0,
+    "barrage_every": 2.5,
+    "barrage_first": 1.0,
+    "warn_s": 1.0,
+    "barrage_pct": [8, 9, 10, 11, 12],
+    "gun_pct": 1,
+    "scale": 2.4
   },
   "obstacles": {
     "_note": "Defaults; a level event may override any key. width = footprint across the road (m): an obstacle only hits the troops whose formation slots overlap it, up to its number (fall/dmg or the % forms), so steering half past it saves half the squad. pothole: unshootable, falling in costs `fall` troops (or `fall_pct` % of the squad); the hero always hops over, so it never ends the level. barricade: shoot its hp away or crash into it (dmg troops, or dmg_pct % of the squad) and lose the next gate in that lane. car: shoot it away or crash (dmg or dmg_pct). barrel: shoot it to arm it; it blows up when the next gang's front reaches it, killing up to `kill` gang members in total (nearest gang first). A lit barrel that reaches the squad first goes off on it: the troops on its footprint fall, up to armed_pct % of its dmg.",

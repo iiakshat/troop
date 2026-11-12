@@ -424,7 +424,7 @@ func _start_level(n: int, boosters: Dictionary = {}) -> void:
 				lanes.append(int(s))
 		else:
 			lanes = (level["route"] as Array).duplicate()
-		_pilot = Autopilot.new(lanes, true)
+		_pilot = Autopilot.new(lanes, true, true)  # dodges telegraphs (spec v2.1: bosses are calibrated so)
 		view.input_enabled = false
 		hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		hud.power_pressed.disconnect(hud.power_pressed.get_connections()[0]["callable"])

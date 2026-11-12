@@ -28,13 +28,23 @@ extends RefCounted
 ## barrel or a car. Snipers are the one exception: they shoot the toughest gang in range.
 ##
 ## Gangs are blocks of rows. Bullets always kill from the front, so the gang's front is its
-## frontmost *living* row. Nothing hurts the squad until that front physically reaches it;
-## then the gang fights row by row (melee), each enemy taking `power` troops and dying.
-## Ranged gangs attack from a distance: grenadiers shoot volleys, molotovs lob firebombs
-## into the squad's lane (dodge by changing lane), sniper foes aim a laser then fire. Gangs
-## with guns (gunmen always, thugs and bikers from district 2) keep firing back while in
-## range, one troop per hit (_return_fire). The player's bomb is thrown and lands later
-## (_throw_bomb, _land_bombs). Counts are exact ints; a huge gang fights in capped rows.
+## frontmost *living* row. Its body only hurts the squad once that front physically reaches
+## it; then the gang fights row by row (melee), each enemy taking `power` troops and dying.
+##
+## Enemies fight back before they die (spec v2.1 §1), and every attack is a capped share of
+## the squad, so nothing wipes a decent squad in one go:
+## - Return fire (_return_fire): gangs with guns (gunmen always, thugs and bikers from
+##   district 2) outrange the squad, open with a volley on entering range, and each hit takes
+##   one visible figure's worth of troops; one volley never takes more than a few percent.
+## - Specials (_gunfire): snipers, grenadiers and molotovs mark the squad's lane from beyond
+##   its reach (`telegraph`) and the attack lands warn_s later (`attack_land`, _land_attacks):
+##   only if the squad still stands in that lane then, and the shield blocks it.
+## - Bosses and lieutenants (_boss_fire): a squad-relative gun (`boss_shot`) and, from the
+##   halt, a telegraphed lane barrage every few seconds.
+## A telegraph lands only in live play: the clock stops with the street (pause, lessons), and
+## one still in the air when the squad falls or bursts into the stash is called off.
+## The player's bomb is thrown and lands later (_throw_bomb, _land_bombs). Counts are exact
+## ints; a huge gang fights in capped rows.
 
 var S: float            # current scroll speed, m/s
 var S_base: float       # running speed
@@ -73,7 +83,9 @@ var weapons: Dictionary
 var enemy_defs: Dictionary
 var obstacle_defs: Dictionary
 var powers: Dictionary
-var rf_cfg: Dictionary     # units.return_fire: from_district, range
+var rf_cfg: Dictionary     # units.return_fire: from_district, range, open, caps
+var boss_cfg: Dictionary   # units.boss: the district boss's barrage and gun
+var lt_cfg: Dictionary     # units.lieutenant: the same for the mini-boss
 var revive_cfg: Dictionary
 var star_cfg: Dictionary
 
@@ -93,7 +105,7 @@ var revived := false
 var rows: Array = []        # gate rows on screen
 var obstacles: Array = []
 var hordes: Array = []
-var firebombs: Array = []   # in the air: {horde, lane, land, burn}
+var attacks: Array = []     # telegraphed enemy attacks in the air: {id, kind, lane, src, land, base, pct, cause, x, z}
 var bombs: Array = []       # the squad's bombs in the air: {id, lane, x, land, target, ref, z}
 var charges: Dictionary = {"shield": 0, "bomb": 0}
 var shield_t := 0.0
@@ -153,6 +165,8 @@ func _init(level: Dictionary = {}, units_cfg: Dictionary = {}, upgrades: Diction
 	obstacle_defs = units_cfg.get("obstacles", {})
 	powers = units_cfg["powers"]
 	rf_cfg = units_cfg.get("return_fire", {})
+	boss_cfg = units_cfg.get("boss", {})
+	lt_cfg = units_cfg.get("lieutenant", {})
 	revive_cfg = units_cfg.get("revive", {})
 	star_cfg = level.get("stars", units_cfg.get("stars", {}))
 
@@ -330,6 +344,12 @@ func set_squad_x(x: float) -> void:
 
 func lane_x(l: int) -> float:
 	return (l - 1) * lane_w
+
+
+## The lane the squad really stands in now: the lane nearest its x (the view's steering in
+## play; the lane centre in autoplay). Telegraphs aim at it and land on it (spec v2.1 §1.2).
+func squad_lane() -> int:
+	return clampi(int(round(squad_x / lane_w)) + 1, 0, 2)
 
 
 ## Which troops an obstacle in its lane would hit right now: Squad.footprint_hits for this
@@ -512,7 +532,7 @@ func revive(troops: int) -> bool:
 			h["melee"] = false
 			h["melee_t"] = 0.0
 			h["z"] = -push + killed_rows(h) * float(h["row_gap"])
-	firebombs.clear()
+	_end_attacks()  # (already called off when the squad fell; a safety net)
 	shield_t = maxf(shield_t, float(revive_cfg.get("shield", 2.0)))
 	state = "run"
 	lose_cause = ""
@@ -564,7 +584,7 @@ func step(dt: float) -> void:
 	_return_fire(dt)
 	if state != "run":
 		return
-	_firebombs()
+	_land_attacks()
 	if state != "run":
 		return
 	_contacts(dt)
@@ -584,6 +604,7 @@ func step(dt: float) -> void:
 		for b in bombs.duplicate():
 			bombs.erase(b)
 			_blast(b, float(b["z"]), null)
+		_end_attacks()  # nothing lands after the finish
 		state = "strike"
 		out.append({"type": "finish"})
 
@@ -609,14 +630,16 @@ func _report_hint(ev: Dictionary) -> void:
 
 
 ## True while the squad must plant its feet and fight: a boss within boss_halt metres, or a
-## gang that stops to shoot has stopped (the street does not scroll past a standoff).
+## gang that stops to shoot has stopped within the squad's reach (the street does not scroll
+## past a standoff). A gang stopped beyond fire_range never halts it: the street carries the
+## squad to it (_move), so it cannot hold the level forever (spec v2.1 §1.2).
 func standoff() -> bool:
 	for h in hordes:
 		if int(h["count"]) <= 0:
 			continue
 		if h["boss"] and front_z(h) >= -boss_halt:
 			return true
-		if h["stopped"]:
+		if h["stopped"] and front_z(h) >= -fire_range:
 			return true
 	return false
 
@@ -711,27 +734,35 @@ func _spawn_horde(sp: Dictionary, early := false) -> void:
 	var z := -stop - (float(sp["at"]) - traveled) * (S_base + speed) / S_base
 	if early:
 		z = maxf(z, -spawn_dist)
+	# Spec v2.1 §1.2: a special (an `attack` in units.json) telegraphs from attack.start_m on;
+	# a boss shoots his gun within shoot_range and barrages from the halt (_boss_fire).
+	var atk: Dictionary = def.get("attack", {})
+	var boss := bool(def.get("boss", false))
 	var attack := ""
-	if def.has("throw_every"):
-		attack = "firebomb"
-	elif def.has("aim"):
-		attack = "snipe"
-	elif float(def.get("shoot_every", 0.0)) > 0.0:
+	var shoot_range := float(def.get("shoot_range", 0.0))
+	if not atk.is_empty():
+		attack = String(atk.get("kind", ""))
+		shoot_range = float(atk.get("start_m", shoot_range))
+	elif boss:
 		attack = "gun"
+	var every := float(def.get("throw_every", def.get("shoot_every", 0.0)))
+	var first := float(def.get("first_shot", every))
 	var h := {
 		"id": _new_id(), "wave": sp["wave"], "enemy": grp["enemy"], "label": sp["label"],
 		"count": int(grp["n"]), "start": int(grp["n"]),
 		"hp": float(def["hp"]), "armour": int(def["armour"]), "power": int(def["power"]),
 		"speed": speed, "vrel": vrel, "stop": stop,
-		"attack": attack, "shoot_every": float(def.get("throw_every", def.get("shoot_every", 0.0))),
-		"shoot_range": float(def.get("shoot_range", 0.0)),
+		"attack": attack, "shoot_every": every, "shoot_range": shoot_range,
 		"shot_dmg": int(def.get("shot_dmg", 1)), "burn": int(def.get("burn", 1)),
-		"flight": float(def.get("flight", 1.0)), "aim": float(def.get("aim", 0.0)), "aimed": false,
-		"first_shot": float(def.get("first_shot", def.get("throw_every", def.get("shoot_every", 0.0)))),
-		"boss": bool(def.get("boss", false)),
+		# per member: what one landed attack costs before the cap (count x hit), the cap, the warning
+		"hit": int(def.get("burn", def.get("shot_dmg", 1))), "cap_pct": int(atk.get("cap_pct", 0)),
+		"warn": float(atk.get("warn_s", 1.0)),
+		"first_shot": first,
+		"boss": boss, "lieutenant": boss and bool(grp.get("lieutenant", false)), "bt": -1.0,
 		"cols": int(def.get("cols", 9)), "row_gap": float(def.get("row_gap", 0.95)),
 		"shield": 0.0, "z": z,
-		"acc": 0.0, "shoot_t": 0.0, "stopped": false, "melee": false, "melee_t": 0.0,
+		# the first attack comes first_shot s after it starts attacking (in range or stopped)
+		"acc": 0.0, "shoot_t": maxf(every - first, 0.0), "stopped": false, "melee": false, "melee_t": 0.0,
 		"hit_t": -1.0,
 	}
 	var mods: Dictionary = _wave_mods.get(sp["wave"], {})
@@ -748,19 +779,31 @@ func _spawn_horde(sp: Dictionary, early := false) -> void:
 	# A huge gang stands in at most gang_figs figures: each carries `per` people, a row is
 	# cols x per of them (killed_rows), and its front row strikes together (_contacts).
 	h["per"] = maxi((int(h["start"]) + gang_figs - 1) / gang_figs, 1)
-	# Return fire (spec v2 §12.2): rate per shooter, share with guns, range; 0 = never.
+	# Return fire (spec v2.1 §1.1): rate per shooter, share with guns (at most the district's
+	# max_shooters), range; 0 = never. The opening volley goes out on first entering range.
 	var rf: Dictionary = def.get("return_fire", {})
 	var on := district >= int(rf.get("from_district", rf_cfg.get("from_district", 2)))
 	h["rf_rate"] = float(rf.get("rate", 0.0)) if on else 0.0
 	h["rf_share"] = int(rf.get("share", 0))
-	h["rf_range"] = float(rf.get("range", rf_cfg.get("range", 32.0)))
+	h["rf_range"] = float(rf.get("range", rf_cfg.get("range", 50.0)))
+	h["rf_max"] = int(_by_district(rf_cfg.get("max_shooters", 1 << 30)))
+	h["rf_open"] = false
 	h["rf_acc"] = 0.0
 	if h["boss"]:
 		h["max_hp"] = float(h["hp"]) * int(h["count"])
 	if h["count"] <= 0:
 		return
 	hordes.append(h)
-	out.append({"type": "horde_spawn", "horde": h})
+	out.append({"type": "horde_spawn", "horde": h, "lieutenant": h["lieutenant"]})
+
+
+## A per-district config number: v[district - 1] of an array (its last entry past the end),
+## or v itself.
+func _by_district(v) -> Variant:
+	if v is Array:
+		var a: Array = v
+		return a[clampi(district, 1, a.size()) - 1] if not a.is_empty() else 0
+	return v
 
 
 func _move(dt: float) -> void:
@@ -777,13 +820,17 @@ func _move(dt: float) -> void:
 			h["z"] = contact_z + killed_rows(h) * float(h["row_gap"])
 			continue
 		if h["stopped"]:
+			if front_z(h) < -fire_range:
+				# Stopped beyond the squad's reach: it stands on the street, which carries the
+				# squad to it (no standoff out there, spec v2.1 §1.2).
+				h["z"] = float(h["z"]) + S * dt
 			continue
 		h["z"] = float(h["z"]) + float(h["vrel"]) * dt
 		if float(h["stop"]) > 0.0 and front_z(h) >= -float(h["stop"]):
 			h["z"] = -float(h["stop"]) + killed_rows(h) * float(h["row_gap"])
 			h["stopped"] = true
-			# They come in ready: the first volley follows `first_shot` s after they stop.
-			h["shoot_t"] = maxf(float(h["shoot_every"]) - float(h["first_shot"]), 0.0)
+			# (Its attack clock started at spawn and runs while it attacks: the first one comes
+			# first_shot s after it starts, in range or stopped.)
 
 
 func _shoot(dt: float) -> void:
@@ -1010,7 +1057,8 @@ func _under_fire() -> bool:
 	return false
 
 
-## True while a gang is attacking from range (stopped, or a boss inside its shoot range).
+## True while a gang is attacking from range: stopped, or its front inside its shoot_range (a
+## special's attack.start_m, a boss's gun range).
 static func is_attacking(h: Dictionary) -> bool:
 	if String(h.get("attack", "")) == "" or h["melee"]:
 		return false
@@ -1037,55 +1085,132 @@ func _lane_target():
 	return best
 
 
+## Ranged attacks (spec v2.1 §1.2-1.3). A special gang that is attacking (front within
+## attack.start_m, or stopped) marks the squad's lane every shoot_every s: a `telegraph` that
+## lands warn_s later (_land_attacks), costing count x hit troops capped at cap_pct % of the
+## squad. Bosses and lieutenants: _boss_fire.
 func _gunfire(dt: float) -> void:
-	for h in hordes:
-		if not is_attacking(h) or float(h["shoot_every"]) <= 0.0:
+	for h in hordes.duplicate():
+		if int(h["count"]) <= 0 or h["melee"]:
 			continue
+		if h["boss"]:
+			_boss_fire(h, dt)
+		elif is_attacking(h) and float(h["shoot_every"]) > 0.0:
+			h["shoot_t"] = float(h["shoot_t"]) + dt
+			var every := float(h["shoot_every"])
+			while float(h["shoot_t"]) >= every:
+				h["shoot_t"] = float(h["shoot_t"]) - every
+				_telegraph(String(h["attack"]), int(h["id"]), float(h["warn"]),
+					int(h["count"]) * int(h["hit"]), int(h["cap_pct"]), String(h["enemy"]))
+		if state != "run":
+			return
+
+
+## The boss's (or lieutenant's) numbers: units.boss, or units.lieutenant for a lieutenant.
+func boss_numbers(h: Dictionary) -> Dictionary:
+	return lt_cfg if h.get("lieutenant", false) else boss_cfg
+
+
+## A boss or lieutenant (spec v2.1 §1.3). His gun, every shoot_every s within shoot_range,
+## takes gun_pct % of the squad (`boss_shot`, shield blocks it). From the halt (front within
+## boss_halt) he marks the squad's lane barrage_first s later and then every barrage_every s;
+## the barrage lands warn_s later and takes barrage_pct % of the squad if it is still there.
+func _boss_fire(h: Dictionary, dt: float) -> void:
+	var cfg := boss_numbers(h)
+	if is_attacking(h) and float(h["shoot_every"]) > 0.0:
 		h["shoot_t"] = float(h["shoot_t"]) + dt
 		var every := float(h["shoot_every"])
-		match String(h["attack"]):
-			"gun":
-				while float(h["shoot_t"]) >= every:
-					h["shoot_t"] = float(h["shoot_t"]) - every
-					if shield_t > 0.0:
-						out.append({"type": "blocked", "horde": h["id"], "n": h["count"]})
-					else:
-						_hurt(int(h["count"]) * int(h["shot_dmg"]), String(h["enemy"]), h["id"])
-					if state != "run":
-						return
-			"firebomb":
-				while float(h["shoot_t"]) >= every:
-					h["shoot_t"] = float(h["shoot_t"]) - every
-					var fb := {"horde": h["id"], "lane": lane, "land": time + float(h["flight"]),
-						"burn": int(h["count"]) * int(h["burn"])}
-					firebombs.append(fb)
-					out.append({"type": "firebomb_throw", "horde": h["id"], "lane": lane, "t": float(h["flight"])})
-			"snipe":
-				if not h["aimed"] and float(h["shoot_t"]) >= every - float(h["aim"]):
-					h["aimed"] = true
-					out.append({"type": "snipe_aim", "horde": h["id"]})
-				while float(h["shoot_t"]) >= every:
-					h["shoot_t"] = float(h["shoot_t"]) - every
-					h["aimed"] = false
-					var lost := 0
-					var blocked := shield_t > 0.0
-					if not blocked:
-						lost = _hurt(int(h["count"]) * int(h["shot_dmg"]), String(h["enemy"]), h["id"], false)
-					out.append({"type": "snipe", "horde": h["id"], "lost": lost, "blocked": blocked})
-					if state != "run":
-						return
+		while float(h["shoot_t"]) >= every:
+			h["shoot_t"] = float(h["shoot_t"]) - every
+			var blocked := shield_t > 0.0
+			var lost := 0
+			if not blocked:
+				var n := _spare_hero(share_loss(squad.total(), int(cfg.get("gun_pct", 0))))
+				if n > 0:
+					lost = _hurt(n, "boss", h["id"], false)
+			out.append({"type": "boss_shot", "horde": h["id"], "lost": lost, "blocked": blocked})
+			if state != "run":
+				return
+	var bevery := float(cfg.get("barrage_every", 0.0))
+	if bevery <= 0.0 or front_z(h) < -boss_halt:
+		return
+	if float(h["bt"]) < 0.0:
+		h["bt"] = maxf(bevery - float(cfg.get("barrage_first", 1.0)), 0.0)
+	h["bt"] = float(h["bt"]) + dt
+	while float(h["bt"]) >= bevery:
+		h["bt"] = float(h["bt"]) - bevery
+		_telegraph("lt_barrage" if h["lieutenant"] else "barrage", int(h["id"]), float(cfg.get("warn_s", 1.0)),
+			-1, int(_by_district(cfg.get("barrage_pct", 0))), "boss")
 
 
-## Gangs with guns fire back while their front is within range (spec v2 §12.2): every
-## shooter (share % of the gang, rounded up) fires rf_rate shots/s; each hit kills one troop,
-## lowest rank first, so the hero falls last. The shield blocks it. One event per gang and
-## tick with the shots fired, so the view draws the muzzle flashes and tracers.
+## Marks the squad's lane (where it stands now) for an attack landing `warn` s later:
+## `base` troops (-1 = none) capped at `pct` % of the squad then, `cause` for the loss.
+## Event `telegraph` {kind, lane, src (horde id), x, z (where it lands), land_t (sim time),
+## id, t (warn s)}.
+func _telegraph(kind: String, src: int, warn: float, base: int, pct: int, cause: String) -> void:
+	var l := squad_lane()
+	var a := {"id": _new_id(), "kind": kind, "lane": l, "src": src, "land": time + warn,
+		"base": base, "pct": pct, "cause": cause, "x": lane_x(l), "z": 0.0}
+	attacks.append(a)
+	out.append({"type": "telegraph", "id": a["id"], "kind": kind, "lane": l, "src": src,
+		"x": a["x"], "z": a["z"], "land_t": a["land"], "t": warn})
+
+
+## Telegraphed attacks whose time has come land on the lane they marked. The hit is decided
+## now, by where the squad really stands (squad_lane): changing lane in time dodges it, the
+## shield blocks it. Event `attack_land` {kind, lane, lost, blocked, hit, id, src, x, z}.
+func _land_attacks() -> void:
+	for a in attacks.duplicate():
+		if time < float(a["land"]):
+			continue
+		attacks.erase(a)
+		var hit := squad_lane() == int(a["lane"])
+		var blocked := hit and shield_t > 0.0
+		var lost := 0
+		if hit and not blocked:
+			var n := share_loss(squad.total(), int(a["pct"]), int(a["base"]))
+			if n > 0:
+				lost = _hurt(n, String(a["cause"]), int(a["src"]), false)
+		out.append(_land_event(a, hit, blocked, lost))
+		if state != "run":
+			return
+
+
+func _land_event(a: Dictionary, hit: bool, blocked: bool, lost: int) -> Dictionary:
+	return {"type": "attack_land", "id": a["id"], "kind": a["kind"], "lane": a["lane"], "src": a["src"],
+		"x": a["x"], "z": a["z"], "lost": lost, "blocked": blocked, "hit": hit}
+
+
+## Calls off every attack still in the air (the squad fell, revived or reached the stash): an
+## `attack_land` with cancelled = true, hit = false, lost = 0 for each, so the view clears its
+## marks. A telegraph only ever lands in live play time.
+func _end_attacks() -> void:
+	for a in attacks:
+		var ev := _land_event(a, false, false, 0)
+		ev["cancelled"] = true
+		out.append(ev)
+	attacks.clear()
+
+
+## Gangs with guns fire back while their front is within rf_range (spec v2.1 §1.1): an
+## opening volley on first entering range, then every shooter (shooters()) fires rf_rate
+## shots/s. Each hit takes one visible figure's troops and one volley at most
+## volley_cap_pct % of the squad (volley_loss), lowest rank first. The shield blocks it. One
+## event per gang and tick {horde, x, z (its front), shots, lost, blocked, opening}, so the
+## view draws the muzzle flashes and tracers.
 func _return_fire(dt: float) -> void:
+	var figs := maxi(int(rf_cfg.get("figures_shown", fig_cap)), 1)
+	var cap_pct := int(rf_cfg.get("volley_cap_pct", 0))
 	for h in hordes:
 		if float(h.get("rf_rate", 0.0)) <= 0.0 or h["melee"] or int(h["count"]) <= 0:
 			continue
 		if front_z(h) < -float(h["rf_range"]):
 			continue
+		var opening := false
+		if not h["rf_open"]:
+			h["rf_open"] = true
+			opening = true
+			h["rf_acc"] = float(h["rf_acc"]) + float(rf_cfg.get("open", 0))
 		h["rf_acc"] = float(h["rf_acc"]) + float(shooters(h)) * float(h["rf_rate"]) * dt
 		var shots := int(floor(float(h["rf_acc"])))
 		if shots <= 0:
@@ -1094,30 +1219,52 @@ func _return_fire(dt: float) -> void:
 		var blocked := shield_t > 0.0
 		var lost := 0
 		if not blocked:
-			lost = _hurt(shots, String(h["enemy"]), h["id"], false)
-		out.append({"type": "return_fire", "horde": h["id"], "shots": shots, "lost": lost, "blocked": blocked})
+			var n := _spare_hero(volley_loss(squad.total(), shots, figs, cap_pct))
+			if n > 0:
+				lost = _hurt(n, String(h["enemy"]), h["id"], false)
+		out.append({"type": "return_fire", "horde": h["id"], "x": 0.0, "z": front_z(h), "shots": shots,
+			"lost": lost, "blocked": blocked, "opening": opening})
 		if state != "run":
 			return
 
 
-## How many of a gang carry guns: its rf_share percent, rounded up (0 when it has none).
+## How many of a gang carry guns: its rf_share percent, rounded up (0 when it has none), at
+## most the district's max_shooters.
 static func shooters(h: Dictionary) -> int:
-	return (int(h["count"]) * int(h.get("rf_share", 0)) + 99) / 100
+	return mini((int(h["count"]) * int(h.get("rf_share", 0)) + 99) / 100, int(h.get("rf_max", 1 << 30)))
 
 
-## Firebombs land in the lane they were thrown at; the squad burns only if it is still there.
-func _firebombs() -> void:
-	for fb in firebombs.duplicate():
-		if time < float(fb["land"]):
-			continue
-		firebombs.erase(fb)
-		var blocked := shield_t > 0.0 and int(fb["lane"]) == lane
-		var lost := 0
-		if int(fb["lane"]) == lane and not blocked:
-			lost = _hurt(int(fb["burn"]), "molotov", int(fb["horde"]), false)
-		out.append({"type": "firebomb_hit", "horde": fb["horde"], "lane": fb["lane"], "lost": lost, "blocked": blocked})
-		if state != "run":
-			return
+## Troops one return-fire volley of `shots` hits takes from a squad of `total`: each hit one
+## visible figure (ceil(total / figs), at least 1), the volley at most cap_pct % of the squad
+## (but never less than one hit). Exact integers, never more than the squad.
+static func volley_loss(total: int, shots: int, figs: int, cap_pct: int) -> int:
+	if total <= 0 or shots <= 0:
+		return 0
+	var f := maxi(figs, 1)
+	var per := (total + f - 1) / f
+	var n := shots * per
+	if cap_pct > 0:
+		n = mini(n, maxi(per, total * cap_pct / 100))
+	return mini(n, total)
+
+
+## A share-of-squad hit: `pct` % of `total` (rounded down, at least 1), but never more than
+## `base` (the attack's own count x damage; -1 = none) and never more than the squad.
+static func share_loss(total: int, pct: int, base := -1) -> int:
+	if total <= 0 or pct <= 0:
+		return 0
+	var n := maxi(total * pct / 100, 1)
+	if base >= 0:
+		n = mini(n, base)
+	return mini(n, total)
+
+
+## Return fire and the boss's gun never take the hero while the squad never had a follower
+## this level (a hero-alone opening, spec v2.1 §1.1); once followers joined he falls last.
+func _spare_hero(n: int) -> int:
+	if peak_squad <= 1:
+		return mini(n, squad.total() - 1)
+	return n
 
 
 func _contacts(dt: float) -> void:
@@ -1154,6 +1301,7 @@ func _hurt(n: int, cause: String, source_id: int = 0, announce: bool = true) -> 
 		state = "lost"
 		lose_cause = cause
 		out.append({"type": "lost", "cause": cause, "source": source_id})
+		_end_attacks()
 	return lost
 
 
@@ -1179,6 +1327,7 @@ func _pass_rows() -> void:
 			state = "lost"
 			lose_cause = "gate"
 			out.append({"type": "lost", "cause": "gate"})
+			_end_attacks()
 			return
 
 
@@ -1374,7 +1523,7 @@ func clone() -> LevelSim:
 	var c := LevelSim.new()
 	for p in ["S", "S_base", "accel", "fire_range", "spawn_dist", "contact_z", "melee_tick",
 			"boss_halt", "finish_hold", "boss_hit_every", "weapons", "enemy_defs", "obstacle_defs",
-			"powers", "rf_cfg", "revive_cfg", "star_cfg", "lane", "squad_x", "_x_driven", "lane_w", "form_half",
+			"powers", "rf_cfg", "boss_cfg", "lt_cfg", "revive_cfg", "star_cfg", "lane", "squad_x", "_x_driven", "lane_w", "form_half",
 			"fig_cap", "fig_r", "gate_clear_s", "gang_priority", "gang_figs", "district", "caps",
 			"coin_ref", "tap_heat", "tap_auto", "tap_per", "tap_coin_pct", "heat_sum", "heat_t",
 			"tap_hold_s", "tap_decay_s", "_tap_hold", "traveled", "time", "state", "lose_cause",
@@ -1386,7 +1535,7 @@ func clone() -> LevelSim:
 	c.rows = rows.duplicate(true)
 	c.obstacles = obstacles.duplicate(true)
 	c.hordes = hordes.duplicate(true)
-	c.firebombs = firebombs.duplicate(true)
+	c.attacks = attacks.duplicate(true)
 	c.bombs = bombs.duplicate(true)
 	c.charges = charges.duplicate()
 	c._wave_mods = _wave_mods.duplicate(true)
