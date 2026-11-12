@@ -413,11 +413,14 @@ func test_levels_are_winnable_and_reward_planning() -> void:
 		var up: Dictionary = pace[str(n)]
 		var route: Array = lv.get("route", [])
 		check(not route.is_empty(), "L%d has a stored route" % n)
-		var best := Autopilot.run(lv, units, route, up, false)
+		# Spec v2.1 §1.3: a boss's barrage is telegraphed to be dodged; boss levels are
+		# calibrated (and kept winnable) with the pilot stepping out of it.
+		var dodge := bool(lv.get("boss", false))
+		var best := Autopilot.run(lv, units, route, up, false, 1.0 / 30.0, dodge)
 		eq(best["state"], "strike", "L%d planned route wins with the paced upgrades and no powers" % n)
 		# Spec v2 section 2 / calibration rule 2: a non-tapper with the same upgrades wins every
 		# level from L6 with the stored decisions, loses L2-L3; L1 needs only light tapping.
-		var cold := Autopilot.run(lv, units, route, up, false, 1.0 / 30.0, false, 0.0)
+		var cold := Autopilot.run(lv, units, route, up, false, 1.0 / 30.0, dodge, 0.0)
 		if n >= 6:
 			eq(cold["state"], "strike", "L%d a non-tapper wins with the stored route" % n)
 		elif n == 2 or n == 3:
@@ -437,7 +440,7 @@ func test_levels_are_winnable_and_reward_planning() -> void:
 			var r: Array = []
 			for j in rows:
 				r.append(rng.randi_range(0, 2))
-			var res := Autopilot.run(lv, units, r, up, false)
+			var res := Autopilot.run(lv, units, r, up, false, 1.0 / 30.0, dodge)
 			sum += int(res["troops"]) if res["state"] == "strike" else 0
 		check(int(best["troops"]) * 4 >= sum, "L%d planned route beats random routes on average" % n)
 		if int(best["troops"]) * 4 > sum:
@@ -477,6 +480,7 @@ func test_boss_walks_in_shooting_and_never_holds_distance() -> void:
 		{"at": 120, "type": "wave", "label": "KINGPIN", "groups": [{"enemy": "boss", "n": 1, "hp": 1200}]},
 		{"at": 150, "type": "finish"}]}
 	var sim := LevelSim.new(lvl, units)
+	var pilot := Autopilot.new([1], false, true, 0.0, 1.0)  # steps out of his barrages
 	var hits: Array = []
 	var shots_walking := 0
 	var last_front := -INF
@@ -484,14 +488,15 @@ func test_boss_walks_in_shooting_and_never_holds_distance() -> void:
 	var halted := true
 	var finish_early := false
 	for i in 9000:
+		pilot.drive(sim)
 		sim.step(1.0 / 30.0)
 		for e in sim.drain():
 			match String(e["type"]):
 				"boss_hit":
 					hits.append({"t": sim.time, "hp": int(e["hp"]), "max": int(e["max"])})
-				"hurt":
+				"boss_shot":
 					for h in sim.hordes:
-						if h["boss"] and String(e["cause"]) == "boss" and not h["stopped"] and not h["melee"]:
+						if h["boss"] and not h["stopped"] and not h["melee"] and int(e["lost"]) > 0:
 							shots_walking += 1
 				"finish":
 					finish_early = finish_early or not sim.hordes.is_empty()
@@ -525,13 +530,23 @@ func test_boss_walks_in_shooting_and_never_holds_distance() -> void:
 
 
 func test_failing_squad_meets_the_boss_in_melee() -> void:
+	# The lone hero dodges every barrage (and the gun never shoots a hero who never had
+	# followers), so the boss walks all the way in and his fists end it.
 	var lvl := {"events": [
-		{"at": 60, "type": "wave", "groups": [{"enemy": "boss", "n": 1, "hp": 5000, "shot_dmg": 0}]},
+		{"at": 60, "type": "wave", "groups": [{"enemy": "boss", "n": 1, "hp": 5000}]},
 		{"at": 90, "type": "finish"}]}
 	var sim := LevelSim.new(lvl, units)
-	var seen := _step_until(sim, func(): return sim.state != "run", 20000)
+	var pilot := Autopilot.new([], false, true, 0.0, 1.0)
+	var seen: Array = []
+	for i in 20000:
+		pilot.drive(sim)
+		sim.step(1.0 / 30.0)
+		seen.append_array(sim.drain())
+		if sim.state != "run":
+			break
 	eq(sim.state, "lost", "hero alone loses")
 	check(not _events_of(seen, "melee_start").is_empty(), "the boss walked all the way into melee")
+	eq(sim.lose_cause, "boss", "his fists")
 
 
 func test_finish_waits_for_every_gang_and_always_ends() -> void:
@@ -569,31 +584,34 @@ func _ranged_level(enemy: String, n: int) -> Dictionary:
 		{"at": 140, "type": "finish"}]}
 
 
+## Spec v2.1 §1.2: a ranged attack is a `telegraph` on the squad's lane, then an `attack_land`
+## warn_s later (it replaced firebomb_throw/firebomb_hit and snipe_aim/snipe).
 func test_molotov_firebomb_hits_the_lane_it_was_thrown_at() -> void:
 	var sim := LevelSim.new(_ranged_level("molotov", 2), units)
 	sim.set_lane(1)
-	var throw := _until_event(sim, "firebomb_throw")
+	var throw := _until_event(sim, "telegraph")
 	check(not throw.is_empty(), "a firebomb was thrown")
 	if throw.is_empty():
 		return
+	eq(String(throw["kind"]), "firebomb", "a firebomb")
 	eq(int(throw["lane"]), 1, "thrown at the squad's lane")
-	check(float(throw["t"]) > 0.0, "flight time given")
+	check(float(throw["land_t"]) > sim.time, "it lands later")
 	var burn := 2 * int(units["enemies"]["molotov"]["burn"])
-	# Stay: burn. Step aside: nothing. Shield: blocked.
+	# Stay: burn (a small gang's count x burn is under the cap). Step aside: nothing. Shield: blocked.
 	var stay := sim.clone()
-	var hit := _until_event(stay, "firebomb_hit")
+	var hit := _until_event(stay, "attack_land")
 	eq(int(hit.get("lost", -1)), burn, "stayed in the lane: burned")
 	eq(bool(hit.get("blocked", true)), false, "not blocked")
 	var dodge := sim.clone()
 	dodge.set_lane(0)
 	var before := dodge.squad.total()
-	hit = _until_event(dodge, "firebomb_hit")
+	hit = _until_event(dodge, "attack_land")
 	eq(int(hit.get("lost", -1)), 0, "stepped aside: no burn")
 	eq(dodge.squad.total(), before, "squad intact")
 	var shield := sim.clone()
 	shield.charges["shield"] = 1
 	check(shield.use_power("shield"), "shield up")
-	hit = _until_event(shield, "firebomb_hit")
+	hit = _until_event(shield, "attack_land")
 	eq(bool(hit.get("blocked", false)), true, "shield blocks the firebomb")
 	eq(int(hit.get("lost", -1)), 0, "no burn under the shield")
 
@@ -601,16 +619,17 @@ func test_molotov_firebomb_hits_the_lane_it_was_thrown_at() -> void:
 func test_sniper_foe_aims_then_fires() -> void:
 	var sim := LevelSim.new(_ranged_level("sniper_foe", 3), units)
 	sim.set_lane(1)
-	check(not _until_event(sim, "snipe_aim").is_empty(), "laser telegraph")
+	var aim := _until_event(sim, "telegraph")
+	eq(String(aim.get("kind", "")), "snipe", "laser telegraph")
 	var aim_t := sim.time
 	var shielded := sim.clone()
-	var shot := _until_event(sim, "snipe")
+	var shot := _until_event(sim, "attack_land")
 	eq(int(shot.get("lost", -1)), 3 * int(units["enemies"]["sniper_foe"]["shot_dmg"]), "each sniper kills shot_dmg")
-	var aim := float(units["enemies"]["sniper_foe"]["aim"])
-	check(absf(sim.time - aim_t - aim) < 0.1, "laser shows `aim` seconds before the shot")
+	var warn := float(units["enemies"]["sniper_foe"]["attack"]["warn_s"])
+	check(absf(sim.time - aim_t - warn) < 0.05, "the laser shows warn_s before the shot")
 	shielded.charges["shield"] = 1
 	check(shielded.use_power("shield"), "shield up")
-	shot = _until_event(shielded, "snipe")
+	shot = _until_event(shielded, "attack_land")
 	eq(bool(shot.get("blocked", false)), true, "shield blocks the sniper")
 	eq(int(shot.get("lost", -1)), 0, "nobody lost")
 
@@ -618,9 +637,11 @@ func test_sniper_foe_aims_then_fires() -> void:
 func test_grenadier_shot_kills_three() -> void:
 	var sim := LevelSim.new(_ranged_level("grenadier", 2), units)
 	sim.set_lane(1)
-	var hurt := _until_event(sim, "hurt")
-	eq(String(hurt.get("cause", "")), "grenadier", "cause")
-	eq(int(hurt.get("n", -1)), 2 * int(units["enemies"]["grenadier"]["shot_dmg"]), "2 grenadiers x 3")
+	var tg := _until_event(sim, "telegraph")
+	eq(String(tg.get("kind", "")), "grenade", "a grenade is telegraphed")
+	var land := _until_event(sim, "attack_land")
+	eq(String(land.get("kind", "")), "grenade", "kind")
+	eq(int(land.get("lost", -1)), 2 * int(units["enemies"]["grenadier"]["shot_dmg"]), "2 grenadiers x 3")
 
 
 func test_pothole_costs_troops_in_its_lane_only() -> void:
@@ -1256,3 +1277,468 @@ func test_coin_troops_follow_the_level_reference() -> void:
 	var plain := LevelSim.new({"district": 4, "events": []}, units)
 	plain.squad.add("constable", 999)
 	eq(plain.coin_troops(), 12, "no coin_ref: the district cap rule (1000 of 25000)")
+
+
+# ---------------------------------------------------------------- v2.1 §1: real fights
+
+var _pace_cache := {}
+
+
+## The no-ad upgrade pace (tests/econ_model.gd), as the level test and calibration use it.
+func _pace() -> Dictionary:
+	if _pace_cache.is_empty():
+		var Model = load("res://tests/econ_model.gd")
+		_pace_cache = Model.pace(Model.run(Config.economy(), Config.load_json("res://config/finale.json"), units))
+	return _pace_cache
+
+
+## A squad of `n` troops (hero + constables) with no cap, against `groups` arriving at `at`.
+func _fight_sim(groups: Array, n: int, district := 1, at := 70, extra: Array = []) -> LevelSim:
+	var events: Array = [{"at": at, "type": "wave", "groups": groups}]
+	events.append_array(extra)
+	events.append({"at": at + 400, "type": "finish"})
+	var sim := LevelSim.new({"district": district, "events": events}, units)
+	sim.squad.cap = 0
+	sim.squad.add("constable", n - 1)
+	sim.peak_squad = sim.squad.total()
+	sim.set_lane(1)
+	return sim
+
+
+func test_return_fire_outranges_squad() -> void:
+	var rf: Dictionary = units["return_fire"]
+	check(float(rf["range"]) > float(units["world"]["fire_range"]), "return fire (%.0f m) outranges the squad" % float(rf["range"]))
+	# L11's stored route at the no-ad pace: every armed gang that comes in range fires its opening
+	# volley at once, before the squad can reach it (v2: 0 troops lost on 35 of 36 normal levels).
+	var lv := Config.level(11)
+	var sim := LevelSim.new(lv, units, _pace()["11"])
+	var pilot := Autopilot.new(lv["route"], false, false, 2.0)
+	var reached := {}
+	var fired := {}
+	var opening_far := 0
+	var lost := 0
+	while sim.state == "run" and sim.time < 400.0:
+		pilot.drive(sim)
+		sim.step(1.0 / 30.0)
+		for h in sim.hordes:
+			if float(h.get("rf_rate", 0.0)) > 0.0 and LevelSim.front_z(h) >= -float(h["rf_range"]):
+				reached[h["id"]] = true
+		for e in sim.drain():
+			if e["type"] != "return_fire":
+				continue
+			fired[e["horde"]] = int(fired.get(e["horde"], 0)) + int(e["shots"])
+			lost += int(e["lost"])
+			for k in ["horde", "x", "z", "shots", "lost", "blocked", "opening"]:
+				check(e.has(k), "return_fire carries %s" % k)
+			if bool(e.get("opening", false)) and float(e["z"]) < -sim.fire_range:
+				opening_far += 1
+	eq(sim.state, "strike", "L11 stored route still wins")
+	check(reached.size() >= 5, "armed gangs came in range (%d)" % reached.size())
+	for id in reached:
+		check(int(fired.get(id, 0)) > 0, "armed gang %d fired before it died" % id)
+	check(opening_far >= reached.size() / 2, "opening volleys come from beyond the squad's reach (%d)" % opening_far)
+	check(lost > 0, "the enemies cost troops (%d)" % lost)
+
+
+func test_return_fire_caps_and_figures() -> void:
+	var figs := int(units["return_fire"]["figures_shown"])
+	var cap_pct := int(units["return_fire"]["volley_cap_pct"])
+	eq(figs, int(units["world"]["formation_figures"]), "one hit is one visible figure")
+	eq(cap_pct, 5, "volley cap 5 %")
+	var maxs: Array = units["return_fire"]["max_shooters"]
+	eq(maxs.size(), 5, "max shooters per district")
+	# A 1,000 squad: the opening volley is one shot = one figure = ceil(1000 / 72) troops.
+	var grp := {"enemy": "gunman", "n": 40, "hp": 100000}
+	var sim := _fight_sim([grp], 1000)
+	var first := _until_event(sim, "return_fire")
+	check(bool(first.get("opening", false)), "the first shots are the opening volley")
+	eq(int(first.get("shots", 0)), int(units["return_fire"]["open"]), "opening volley size")
+	eq(int(first.get("lost", 0)), 14, "one hit = ceil(1000 / 72) troops")
+	if not sim.hordes.is_empty():
+		eq(LevelSim.shooters(sim.hordes[0]), int(maxs[0]), "40 gunmen, district 1: capped shooters")
+	# A burst of shots in one tick is capped at 5 % of the squad.
+	var fast := _fight_sim([{"enemy": "gunman", "n": 40, "hp": 100000, "return_fire": {"rate": 200.0, "share": 100, "from_district": 1}}], 1000)
+	var checked := 0
+	for i in 2000:
+		var before := fast.squad.total()
+		fast.step(1.0 / 30.0)
+		for e in fast.drain():
+			if e["type"] != "return_fire" or e["blocked"]:
+				continue
+			var per := (before + figs - 1) / figs
+			var want := mini(int(e["shots"]) * per, maxi(per, before * cap_pct / 100))
+			eq(int(e["lost"]), mini(want, before), "volley loss is capped (squad %d, %d shots)" % [before, int(e["shots"])])
+			check(int(e["lost"]) <= maxi(per, before * cap_pct / 100), "never more than 5 %% of %d" % before)
+			checked += 1
+		if checked >= 6 or fast.state != "run":
+			break
+	check(checked >= 6, "bursts measured (%d)" % checked)
+	var d5 := _fight_sim([grp], 1000, 5)
+	_until_event(d5, "return_fire")
+	if not d5.hordes.is_empty():
+		eq(LevelSim.shooters(d5.hordes[0]), int(maxs[4]), "district 5 fields more shooters")
+	eq(LevelSim.volley_loss(1000, 1, figs, cap_pct), 14, "volley_loss: one shot")
+	eq(LevelSim.volley_loss(1000, 10, figs, cap_pct), 50, "volley_loss: capped at 5 %")
+	eq(LevelSim.volley_loss(10, 3, figs, cap_pct), 1, "a small squad still loses at least one per volley")
+	eq(LevelSim.volley_loss(0, 3, figs, cap_pct), 0, "nothing from nothing")
+
+
+func test_hero_falls_last_and_not_in_hero_alone_opening() -> void:
+	# Followers of several ranks: lowest rank first, then the hero (he had followers).
+	var lvl := {"district": 1, "events": [
+		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 12}]},
+		{"at": 20, "type": "gates", "gates": [{"lane": 1, "op": "recruit", "unit": "sergeant", "n": 4}]},
+		{"at": 90, "type": "wave", "groups": [{"enemy": "gunman", "n": 6, "hp": 100000}]},
+		{"at": 300, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	var order_ok := true
+	var joined := false
+	for i in 30000:
+		sim.step(1.0 / 30.0)
+		sim.drain()
+		joined = joined or sim.squad.count("sergeant") == 4
+		if joined and sim.squad.count("sergeant") < 4 and sim.squad.count("constable") > 0:
+			order_ok = false
+		if sim.squad.count("hero") == 0 and sim.squad.total() > 0:
+			order_ok = false
+		if sim.state != "run":
+			break
+	check(order_ok, "constables fall before sergeants, the hero last")
+	eq(sim.state, "lost", "a do-nothing squad is worn down")
+	eq(sim.lose_cause, "gunman", "by return fire")
+	# The hero alone, never joined by followers (the L1-L3 opening): return fire never takes him.
+	var alone := LevelSim.new({"district": 1, "events": [
+		{"at": 60, "type": "wave", "groups": [{"enemy": "gunman", "n": 6, "hp": 100000}]},
+		{"at": 300, "type": "finish"}]}, units)
+	alone.set_lane(1)
+	var shots := 0
+	var lost := 0
+	for i in 1800:
+		alone.step(1.0 / 30.0)
+		for e in alone.drain():
+			if e["type"] == "return_fire":
+				shots += int(e["shots"])
+				lost += int(e["lost"])
+		if alone.state != "run":
+			break
+	check(shots > 3, "the gunmen fire at the lone hero (%d)" % shots)
+	eq(lost, 0, "a hero-alone opening is never shot dead")
+	eq(alone.state, "run", "the hero stands")
+
+
+## The first telegraph of a special gang: {e: the event, z: its gang's front at the telegraph}.
+func _first_telegraph(sim: LevelSim) -> Dictionary:
+	for i in 6000:
+		sim.step(1.0 / 30.0)
+		for e in sim.drain():
+			if e["type"] == "telegraph":
+				var z := 0.0
+				for h in sim.hordes:
+					if int(h["id"]) == int(e["src"]):
+						z = LevelSim.front_z(h)
+				return {"e": e, "z": z}
+		if sim.state != "run":
+			break
+	return {}
+
+
+func test_specials_attack_beyond_range_and_cap() -> void:
+	var kinds := {"sniper_foe": "snipe", "grenadier": "grenade", "molotov": "firebomb"}
+	for enemy in kinds:
+		var atk: Dictionary = units["enemies"][enemy]["attack"]
+		check(float(atk["start_m"]) > float(units["world"]["fire_range"]), "%s attacks from beyond the squad's reach" % enemy)
+		var pct := int(atk["cap_pct"])
+		check(pct >= 10 and pct <= 20, "%s cap %d %% (spec 10-20)" % [enemy, pct])
+		var sim := _fight_sim([{"enemy": enemy, "n": 200, "hp": 4000}], 400, 2)
+		var tg := _first_telegraph(sim)
+		check(not tg.is_empty(), "%s telegraphs" % enemy)
+		if tg.is_empty():
+			continue
+		var e: Dictionary = tg["e"]
+		eq(String(e["kind"]), kinds[enemy], "%s telegraph kind" % enemy)
+		check(float(tg["z"]) < -sim.fire_range, "%s telegraphs from beyond %.0f m (%.1f)" % [enemy, sim.fire_range, float(tg["z"])])
+		eq(int(e["lane"]), 1, "aimed at the squad's lane")
+		for k in ["kind", "lane", "src", "x", "z", "land_t"]:
+			check(e.has(k), "telegraph carries %s" % k)
+		near(float(e["land_t"]) - sim.time, float(atk["warn_s"]), "%s lands warn_s later" % enemy)
+		var landed := {}
+		var before := 0
+		for i in 600:
+			before = sim.squad.total()
+			sim.step(1.0 / 30.0)
+			for ev in sim.drain():
+				if ev["type"] == "attack_land" and int(ev.get("id", -1)) == int(e.get("id", -2)):
+					landed = ev
+			if not landed.is_empty():
+				break
+		check(not landed.is_empty(), "%s attack lands" % enemy)
+		if landed.is_empty():
+			continue
+		for k in ["kind", "lane", "lost", "blocked", "hit"]:
+			check(landed.has(k), "attack_land carries %s" % k)
+		check(bool(landed["hit"]), "the squad stayed in the lane: hit")
+		eq(int(landed["lost"]), before * pct / 100, "%s takes its cap share of %d" % [enemy, before])
+	eq(LevelSim.share_loss(400, 12, 6), 6, "a small gang's base stays under the cap")
+	eq(LevelSim.share_loss(400, 12, 1000), 48, "a big gang is capped")
+	eq(LevelSim.share_loss(3, 12, 1000), 1, "at least one troop")
+	# A gang that stops beyond the squad's reach rides the street in: no standoff deadlock.
+	var far := _fight_sim([{"enemy": "gunman", "n": 6, "hp": 2, "stop_at": 60.0, "return_fire": {"rate": 0.0, "share": 0}}], 50)
+	var stuck := 0
+	for i in 9000:
+		far.step(1.0 / 30.0)
+		far.drain()
+		for h in far.hordes:
+			if h["stopped"] and LevelSim.front_z(h) < -far.fire_range - 0.5 and far.standoff():
+				stuck += 1
+		if far.state != "run":
+			break
+	eq(stuck, 0, "a gang stopped beyond range never halts the street")
+	eq(far.state, "strike", "the squad reaches it, kills it and finishes")
+
+
+## A molotov gang that keeps throwing (the squad cannot kill it), squad of 300 in lane 1.
+func _thrower_sim() -> LevelSim:
+	return _fight_sim([{"enemy": "molotov", "n": 30, "hp": 4000}], 300, 2)
+
+
+func _land_of(sim: LevelSim, id: int, max_steps := 600) -> Dictionary:
+	for i in max_steps:
+		sim.step(1.0 / 30.0)
+		for ev in sim.drain():
+			if ev["type"] == "attack_land" and int(ev["id"]) == id:
+				return ev
+		if sim.state != "run":
+			break
+	return {}
+
+
+func test_dodge_decided_at_land_time() -> void:
+	var sim := _thrower_sim()
+	var tg := _first_telegraph(sim)
+	check(not tg.is_empty(), "a firebomb is telegraphed")
+	if tg.is_empty():
+		return
+	var e: Dictionary = tg["e"]
+	var id := int(e["id"])
+	var land := float(e["land_t"])
+	# Stay: hit.
+	var stay := sim.clone()
+	var r := _land_of(stay, id)
+	check(bool(r.get("hit", false)) and int(r.get("lost", 0)) > 0, "stayed in the lane: hit (%s)" % str(r))
+	# Leave just before it lands: dodged.
+	var late := sim.clone()
+	while late.time < land - 0.1:
+		late.step(1.0 / 30.0)
+		late.drain()
+	late.set_lane(0)
+	r = _land_of(late, id)
+	check(not bool(r.get("hit", true)) and int(r.get("lost", -1)) == 0, "stepped out at the last moment: dodged")
+	# Leave at the telegraph, come back before it lands: hit (decided at land time).
+	var back := sim.clone()
+	back.set_lane(0)
+	while back.time < land - 0.15:
+		back.step(1.0 / 30.0)
+		back.drain()
+	back.set_lane(1)
+	r = _land_of(back, id)
+	check(bool(r.get("hit", false)), "back in the lane when it lands: hit")
+	# In play the view's real x decides: the lane is set but the squad has not moved yet...
+	var slow := sim.clone()
+	slow.set_squad_x(slow.lane_x(1))
+	slow.set_lane(0)
+	r = _land_of(slow, id)
+	check(bool(r.get("hit", false)), "the squad still stands in the lane (real x): hit")
+	# ...or it already stands mostly in the next lane.
+	var moved := sim.clone()
+	moved.set_squad_x(moved.lane_x(0) + 0.3)
+	r = _land_of(moved, id)
+	check(not bool(r.get("hit", true)), "the squad is in the next lane (real x): dodged")
+	# Shield: hit but blocked.
+	var sh := sim.clone()
+	sh.charges["shield"] = 1
+	check(sh.use_power("shield"), "shield up")
+	r = _land_of(sh, id)
+	check(bool(r.get("blocked", false)) and int(r.get("lost", -1)) == 0, "the shield blocks it")
+
+
+func test_telegraph_respects_freeze_revive_finish() -> void:
+	# Freeze (a first-run lesson or pause stops the street's clock): nothing lands.
+	var sim := _thrower_sim()
+	var tg := _first_telegraph(sim)
+	check(not tg.is_empty(), "a firebomb is telegraphed")
+	if tg.is_empty():
+		return
+	var id := int(tg["e"]["id"])
+	var t0 := sim.time
+	var frozen := sim.clone()
+	var landed_frozen := false
+	for i in 300:
+		frozen.step(0.0)
+		for ev in frozen.drain():
+			if ev["type"] == "attack_land":
+				landed_frozen = true
+	check(not landed_frozen, "no attack lands while the clock is frozen")
+	near(frozen.time, t0, "frozen time")
+	check(not _land_of(frozen, id).is_empty(), "it lands once the clock runs again")
+	# Revive: the attack in the air when the squad fell never lands through the revive.
+	var rv := sim.clone()
+	rv._hurt(rv.squad.total(), "test")
+	eq(rv.state, "lost", "squad down")
+	var cancelled := false
+	for ev in rv.drain():
+		if ev["type"] == "attack_land" and int(ev["id"]) == id:
+			cancelled = bool(ev.get("cancelled", false)) and not bool(ev["hit"]) and int(ev["lost"]) == 0
+	check(cancelled, "the pending attack is called off when the squad falls")
+	check(rv.attacks.is_empty(), "nothing left in the air")
+	check(rv.revive(rv.revive_troops()), "revived")
+	var hit_after := false
+	while rv.time < t0 + 3.0 and rv.state == "run":
+		rv.step(1.0 / 30.0)
+		for ev in rv.drain():
+			if ev["type"] == "attack_land" and int(ev["id"]) == id:
+				hit_after = true
+	check(not hit_after, "the old attack never lands after the revive")
+	# Finish: an attack still in the air when the squad bursts into the stash never lands.
+	var fin := LevelSim.new({"events": [{"at": 30, "type": "finish"}]}, units)
+	fin.set_lane(1)
+	for i in 10:
+		fin.step(1.0 / 30.0)
+	fin.drain()
+	fin._telegraph("grenade", 0, 5.0, 10, 12, "grenadier")
+	var seen := _step_until(fin, func(): return fin.state != "run")
+	eq(fin.state, "strike", "finished")
+	var hits := _events_of(seen, "attack_land").filter(func(ev): return bool(ev["hit"]))
+	eq(hits.size(), 0, "no attack lands after the finish")
+	check(fin.attacks.is_empty(), "the pending attack is dropped at the finish")
+
+
+func test_caps_exact_on_huge_squads() -> void:
+	var figs := int(units["return_fire"]["figures_shown"])
+	eq(LevelSim.volley_loss(150000, 1, figs, 5), 2084, "one hit on 150,000 = ceil(150000 / 72)")
+	eq(LevelSim.volley_loss(150000, 10, figs, 5), 7500, "a volley is capped at exactly 5 %")
+	eq(LevelSim.share_loss(150000, 18), 27000, "an 18 % barrage")
+	eq(LevelSim.share_loss(150000, 12, 100000), 18000, "a capped grenade")
+	eq(LevelSim.share_loss(150001, 15), 22500, "rounded down to whole troops")
+	eq(LevelSim.share_loss(1, 18), 1, "at least one troop")
+	# In the sim: the opening volley and a boss barrage on a 150,000 squad (district 5).
+	var sim := _fight_sim([{"enemy": "gunman", "n": 40, "hp": 100000000}], 150000, 5)
+	var rf := _until_event(sim, "return_fire")
+	eq(int(rf.get("lost", 0)), 2084, "the opening volley takes one figure of 150,000")
+	eq(sim.squad.total(), 150000 - 2084, "exact count")
+	var bpct := int(units["boss"]["barrage_pct"][4])
+	var boss := _fight_sim([{"enemy": "boss", "n": 1, "hp": 1000000000}], 150000, 5)
+	var hits := _boss_hits(boss)
+	var lands: Array = hits["land"]
+	check(not lands.is_empty(), "the boss barrages")
+	for l in lands:
+		eq(int(l["lost"]), int(l["before"]) * bpct / 100, "barrage = exactly %d %% of %d" % [bpct, int(l["before"])])
+	for s in hits["shot"]:
+		eq(int(s["lost"]), maxi(int(s["before"]) * int(units["boss"]["gun_pct"]) / 100, 1), "boss gun = gun_pct of %d" % int(s["before"]))
+	eq(boss.squad.total(), int(hits["end"]), "exact count")
+
+
+## Steps a boss fight (the squad stands still) until `n` barrages landed. Each landed barrage
+## and boss shot comes with the squad just before it (events in order within a tick).
+func _boss_hits(sim: LevelSim, n := 2) -> Dictionary:
+	var lands: Array = []
+	var shots: Array = []
+	var tgs: Array = []
+	for i in 9000:
+		var cur := sim.squad.total()
+		sim.step(1.0 / 30.0)
+		for e in sim.drain():
+			match String(e["type"]):
+				"telegraph":
+					tgs.append(e)
+				"attack_land":
+					lands.append({"before": cur, "lost": int(e["lost"]), "e": e})
+					cur -= int(e["lost"])
+				"boss_shot":
+					shots.append({"before": cur, "lost": int(e["lost"]), "e": e})
+					cur -= int(e["lost"])
+				"return_fire", "melee":
+					cur -= int(e["lost"])
+				"hurt":
+					cur -= int(e["n"])
+		if lands.size() >= n or sim.state != "run":
+			break
+	return {"land": lands, "shot": shots, "telegraph": tgs, "end": sim.squad.total()}
+
+
+func test_boss_hp_not_scaled_and_barrage() -> void:
+	var bc: Dictionary = units["boss"]
+	var secs: Array = bc["hp_secs"]
+	for s in secs:
+		check(float(s) >= 12.0 and float(s) <= 15.0, "boss hp_secs %.1f in 12-15" % float(s))
+	for p in bc["barrage_pct"]:
+		check(int(p) >= 12 and int(p) <= 18, "boss barrage %d %% in 12-18" % int(p))
+	var min_halt := float(bc["halt_min_s"])
+	eq(min_halt, 6.0, "a boss halts the street at least 6 s")
+	for n in [10, 20, 30, 40, 50]:
+		var lv: Dictionary = Config.level(n).duplicate(true)
+		var up: Dictionary = _pace()[str(n)]
+		var route: Array = lv["route"]
+		var dps := Autopilot.boss_dps(lv, units, route, up, 2.0)
+		check(dps > 0.0, "L%d boss dps measured (%.0f)" % [n, dps])
+		# The rule (tools/gen_levels.py): hp = hp_secs x the expected squad's dps, never x k.
+		var hp := int(round(float(secs[int(lv["district"]) - 1]) * dps))
+		for e in lv["events"]:
+			if e["type"] == "wave":
+				for g in e["groups"]:
+					if g["enemy"] == "boss":
+						g["hp"] = hp
+		for dodge in [false, true]:
+			var sim := LevelSim.new(lv, units, up)
+			var pilot := Autopilot.new(route, false, dodge, 2.0, 1.0)
+			var halt := 0.0
+			var barrages := 0
+			var barrage_lost := 0
+			var boss_seen := false
+			while sim.state == "run" and sim.time < 600.0:
+				pilot.drive(sim)
+				sim.step(1.0 / 30.0)
+				for h in sim.hordes:
+					if h["boss"] and LevelSim.front_z(h) >= -sim.boss_halt:
+						halt += 1.0 / 30.0
+						boss_seen = true
+				for e in sim.drain():
+					if e["type"] == "telegraph" and String(e["kind"]) == "barrage":
+						barrages += 1
+					elif e["type"] == "attack_land" and String(e["kind"]) == "barrage":
+						barrage_lost += int(e["lost"])
+			check(boss_seen, "L%d the boss reaches the halt" % n)
+			check(halt >= min_halt, "L%d (dodge %s) the boss halts the street %.1f s (>= %.0f)" % [n, dodge, halt, min_halt])
+			check(barrages >= 2, "L%d (dodge %s) the boss fires %d barrages" % [n, dodge, barrages])
+			if dodge:
+				eq(barrage_lost, 0, "L%d a dodger takes nothing from barrages" % n)
+			else:
+				check(barrage_lost > 0, "L%d barrages hurt a squad that stands still" % n)
+
+
+func test_lieutenant_wave() -> void:
+	var lt: Dictionary = units["lieutenant"]
+	for s in lt["hp_secs"]:
+		check(float(s) >= 6.0 and float(s) <= 8.0, "lieutenant hp_secs %.1f in 6-8" % float(s))
+	for p in lt["barrage_pct"]:
+		check(int(p) >= 8 and int(p) <= 12, "lieutenant barrage %d %% in 8-12" % int(p))
+	var d := 2
+	var sim := _fight_sim([{"enemy": "boss", "n": 1, "hp": 1000000, "lieutenant": true}], 600, d)
+	var spawn := _until_event(sim, "horde_spawn")
+	check(bool(spawn.get("lieutenant", false)), "horde_spawn says lieutenant")
+	check(bool(spawn.get("horde", {}).get("lieutenant", false)), "the horde is a lieutenant")
+	check(bool(spawn.get("horde", {}).get("boss", false)), "he fights as a boss (halt, bar)")
+	var hits := _boss_hits(sim)
+	check(sim.halted, "the lieutenant halts the street")
+	var tgs: Array = hits["telegraph"]
+	check(not tgs.is_empty(), "he barrages")
+	for t in tgs:
+		eq(String(t["kind"]), "lt_barrage", "his barrage is the lieutenant's")
+	check(not (hits["shot"] as Array).is_empty(), "he shoots")
+	for s in hits["shot"]:
+		for k in ["horde", "lost", "blocked"]:
+			check((s["e"] as Dictionary).has(k), "boss_shot carries %s" % k)
+		eq(int(s["lost"]), maxi(int(s["before"]) * int(lt["gun_pct"]) / 100, 1), "his gun takes gun_pct of %d" % int(s["before"]))
+	check(not (hits["land"] as Array).is_empty(), "his barrage lands")
+	for l in hits["land"]:
+		eq(int(l["lost"]), int(l["before"]) * int(lt["barrage_pct"][d - 1]) / 100, "lieutenant barrage share of %d" % int(l["before"]))

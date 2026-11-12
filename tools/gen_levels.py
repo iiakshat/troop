@@ -52,10 +52,54 @@ GANG_FIGS = int(W.get("gang_figures", 180))
 # Gang size ceilings below were tuned for the v1 squad cap of 150; they grow with the cap.
 V1_CAP = 150
 RF = UNITS.get("return_fire", {})
+# Spec v2.1 section 1 (mirrors LevelSim): return fire opens with a volley, each hit is one
+# visible figure, a volley is capped; bosses and lieutenants barrage and shoot a share.
+RF_OPEN = float(RF.get("open", 0))
+RF_CAP = int(RF.get("volley_cap_pct", 0))
+RF_FIGS = max(int(RF.get("figures_shown", W.get("formation_figures", 72))), 1)
+BOSS_CFG = UNITS.get("boss", {})
+LT_CFG = UNITS.get("lieutenant", {})
+LT_BANNER = "LIEUTENANT"
 
 
 def cap_of(d: int) -> int:
     return CAPS[min(max(d, 1), len(CAPS)) - 1]
+
+
+def by_district(v, d: int):
+    """A per-district config number: v[d - 1] of a list (its last entry past the end), or v."""
+    if isinstance(v, list):
+        return v[min(max(d, 1), len(v)) - 1] if v else 0
+    return v
+
+
+def volley_loss(total: int, shots: int, figs: int = RF_FIGS, cap_pct: int = RF_CAP) -> int:
+    """LevelSim.volley_loss: one figure's troops per hit, a volley at most cap_pct % (one hit)."""
+    if total <= 0 or shots <= 0:
+        return 0
+    per = -(-total // max(figs, 1))
+    n = shots * per
+    if cap_pct > 0:
+        n = min(n, max(per, total * cap_pct // 100))
+    return min(n, total)
+
+
+def share_loss(total: int, pct: int, base: int = -1) -> int:
+    """LevelSim.share_loss: pct % of the squad (at least 1), never more than base (-1 = none)."""
+    if total <= 0 or pct <= 0:
+        return 0
+    n = max(total * pct // 100, 1)
+    if base >= 0:
+        n = min(n, base)
+    return min(n, total)
+
+
+def boss_hp(d: int, dps: float, lieutenant: bool = False) -> int:
+    """Spec v2.1 section 1.3: a boss (lieutenant) lasts hp_secs of the expected squad's dps.
+    Never scaled by the calibration k x kf (apply_scale skips bosses)."""
+    cfg = LT_CFG if lieutenant else BOSS_CFG
+    secs = float(by_district(cfg.get("hp_secs", 12), d))
+    return nice(max(60 if lieutenant else 150, dps * secs))
 
 DISTRICTS = ["Downtown", "Market", "Docks", "Industrial", "Uptown"]
 BOSS_BANNERS = ["KINGPIN", "THE BUTCHER", "DOCK KING", "IRON BARON", "OVERLORD"]
@@ -262,7 +306,8 @@ def enemy_def(grp: dict) -> dict:
 
 def fight(sq: Sq, groups: list[dict], dt: float = 0.05) -> bool:
     """Plays one wave against `sq` (changed in place) with a simplified copy of LevelSim's
-    battle rules: no gates, no powers, every firebomb lands. Returns True if the hero lives."""
+    battle rules: no gates, no powers, no dodging (every telegraphed attack lands, capped).
+    Returns True if the hero lives."""
     hs = []
     x0 = 0.0
     for g in groups:
@@ -275,29 +320,34 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05) -> bool:
         v = float(d["speed"])
         stop = float(d.get("stop_at", 0.0))
         n = int(g["n"])
-        attack = ""
-        if "throw_every" in d:
-            attack = "fire"
-        elif float(d.get("shoot_every", 0.0)) > 0:
-            attack = "gun"
+        # Spec v2.1 section 1.2-1.3: specials telegraph from attack.start_m; bosses shoot a share
+        # and barrage from the halt (LevelSim._gunfire / _boss_fire).
+        atk = d.get("attack", {})
+        boss = bool(d.get("boss", False))
+        attack = str(atk.get("kind", "")) if atk else ("gun" if boss else "")
+        every = float(d.get("throw_every", d.get("shoot_every", 0.0)))
+        first = float(d.get("first_shot", every))
         rf = d.get("return_fire", {})
         rf_on = sq.d >= int(rf.get("from_district", RF.get("from_district", 2)))
         hs.append({"n": n, "start": n, "hp": float(d["hp"]), "armour": int(d["armour"]),
                    "power": int(d["power"]), "v": v, "stop": stop, "cols": int(d.get("cols", 9)),
                    # a huge gang stands in GANG_FIGS figures of `per` people (LevelSim)
                    "per": max(1, (n + GANG_FIGS - 1) // GANG_FIGS),
-                   "gap": float(d.get("row_gap", 0.95)), "boss": bool(d.get("boss", False)),
+                   "gap": float(d.get("row_gap", 0.95)), "boss": boss,
+                   "lt": boss and bool(g.get("lieutenant", False)), "bt": -1.0,
                    "z": -stop - (x0 + float(g.get("gap", 0.0))) * (S0 + v) / S0,
-                   "shield": float(d.get("shield", 0.0)) * n, "acc": 0.0, "st": 0.0, "mt": 0.0,
-                   "stopped": False, "melee": False, "attack": attack,
-                   "every": float(d.get("throw_every", d.get("shoot_every", 0.0))),
-                   "first": float(d.get("first_shot", d.get("throw_every", d.get("shoot_every", 0.0)))),
+                   "shield": float(d.get("shield", 0.0)) * n, "acc": 0.0, "st": max(every - first, 0.0), "mt": 0.0,
+                   "stopped": False, "melee": False, "attack": attack, "every": every,
                    "hit": int(d.get("burn", d.get("shot_dmg", 1))),
-                   "range": float(d.get("shoot_range", 0.0)),
-                   # return fire (spec v2 section 12.2)
+                   "cap": int(atk.get("cap_pct", 0)), "warn": float(atk.get("warn_s", 1.0)),
+                   "range": float(atk.get("start_m", d.get("shoot_range", 0.0))) if atk else float(d.get("shoot_range", 0.0)),
+                   # return fire (spec v2.1 section 1.1)
                    "rf_rate": float(rf.get("rate", 0.0)) if rf_on else 0.0,
                    "rf_share": int(rf.get("share", 0)),
-                   "rf_range": float(rf.get("range", RF.get("range", 32.0))), "rf_acc": 0.0})
+                   "rf_max": int(by_district(RF.get("max_shooters", 1 << 30), sq.d)), "rf_open": False,
+                   "rf_range": float(rf.get("range", RF.get("range", 50.0))), "rf_acc": 0.0})
+    pending: list[list] = []  # telegraphed attacks in the air: [land time, base, pct]
+    had = sq.total() > 1      # return fire never takes a hero who never had followers
 
     def row_size(h):
         return max(h["cols"], 1) * h["per"]
@@ -328,12 +378,13 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05) -> bool:
                 h["z"] = CONTACT + ((h["start"] - h["n"]) // row_size(h)) * h["gap"]
                 continue
             if h["stopped"]:
+                if front(h) < -FIRE:
+                    h["z"] += speed * dt  # stopped beyond reach: the street carries the squad in
                 continue
             h["z"] += (speed + h["v"]) * dt
             if h["stop"] > 0 and front(h) >= -h["stop"]:
                 h["z"] = -h["stop"] + ((h["start"] - h["n"]) // row_size(h)) * h["gap"]
                 h["stopped"] = True
-                h["st"] = max(h["every"] - h["first"], 0.0)
         in_range = [h for h in hs if front(h) >= -FIRE and h["n"] > 0]
         which = "all"
         if in_range and sq.has_snipers():
@@ -346,24 +397,46 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05) -> bool:
             h = max(in_range, key=front)
             damage(h, sq.dps(h["armour"], h["hp"], h["n"], which) * dt, sq.pierce_dps(h["hp"], h["n"], which) * dt)
         for h in hs:
+            # Ranged attacks (LevelSim._gunfire, _boss_fire). The planned squad never dodges or
+            # shields, so every telegraphed attack lands (capped at its share of the squad).
             if h["n"] <= 0 or not h["attack"] or h["melee"]:
                 continue
-            if not (h["stopped"] or (h["range"] > 0 and front(h) >= -h["range"])):
-                continue
-            h["st"] += dt
-            while h["st"] >= h["every"]:
-                h["st"] -= h["every"]
-                sq.lose(h["n"] * h["hit"])
+            cfg = LT_CFG if h["lt"] else BOSS_CFG
+            if h["every"] > 0 and (h["stopped"] or (h["range"] > 0 and front(h) >= -h["range"])):
+                h["st"] += dt
+                while h["st"] >= h["every"]:
+                    h["st"] -= h["every"]
+                    if h["boss"]:
+                        n = share_loss(sq.total(), int(cfg.get("gun_pct", 0)))
+                        sq.lose(n if had else min(n, sq.total() - 1))
+                    else:
+                        pending.append([t + h["warn"], h["n"] * h["hit"], h["cap"]])
+            bevery = float(cfg.get("barrage_every", 0.0))
+            if h["boss"] and bevery > 0 and front(h) >= -float(W["boss_halt"]):
+                if h["bt"] < 0:
+                    h["bt"] = max(bevery - float(cfg.get("barrage_first", 1.0)), 0.0)
+                h["bt"] += dt
+                while h["bt"] >= bevery:
+                    h["bt"] -= bevery
+                    pending.append([t + float(cfg.get("warn_s", 1.0)), -1, int(by_district(cfg.get("barrage_pct", 0), sq.d))])
         for h in hs:
-            # Return fire: shooters = share % of the gang (rounded up), rf_rate shots/s each,
-            # one troop per hit, while the front is within rf_range (LevelSim._return_fire).
+            # Return fire (LevelSim._return_fire): an opening volley on entering rf_range, then
+            # shooters = share % of the gang (rounded up, at most rf_max) x rf_rate shots/s;
+            # each hit one figure's troops, a volley capped (volley_loss).
             if h["n"] <= 0 or h["rf_rate"] <= 0 or h["melee"] or front(h) < -h["rf_range"]:
                 continue
-            h["rf_acc"] += (h["n"] * h["rf_share"] + 99) // 100 * h["rf_rate"] * dt
+            if not h["rf_open"]:
+                h["rf_open"] = True
+                h["rf_acc"] += RF_OPEN
+            h["rf_acc"] += min((h["n"] * h["rf_share"] + 99) // 100, h["rf_max"]) * h["rf_rate"] * dt
             shots = int(math.floor(h["rf_acc"]))
             if shots > 0:
                 h["rf_acc"] -= shots
-                sq.lose(shots)
+                n = volley_loss(sq.total(), shots)
+                sq.lose(n if had else min(n, sq.total() - 1))
+        for p in [p for p in pending if p[0] <= t + 1e-9]:
+            pending.remove(p)
+            sq.lose(share_loss(sq.total(), p[2], p[1]))
         for h in hs:
             if h["n"] <= 0:
                 continue
@@ -679,8 +752,9 @@ def scaled(n: int, k: float, minimum: int) -> int:
 
 
 def apply_scale(events: list[dict], k: float, kf: float = 1.0) -> None:
-    """Every gang's size (bosses: hp) and barrel blast x k; the last wave x kf more (same
-    rounding as tests/tune.gd)."""
+    """Every gang's size and barrel blast x k; the last wave x kf more (same rounding as
+    tests/tune.gd). Bosses and lieutenants keep their HP: it is designed in seconds of the
+    expected squad's fire (boss_hp, apply_boss_hp), never scaled (spec v2.1 section 1.3)."""
     if abs(k - 1.0) > 1e-9:
         for e in events:
             if e["type"] == "obstacle" and e.get("kind") == "barrel" and "kill" in e:
@@ -693,10 +767,49 @@ def apply_scale(events: list[dict], k: float, kf: float = 1.0) -> None:
         if abs(m - 1.0) < 1e-9:
             continue
         for g in e["groups"]:
-            if g["enemy"] == "boss":
-                g["hp"] = scaled(int(g.get("hp", ENEMIES["boss"]["hp"])), m, 50)
-            else:
+            if g["enemy"] != "boss":
                 g["n"] = scaled(int(g["n"]), m, 1)
+
+
+def apply_boss_hp(events: list[dict], level: int, cal: dict) -> None:
+    """Spec v2.1 section 1.3: with a calibrated boss_dps (Autopilot.boss_dps: the squad's dps
+    against him when he halts the street, on the stored route at the pace), every boss and
+    lieutenant gets hp_secs of it."""
+    dps = float(cal.get("boss_dps", 0.0))
+    if dps <= 0:
+        return
+    for e in events:
+        if e["type"] == "wave":
+            for g in e["groups"]:
+                if g["enemy"] == "boss":
+                    g["hp"] = boss_hp(district(level), dps, bool(g.get("lieutenant", False)))
+
+
+def lieutenant_wave(level: int, d: int, sq: Sq | None = None, at: int = 0) -> dict:
+    """Spec v2.1 section 1.3: the mini-boss wave of slot 5 (L5, 15, 25, 35, 45), the last wave
+    of its level. A boss group with "lieutenant": true (units.json lieutenant numbers: halt,
+    gun, `lt_barrage`; drawn 2.4x a thug, smaller bar, no liberation), arriving `at`.
+
+    With `sq` (the planned squad before this wave, changed in place to the squad after the
+    crew) a thug crew walks in front of him, sized like a boss crew, and his HP is
+    lieutenant.hp_secs of the planned squad's fire after it. Without `sq` he comes alone with
+    a district-sized estimate. build() replaces the HP with hp_secs x the calibrated boss_dps
+    when calibration.json has one; it is never scaled by k x kf."""
+    groups: list[dict] = []
+    if sq is not None:
+        crew, after = size_wave(sq, MIXES["crowd"], 0.08 + 0.06 * difficulty(level), 1.0 + difficulty(level))
+        groups = crew
+        sq.c = after.c
+    else:
+        after = Sq(d)
+        after.add("constable", cap_of(d) * 3 // 10)
+    dps = max(after.dps(int(ENEMIES["boss"]["armour"]), float(ENEMIES["boss"]["hp"]), 1), 5.0)
+    lt = {"enemy": "boss", "lieutenant": True, "n": 1, "hp": boss_hp(d, dps, True)}
+    if groups:
+        lt["gap"] = 18
+    if cap_of(d) > 1000:
+        lt["power"] = nice(int(ENEMIES["boss"]["power"]) * cap_of(d) / 1000.0)
+    return {"at": at, "type": "wave", "label": LT_BANNER, "groups": groups + [lt]}
 
 
 def star_thresholds(level: int, cal: dict) -> dict:
@@ -759,7 +872,9 @@ def mechanics_of(ev: dict) -> list[tuple[str, float]]:
         out.append((ev["kind"], at - 28))
     elif ev["type"] == "wave":
         for g in ev["groups"]:
-            out.append((g["enemy"], at - 8))
+            # A lieutenant is a boss group of his own kind: his own hint (if HINTS has one),
+            # never the district boss's.
+            out.append(("lieutenant" if g.get("lieutenant") else g["enemy"], at - 8))
     return out
 
 
@@ -1022,12 +1137,13 @@ def generate(level: int) -> dict:
             apply_gate(sq, pick)
         crew_mix = MIXES[rng.choice([m for m in mixes if m in ("crowd", "fast", "brutes", "riot")])]
         crew, after = size_wave(sq, crew_mix, 0.12 + 0.08 * diff, 1.0 + diff)
-        # Boss health: about 12 s of the planned squad's fire; his gun gets heavier each district.
+        # Boss health (spec v2.1 section 1.3): boss.hp_secs of the expected squad's fire. Here the
+        # planned squad's; build() replaces it with the calibrated boss_dps (the real squad on the
+        # stored route at the pace) once calibration.json has it. His gun and barrage take a
+        # share of the squad (units.json boss), so they need no per-level numbers.
         dps_boss = max(after.dps(int(ENEMIES["boss"]["armour"]), float(ENEMIES["boss"]["hp"]), 1), 5.0)
-        hp = nice(max(150, dps_boss * (9 + 3 * d)))
-        # His gun and his fists grow with the district's cap (a 100K squad must still feel them).
-        boss_grp = {"enemy": "boss", "n": 1, "gap": 22, "hp": hp,
-                    "shot_dmg": max(2 + 2 * d, (2 + 2 * d) * cap_of(d) // CAPS[0])}
+        boss_grp = {"enemy": "boss", "n": 1, "gap": 22, "hp": boss_hp(d, dps_boss)}
+        # His fists grow with the district's cap (a 100K squad must still feel them).
         if cap_of(d) > 1000:
             boss_grp["power"] = nice(int(ENEMIES["boss"]["power"]) * cap_of(d) / 1000.0)
         wave_at = at + 36
@@ -1065,6 +1181,7 @@ def build(level: int, seen: set, cal_all: dict) -> dict:
     events = lv["events"]
     stretch(events)
     apply_scale(events, float(cal.get("k", 1.0)), float(cal.get("kf", 1.0)))
+    apply_boss_hp(events, level, cal)
     # One-time icon hints: the first time ever each mechanic shows up. A bomb charge at the
     # start counts as the bomb's debut: point at its button before the first wave.
     hints = []
@@ -1138,6 +1255,11 @@ def merge(paths: list[str]) -> None:
         for r in json.loads(Path(p).read_text(encoding="utf-8")):
             key = str(int(r["level"]))
             old = cal.get(key, {})
+            if "k" not in r:
+                # A tools/boss_dps.gd report: only the boss HP rule's expected dps changes.
+                if float(r.get("boss_dps", 0.0)) > 0:
+                    cal[key] = dict(old, boss_dps=round(float(r["boss_dps"]), 1))
+                continue
             entry = {"k": round(float(old.get("k", 1.0)) * float(r["k"]), 4),
                      "kf": round(float(old.get("kf", 1.0)) * float(r.get("kf", 1.0)), 4),
                      "best_ratio": round(float(r["best_ratio"]), 3),
@@ -1152,6 +1274,12 @@ def merge(paths: list[str]) -> None:
                 # district-1 squad (most levels end far below their district's cap).
                 if r.get("route") and int(r.get("best_troops", 0)) > 0:
                     entry["coin_ref"] = int(r["best_troops"])
+            # Spec v2.1 section 1.3: the boss HP rule's expected dps (Autopilot.boss_dps), kept
+            # until a report measures it again.
+            if float(r.get("boss_dps", 0.0)) > 0:
+                entry["boss_dps"] = round(float(r["boss_dps"]), 1)
+            elif old.get("boss_dps"):
+                entry["boss_dps"] = old["boss_dps"]
             cal[key] = entry
     ordered = {k: cal[k] for k in sorted(cal, key=int)}
     CAL_PATH.write_text(json.dumps(ordered, indent=1) + "\n", encoding="utf-8", newline="\n")
