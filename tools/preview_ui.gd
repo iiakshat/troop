@@ -120,6 +120,15 @@ func _make(name: String, holder: Control) -> Control:
 			else:
 				r.show_loss(int(_args.get("level", "7")), String(_args.get("cause", "brute")), float(_args.get("progress", "0.82")), 64)
 			return r
+		"building":
+			# The first build (spec v2 §12.3 hand audit): level 1 beaten, nothing built yet.
+			var g: Node = root.get_node("Game")
+			g.save["stars"]["1"] = 3
+			g.save["unlocked"] = maxi(int(g.save["unlocked"]), 2)
+			g.save["seen_hints"].erase("first_build")
+			g.save["city"] = {}
+			g.save["coins"] = int(_args.get("coins", g.save["coins"]))
+			return _ui("building_panel").new(String(_args.get("id", "cafe")))
 		"toast":
 			_ui("rank_toast").show(holder, String(_args.get("unit", "inspector")))
 			return null
