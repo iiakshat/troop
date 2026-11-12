@@ -65,13 +65,18 @@ void fragment() {
 	float edge = smoothstep(0.40, 0.48, hex_dist(hp));
 	// A bright scan band climbs from the road over the top and lights the lattice it passes.
 	float band = fract(t * scan_speed) * 1.6 - 0.4;
-	float scan = exp(-pow((up - band) / 0.09, 2.0));
+	// Gaussians square their argument directly: pow() of a negative base is undefined in GLSL ES
+	// and SPIR-V (NaN on Mali/Adreno), and these bases go negative below the band, the road
+	// line and inside a ripple ring.
+	float zs = (up - band) / 0.09;
+	float scan = exp(-zs * zs);
 	float lattice = edge * hex_alpha * (0.2 + 0.8 * smoothstep(0.2, 0.8, fres)) * (0.55 + 1.6 * scan);
 	lattice *= 1.0 - smoothstep(0.55, 0.85, d.y);   // no pinched cells round the top pole
 	float wall = FRONT_FACING ? 1.0 : back_wall;   // the far wall is fainter
 
 	// Where it meets the road: a bright seam, so it stands on the street.
-	float seam = contact * exp(-pow(v_height / contact_m, 2.0));
+	float zh = v_height / contact_m;
+	float seam = contact * exp(-zh * zh);
 
 	// Ripples where blocked fire hit: a white ring running out from the hit, and a core flash.
 	float ripple = 0.0;
@@ -80,7 +85,8 @@ void fragment() {
 		if (age < 1.0) {
 			float dist = distance(d, hits[i].xyz);
 			float k = 1.0 - age;
-			float ring = exp(-pow((dist - age * hit_reach) / hit_width, 2.0));
+			float zr = (dist - age * hit_reach) / hit_width;
+			float ring = exp(-zr * zr);
 			float core = exp(-dist * dist / 0.03) * k * k;
 			ripple += ring * k + core;
 		}

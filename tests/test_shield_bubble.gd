@@ -195,3 +195,18 @@ func test_hud_shield_button_drains_while_up() -> void:
 	near(ring.frac, 1.0, "a new shield (a revive's 2 s) starts full again")
 	tree.root.remove_child(hud)
 	hud.free()
+
+
+## pow() of a negative base is undefined in GLSL ES and SPIR-V (NaN on Mali and Adreno, black
+## or solid patches over the squad): every Gaussian squares its argument directly, and the one
+## pow left has a base of 0 or more (the Fresnel term).
+func test_shader_never_powers_a_negative_base() -> void:
+	var code := FileAccess.get_file_as_string("res://src/game/shield_bubble.gdshader")
+	code = RegEx.create_from_string("//.*").sub(code, "", true)  # comments may name pow()
+	var bases := []
+	var re := RegEx.create_from_string("pow[(]([^,]+),")
+	for m in re.search_all(code):
+		bases.append(m.get_string(1).strip_edges())
+	eq(bases, ["fres"], "the only pow is the Fresnel rim's (base 1 - |cos| >= 0)")
+	check(code.contains("float fres = 1.0 - facing;") and code.contains("clamp(abs(dot(n, normalize(VIEW))), 0.0, 1.0)"),
+		"the Fresnel base is clamped to 0..1")
