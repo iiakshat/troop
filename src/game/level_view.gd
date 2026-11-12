@@ -75,6 +75,7 @@ var _finish: Node3D
 var _hq: Node3D
 var _hq_fill: MeshInstance3D
 var finale: BottleShot = null
+var item_card: NewItemCard = null   # v2 §11: the "this is new" card + gold outline (new_item_card())
 var _hero_throw_t := -1.0
 var _hero_knife_t := 9.0         # seconds since the hero's last in-level knife throw
 var _spotlight := 0.0            # seconds of new-rank spotlight left (real time)
@@ -216,6 +217,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			use_power("shield")
 		elif k == KEY_B:
 			use_power("bomb")
+
+
+## The level's "this is new" card (spec v2 §11), made on first use.
+func new_item_card() -> NewItemCard:
+	if item_card == null:
+		item_card = NewItemCard.new().setup(self)
+		add_child(item_card)
+	return item_card
 
 
 func _move(dir: int) -> void:
@@ -403,6 +412,7 @@ func _handle_events(events: Array) -> void:
 			"shield_on":
 				Sfx.play("shield")
 			"hint":
+				new_item_card().show_item(e["ev"])  # first: it marks the hint seen, so Hud's old hand stays away
 				hint.emit(e["ev"])
 			"finish_spawn":
 				_spawn_finish(float(e["at"]))
