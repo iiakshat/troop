@@ -1,0 +1,35 @@
+{
+  "_doc": "AdMob setup (spec v2 §8). Not secret. provider: admob | placeholder (placeholder forces the stub popup everywhere). is_real=false uses Google's official test IDs below; the owner pastes real IDs into android.real and sets is_real=true (docs/owner_ads_setup.md). tools/ads_export_cfg.py copies the app ID into addons/AdmobPlugin/android_export.cfg at build time. child_tags / adult_tags are the request settings per audience (Audience, Game.is_child).",
+  "provider": "admob",
+  "is_real": false,
+  "android": {
+    "test": {
+      "app_id": "ca-app-pub-3940256099942544~3347511713",
+      "rewarded": "ca-app-pub-3940256099942544/5224354917",
+      "interstitial": "ca-app-pub-3940256099942544/1033173712"
+    },
+    "real": {
+      "app_id": "",
+      "rewarded": "",
+      "interstitial": ""
+    }
+  },
+  "child_tags": {
+    "child_directed": true,
+    "under_age_of_consent": true,
+    "max_rating": "G",
+    "npa": true,
+    "ad_id": false,
+    "consent_form": false
+  },
+  "adult_tags": {
+    "child_directed": false,
+    "under_age_of_consent": false,
+    "max_rating": "PG",
+    "npa": false,
+    "ad_id": true,
+    "consent_form": true
+  },
+  "load_timeout_seconds": 8,
+  "test_device_hashed_ids": []
+}
