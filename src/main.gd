@@ -647,7 +647,7 @@ func _perf_frame() -> void:
 	var st := "menu"
 	var playing := false
 	if is_instance_valid(view):
-		_perf_level_t += ms / 1000.0
+		_perf_level_t += 1.0 / 60.0  # by frames: the loading frame itself must not count as 2 s
 		st = "%s:%d" % [view._state, view.sim.squad.total()]
 		playing = view._state == "play"
 		marks = " ".join(view.perf_marks)
