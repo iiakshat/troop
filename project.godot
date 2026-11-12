@@ -5,11 +5,17 @@ config_version=5
 
 [application]
 
-config/name="Troop"
+config/name="Siren Squad"
 config/version="0.1.0"
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
-config/icon="res://icon.svg"
+config/icon="res://assets/brand/icon.png"
+; The rename keeps the save where it was: %APPDATA%/Godot/app_userdata/Troop (the default
+; path, written out) on PC. Android keeps user:// in the app's own files dir.
+config/use_custom_user_dir=true
+config/custom_user_dir_name="Godot/app_userdata/Troop"
+boot_splash/bg_color=Color(0.043, 0.078, 0.188, 1)
+boot_splash/show_image=false
 config/quit_on_go_back=false
 
 [autoload]

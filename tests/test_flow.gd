@@ -73,3 +73,104 @@ func test_sfx_ids_and_calls() -> void:
 	sfx.duck_music(true)
 	sfx.duck_music(false)
 	check(true, "Sfx duck calls ran")
+
+
+## BRAND: the boot screens (axnex intro -> Siren Squad logo -> loading -> the flow).
+## Driven by advance()/tap() so no frames or tweens are needed.
+func _boot_seq(first_launch: bool, flow: Callable) -> BootSequence:
+	var seq := BootSequence.new(first_launch, flow)
+	seq.write_seen = false  # tests never write the save
+	return seq
+
+
+func test_boot_shows_intro_then_logo_on_first_launch() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	var game: Node = tree.root.get_node_or_null("Game")
+	var keep: Dictionary = game.save.duplicate(true)
+	game.save["seen_hints"] = []
+	check(BootSequence.is_first_launch(), "a save without the intro hint is a first launch")
+	var started := [0]
+	var seq := _boot_seq(true, func(): started[0] += 1)
+	eq(seq.stage, "intro", "the axnex intro comes first")
+	seq.tap()
+	eq(seq.stage, "intro", "a tap does not skip the intro on the first launch")
+	seq.advance(BootIntro.DURATION * 0.5)
+	eq(seq.stage, "intro", "the intro runs its full length")
+	seq.advance(BootIntro.DURATION * 0.5 + 0.02)
+	eq(seq.stage, "logo", "the Siren Squad logo follows the intro")
+	check((game.save["seen_hints"] as Array).has("intro"), "a finished intro is remembered")
+	check(not BootSequence.is_first_launch(), "the next launch is not a first launch")
+	seq.advance(TitleLogo.DURATION + 0.02)
+	eq(seq.stage, "loading", "the loading screen follows the logo")
+	eq(started[0], 0, "the game flow waits for the loading bar")
+	for i in 120:
+		seq.advance(1.0 / 30.0)
+	eq(started[0], 1, "the game flow starts once, when the bar is full")
+	eq(seq.stage, "done", "the boot screens fade out and finish")
+	seq.free()
+	game.save = keep
+
+
+func test_intro_skippable_after_first_launch() -> void:
+	var started := [0]
+	var seq := _boot_seq(false, func(): started[0] += 1)
+	eq(seq.stage, "intro", "later launches still open on the intro")
+	seq.advance(0.1)
+	seq.tap()
+	eq(seq.stage, "logo", "a tap skips the intro after the first launch")
+	seq.tap()
+	eq(seq.stage, "loading", "a tap also hurries the logo after the first launch")
+	seq.tap()
+	eq(seq.stage, "loading", "the loading bar cannot be skipped")
+	seq.free()
+
+
+## The rename to Siren Squad keeps the save where it was (%APPDATA%/Godot/app_userdata/Troop).
+func test_user_dir_unchanged() -> void:
+	var dir := OS.get_user_data_dir().replace("\\", "/")
+	check(dir.ends_with("/Troop"), "user dir still ends with /Troop (got %s)" % dir)
+	check(dir.ends_with("app_userdata/Troop"), "user dir is still Godot/app_userdata/Troop (got %s)" % dir)
+	eq(String(ProjectSettings.get_setting("application/config/name")), "Siren Squad", "app name")
+
+
+## BRAND: the backup-joins siren chirp is throttled to once per 3 s.
+func test_siren_chirp_throttled() -> void:
+	var sfx_script = preload("res://src/autoload/sfx.gd")
+	check(float(sfx_script.MIN_GAP.get("siren_chirp", 0.0)) >= 3.0, "siren_chirp at most once per 3 s")
+	check(ResourceLoader.exists("res://assets/audio/siren_chirp.ogg"), "siren_chirp.ogg exists")
+	check(ResourceLoader.exists("res://assets/audio/siren_whoop.ogg"), "siren_whoop.ogg exists")
+
+
+## BRAND: every loading tip is pictures only, each a real icon (no star_icon fallback), and
+## the tap tip uses the HUD's firepower unit (spec v2 §12.4): a tapping hand -> lightning.
+func test_loading_tips_use_real_icons() -> void:
+	for tip in LoadingScreen.TIPS:
+		for it in tip:
+			if it == ">":
+				continue
+			var name := String(it)
+			check(ResourceLoader.exists("res://assets/icons/gloss/%s.png" % name)
+				or ResourceLoader.exists("res://assets/icons/%s.svg" % name), "tip icon %s exists" % name)
+	var tap_tip: Array = LoadingScreen.TIPS[0]
+	eq(String(tap_tip[0]), "hand", "the first tip is the tap")
+	eq(String(tap_tip[tap_tip.size() - 1]), "power", "tapping raises firepower (the lightning unit)")
+	check(LoadingScreen.TAP_ICONS.has("hand"), "the hand in a tip is drawn as a tap (ripple), not a pointer")
+
+
+## BRAND: the Android preset carries the Siren Squad package and every launcher icon layer,
+## including the monochrome one (Android 13 themed icons; unset, Godot ships its own logo).
+func test_android_preset_is_branded() -> void:
+	var cfg := ConfigFile.new()
+	eq(cfg.load("res://export_presets.cfg"), OK, "export_presets.cfg loads")
+	eq(String(cfg.get_value("preset.0.options", "package/unique_name", "")), "com.iiakshat.sirensquad", "package ID")
+	eq(String(cfg.get_value("preset.0.options", "package/name", "")), "Siren Squad", "app name")
+	var sizes := {"launcher_icons/main_192x192": 192, "launcher_icons/adaptive_foreground_432x432": 432,
+		"launcher_icons/adaptive_background_432x432": 432, "launcher_icons/adaptive_monochrome_432x432": 432}
+	for key in sizes:
+		var path := String(cfg.get_value("preset.0.options", key, ""))
+		check(path.begins_with("res://assets/brand/"), "%s is a brand icon (got '%s')" % [key, path])
+		if ResourceLoader.exists(path):
+			var tex := load(path) as Texture2D
+			eq(tex.get_width(), int(sizes[key]), "%s is %d px" % [key, sizes[key]])
+		else:
+			check(false, "%s exists" % path)

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-14 26 574 118" width="1148" height="236">
+<!-- axnex: our studio wordmark (original, drawn by hand). Geometric lowercase strokes;
+     each x crosses a police-blue and a siren-red stroke. -->
+<g fill="none" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+<g stroke="#ffffff">
+<circle cx="45" cy="85" r="34"/>
+<path d="M79 51 V119"/>
+<path d="M239 51 V119 M239 85 A34 34 0 0 1 307 85 V119"/>
+<path d="M354 85 H420 A33 33 0 1 0 410.3 108.3"/>
+</g>
+<path stroke="#3fa9ff" d="M125 51 L193 119"/>
+<path stroke="#ff4a4a" d="M193 51 L125 119"/>
+<path stroke="#3fa9ff" d="M467 51 L535 119"/>
+<path stroke="#ff4a4a" d="M535 51 L467 119"/>
+</g>
+</svg>

@@ -1,0 +1,9 @@
+A mobile game brand art sheet on a perfectly flat solid pure green background (#00FF00) everywhere, with no gradients, no shadows, no glow and no texture on the background. Three separate items with generous empty green space between them; nothing touches another item or the image edge. Do not use any green or yellow-green inside the art.
+
+Style for every item: premium glossy 3D mobile game art like the Brawl Stars or Clash Royale logos. Chunky rounded shapes, bold saturated colours, strong soft highlights and gloss, a thick dark navy outline (#141c3a) around each whole silhouette, crisp clean edges.
+
+Item 1 (the top half of the image, wide and centred): the game logo. The words read exactly "SIREN SQUAD", spelled S-I-R-E-N on the first line and S-Q-U-A-D on the second line, stacked and centred, both lines the same width. Huge chunky bold rounded 3D capital letters with a white-to-pale-sky-blue face, a deep police-blue 3D extrude underneath and a thick dark navy outline. Sitting on top of the first line, slightly overlapping it: a wide chunky police light-bar (a rounded rectangle) whose left half is a glowing bright blue lens and right half is a glowing bright red lens, with a chrome centre and small white sparkle highlights. A soft light glow of blue on the left and red on the right is allowed only inside the navy outline. No other words, no letters other than SIREN SQUAD, no slogan.
+
+Item 2 (bottom left quarter): the app icon emblem, no text: a fat gold six-point police star badge seen from the front, with a chunky police light-bar sitting across its upper half, the left lens glowing blue and the right lens glowing red. Centred and compact, roughly square.
+
+Item 3 (bottom right quarter): the same police light-bar on its own, seen from the front, wide and short: rounded chrome body, left lens glowing blue, right lens glowing red, white sparkle highlights. No text.
