@@ -108,7 +108,7 @@ func _ready() -> void:
 	ui.add_child(result)
 	result.visible = false
 	if _boot_screens():
-		# Brand (spec v2 §1): axnex intro -> logo -> loading; the flow starts under the full bar.
+		# Brand (owner 2026-11-12): axnex intro -> key-art loading screen; the flow builds once its loads are in.
 		add_child(BootSequence.new(BootSequence.is_first_launch(), _begin_flow))
 	else:
 		_begin_flow()

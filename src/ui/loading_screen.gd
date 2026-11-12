@@ -14,7 +14,7 @@ extends Control
 
 const SHOTS := [
 	{"path": "res://assets/brand/keyart_charge.jpg", "focus": Vector2(0.5, 0.45)},
-	{"path": "res://assets/brand/keyart_standoff.jpg", "focus": Vector2(0.45, 0.47)},
+	{"path": "res://assets/brand/keyart_standoff.jpg", "focus": Vector2(0.5, 0.47)},
 ]
 const SHOT_FILE := "user://boot_art.cfg"
 const SHOT_FILE_DEBUG := "user://boot_art_debug.cfg"  # debug-save runs keep the player's turn
