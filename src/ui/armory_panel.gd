@@ -529,6 +529,15 @@ func lock_icon_visible(id: String) -> bool:
 	return (_cards[id]["lock"] as Control).visible and (_cards[id]["lock_ic"] as Control).visible
 
 
+## The buy button as shown: {icons, text, disabled} (tests).
+func buy_face(id: String) -> Dictionary:
+	var b: Button = _cards[id]["buy"]
+	var row: HBoxContainer = b.get_meta("row") if b.has_meta("row") else null
+	if row == null:
+		return {"icons": [], "text": b.text, "disabled": b.disabled}
+	return {"icons": row.get_meta("names", []), "text": (row.get_meta("label") as Label).text, "disabled": b.disabled}
+
+
 func lock_text(id: String) -> String:
 	return (_cards[id]["lock_label"] as Label).text
 

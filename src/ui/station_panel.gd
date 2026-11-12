@@ -340,6 +340,15 @@ func refresh() -> void:
 			UiKit.button_row(buy, ["coin"], UiKit.fmt_coins(cost), 40)
 
 
+## A room's buy button as shown: {icons, text, disabled} (tests).
+func buy_face(room: String) -> Dictionary:
+	var b: Button = _rows[room]["buy"]
+	var row: HBoxContainer = b.get_meta("row") if b.has_meta("row") else null
+	if row == null:
+		return {"icons": [], "text": b.text, "disabled": b.disabled}
+	return {"icons": row.get_meta("names", []), "text": (row.get_meta("label") as Label).text, "disabled": b.disabled}
+
+
 ## True when the player can afford at least one upgrade (drives the "!" badges).
 static func anything_affordable() -> bool:
 	for room in Game.economy["station_order"]:

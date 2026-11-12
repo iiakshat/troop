@@ -234,8 +234,19 @@ func test_armory_panel_shows_lock_and_level() -> void:
 	ap.buy("knives")
 	eq(game.weapon_level("knives"), Vector2i(1, 1), "bought one step")
 	eq(ap.pips_filled("knives"), 1, "one pip filled")
-	for i in 4:
+	for i in 3:
 		ap.buy("knives")
+	# Spec v2.1 §3.2: the bar fills, the evolution waits for L9 (lock + level pin + 9).
+	eq(game.weapon_level("knives"), Vector2i(1, 4), "the bar is full at level 1")
+	var face: Dictionary = ap.buy_face("knives")
+	check(bool(face["disabled"]) and (face["icons"] as Array).has("lock") and String(face["text"]) == "9", "the evolving buy shows the lock and L9 (%s)" % str(face))
+	ap.buy("knives")
+	eq(game.weapon_level("knives"), Vector2i(1, 4), "no evolution before L9")
+	game.save["unlocked"] = 9
+	ap.refresh()
+	ap.buy("knives")
+	game.save["unlocked"] = 1
+	ap.refresh()
 	eq(game.weapon_level("knives"), Vector2i(2, 0), "the 5th buy evolved the knife")
 	eq(ap.name_text("knives"), String(Armory.tier_info("knives", 2)["name"]), "the new tier's name")
 	eq(ap.pips_filled("knives"), 0, "the bar starts again")

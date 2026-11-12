@@ -376,8 +376,9 @@ static func recommended_power(level: int, economy: Dictionary = {}) -> float:
 # ---------------------------------------------------------------- what to buy (v1.1 item 5)
 
 ## Everything the player could spend coins on right now (coins aside): the next level of each
-## station room that is not locked or maxed, the next step of each Armory track that is open
-## and not maxed, the next build of each building that can start (district reached, a builder
+## station room that is not locked (district or v2.1 level gate) or maxed, the next step of each
+## Armory track that is open, not maxed and not an evolution into a tier the player's level has
+## not opened (v2.1), the next build of each building that can start (district reached, a builder
 ## free), and each cosmetic not owned yet. Each entry: {kind: room|weapon|building|cosmetic, id,
 ## cost, gain, value}; gain = Squad Power added (room, weapon: level-start firepower, so 0 for a
 ## rank that joins mid-level, the cap, the coin bonus and a Bottle Shot track), coins per hour

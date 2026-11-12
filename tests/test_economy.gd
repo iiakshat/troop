@@ -482,6 +482,32 @@ func test_training_gated_l2_l3_tap_check() -> void:
 	eq(int(g.level_upgrades({}, 9)["squad"]), 3, "Game: L9 brings all three")
 	eq(int(g.level_upgrades({})["squad"]), 3, "Game: no level given = everything owned")
 	g.free()
+	# The station shows the lock, the level pin and the level on training's button.
+	var tree := Engine.get_main_loop() as SceneTree
+	var game: Node = tree.root.get_node_or_null("Game")
+	if game == null:
+		return
+	var keep: Dictionary = game.save.duplicate(true)
+	var keep_path: String = game.save_path
+	game.save_path = ""
+	game.boot({})
+	game.save["unlocked"] = 3
+	game.save["coins"] = 5000
+	var sp := StationPanel.new()
+	tree.root.add_child(sp)
+	if not sp.is_node_ready():
+		sp._ready()
+	sp.refresh()
+	var face: Dictionary = sp.buy_face("training")
+	check(bool(face["disabled"]) and (face["icons"] as Array).has("lock") and String(face["text"]) == "4", "station: training shows the lock and L4 (%s)" % str(face))
+	game.save["unlocked"] = 4
+	sp.refresh()
+	face = sp.buy_face("training")
+	check(not bool(face["disabled"]) and (face["icons"] as Array).has("coin"), "station: training 1 for sale at L4 (%s)" % str(face))
+	tree.root.remove_child(sp)
+	sp.free()
+	game.save = keep
+	game.save_path = keep_path
 
 
 ## Spec v2.1 §3.4: builds take long enough to finish between sessions, by district: 2-10 min,
