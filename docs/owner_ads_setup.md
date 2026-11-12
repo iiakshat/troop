@@ -102,4 +102,5 @@ downloads Gradle and the Android libraries (a few hundred MB, then cached in `%U
 | Firebase console shows no users | `google-services.json` is in the project root, its package is `com.iiakshat.sirensquad`, and you answered the age wheel as an adult. Debug view: `adb shell setprop debug.firebase.analytics.app com.iiakshat.sirensquad`. |
 | Real ads never show | New AdMob apps can take hours; check AdMob → Apps for "limited ad serving"; app-ads.txt. The placeholder stands in meanwhile. |
 | Build says "Missing android_source.zip" | Run `python -I tools/setup_android.py`. |
+| First build stops while downloading Gradle or libraries | Slow connection: run `build_apk.bat` again. The Gradle download resumes where it stopped, and finished libraries stay cached. |
 | Build fails in Gradle after a Godot upgrade | `python -I tools/android_template.py --force` reinstalls the template for the new version. |

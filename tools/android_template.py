@@ -7,7 +7,9 @@
 2. Fetches the Gradle distribution the template's wrapper wants into %USERPROFILE%/.gradle (resumable,
    retried, SHA-256 checked) and gives the wrapper a longer network timeout. The wrapper's own
    download gives up after 10 s without data, which a slow connection hits.
-3. Patches android/build/build.gradle for Firebase: the google-services Gradle plugin, applied only
+3. Turns the Gradle daemon off (gradle.properties). A daemon outlives the export and keeps Godot's
+   console handle open, so build_apk.bat would hang after a finished export.
+4. Patches android/build/build.gradle for Firebase: the google-services Gradle plugin, applied only
    when android/build/google-services.json exists. The Firebase export plugin copies the owner's
    google-services.json from the project root into android/build/ at export time. That file is
    git-ignored everywhere and never committed; without it the APK still builds, and Firebase simply
@@ -170,9 +172,21 @@ def prefetch_gradle():
     os.replace(part, zip_path)  # the wrapper unpacks it on the first build
 
 
+def no_daemon():
+    path = BUILD / "gradle.properties"
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    if re.search(r"^org\.gradle\.daemon=", text, re.M):
+        text = re.sub(r"^org\.gradle\.daemon=.*$", "org.gradle.daemon=false", text, flags=re.M)
+    else:
+        text = (text.rstrip("\n") + "\n# %s: no daemon (it would keep the export open)\n"
+                "org.gradle.daemon=false\n" % MARK)
+    path.write_text(text, encoding="utf-8")
+
+
 def main():
     install(force="--force" in sys.argv)
     prefetch_gradle()
+    no_daemon()
     patch_gradle()
 
 
