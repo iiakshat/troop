@@ -186,7 +186,7 @@ The owner played v1.1 on a phone. Verdict: "okayish, promising, but it feels bui
   - Squad Power, the loss tip and the "best next purchase" hand include weapon upgrades.
 - **In the level:** the same low-poly weapons, recoloured and slightly reshaped per tier, so performance stays light.
 - **Difficulty:**
-  - From district 2 on, the levels assume a player who spends coins on weapons at the expected pace. A player who never upgrades struggles around districts 2-3.
+  - From mid district 1 (about L5-L7) on, the levels assume a player who spends coins on weapons at the expected pace: gently at first, then more. A player who never upgrades stalls in late district 1 or early district 2.
   - Good decisions still matter as much as power.
   - Extend `tests/econ_sim.gd` so coins (with and without the x2 ad) → upgrades → power keep each level's win target, and show 1-3 meaningful buys after most wins.
 - **Hero skins:** cosmetic only, sold for coins in the existing Style panel. Outfits for the current hero model now; Mixamo heroes later.
@@ -247,10 +247,31 @@ The owner played v1.1 on a phone. Verdict: "okayish, promising, but it feels bui
 - Update `CLAUDE.md`, `DECISIONS.md` and `ASSETS.md`.
 - Git flow as before: `dev`, a green local build, then fast-forward `main` and push.
 
+## 11. Hints and pointers: one clear visual language
+
+- **Owner's problem.** The ghost hand that appears mid-level (the `hint` events in the level files: sergeant, pothole, armour, barrel and so on, plus the gate-pick lesson) is ugly and unclear. You can't tell whether it means "something new unlocked", "go this way", or just "this exists", and it points in arbitrary directions.
+- **Rule:** each kind of message gets its own look, never shared:
+  - **Teaching a gesture** (first run only: drag, tap-to-fire, the bottle weapons):
+    - an animated hand that performs the gesture (a tap ripple, a swipe trail) where you should do it
+    - the screen dimmed around it
+    - This is the only use of the hand in a level.
+  - **"This is new"** (a new enemy, obstacle, rank or power appears for the first time):
+    - no hand
+    - the object gets a pulsing gold outline and a small "new" burst badge (sparkle + "!")
+    - a one-time icon card slides in at the top edge: the object's icon, then ▸ its effect as icons and numbers (barrel: shoot → fuse → blast kills N)
+    - No freeze. It disappears by itself after about 2 s.
+  - **"Best choice here"** (only for the first gate lesson):
+    - green chevrons painted on the road leading into the best lane
+    - a result preview above the gate (squad 16 ▸ 48)
+    - No hand pointing sideways.
+  - **"Buy this" in menus** (best next purchase, loss tip): the hand stays, bouncing *on* the button, always next to the item's icon and the before ▸ after number.
+- **New hand art:** a glossy, polished cartoon hand in the game's style, replacing the current one, with a soft shadow.
+- Remove every hand that points at nothing in particular. Each hint must be anchored to its object and follow it on screen.
+
 ## Calibration, migration and data rules (Claude's calls after the builder check)
 
 1. **Upgrades gate progress, fairly.** This replaces v1's "every level is winnable without purchases" (the owner: upgrading should be required).
-   - From district 2 on, some levels need upgraded weapons.
+   - **It starts gently in district 1** (owner): from about L5-L7 a few cheap weapon steps are needed. The requirement grows from there, and §6's "from district 2 on" wording changes to match.
    - Every level stays winnable with what a player can buy from coins earned by playing, with **no ads**. Replaying earlier levels for coins counts.
    - Ads only speed this up.
    - Squad Power and the loss tip become real guidance, not decoration.
