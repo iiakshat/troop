@@ -282,20 +282,35 @@ func test_bomb_kills_apply_at_landing_not_at_the_tap() -> void:
 
 
 func test_levels_are_winnable_and_reward_planning() -> void:
-	# Every level stores a winning lane route found by tests/tune.gd (`route`; levels 1-10
-	# also `route_np`, which wins without powers). Random routes (sampled, seeded) must not
-	# do better than the planned one on average: planning pays.
+	# Plan v2 Task 13: the levels are calibrated (tests/tune.gd profile=paced) for a player
+	# with the no-ad upgrade pace (tests/econ_model.gd), tapping about 4/s, with no shield or
+	# bomb. Every level stores a lane route that profile wins. Random routes (sampled, seeded)
+	# must not do better than the planned one on average: planning pays.
+	var Model = load("res://tests/econ_model.gd")
+	var pace: Dictionary = Model.pace(Model.run(Config.economy(), Config.load_json("res://config/finale.json"), units))
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 4242
 	var planned_better := 0
+	var zero_lost := []
 	for n in range(1, Config.LEVEL_COUNT + 1):
 		var lv := Config.level(n)
+		var up: Dictionary = pace[str(n)]
 		var route: Array = lv.get("route", [])
 		check(not route.is_empty(), "L%d has a stored route" % n)
-		var best := _run(lv, route)
-		eq(best["state"], "strike", "L%d planned route wins" % n)
-		if n <= 10:
-			eq(_run(lv, lv.get("route_np", route), false)["state"], "strike", "L%d wins without powers" % n)
+		var best := Autopilot.run(lv, units, route, up, false)
+		eq(best["state"], "strike", "L%d planned route wins with the paced upgrades and no powers" % n)
+		# Spec v2 section 2 / calibration rule 2: a non-tapper with the same upgrades wins every
+		# level from L6 with the stored decisions, loses L2-L3; L1 needs only light tapping.
+		var cold := Autopilot.run(lv, units, route, up, false, 1.0 / 30.0, false, 0.0)
+		if n >= 6:
+			eq(cold["state"], "strike", "L%d a non-tapper wins with the stored route" % n)
+		elif n == 2 or n == 3:
+			check(cold["state"] != "strike", "L%d a non-tapper loses" % n)
+		if n == 1:
+			eq(Autopilot.run(lv, units, route, up, false, 1.0 / 30.0, false, 1.5)["state"], "strike", "L1 is won with light tapping (1.5/s)")
+		# Rule 1: upgrades gate progress from mid district 1 (the stored route, no upgrades).
+		if n >= 5 and n <= 10 and Autopilot.run(lv, units, route, {}, false)["state"] != "strike":
+			zero_lost.append(n)
 		if n % 3 != 1 and n > 3:
 			continue  # sample: random routes on a third of the levels keep the suite fast
 		var rows := Autopilot.gate_row_count(lv)
@@ -304,12 +319,13 @@ func test_levels_are_winnable_and_reward_planning() -> void:
 			var r: Array = []
 			for j in rows:
 				r.append(rng.randi_range(0, 2))
-			var res := _run(lv, r)
+			var res := Autopilot.run(lv, units, r, up, false)
 			sum += int(res["troops"]) if res["state"] == "strike" else 0
 		check(int(best["troops"]) * 4 >= sum, "L%d planned route beats random routes on average" % n)
 		if int(best["troops"]) * 4 > sum:
 			planned_better += 1
 	check(planned_better >= 10, "planning clearly pays on most sampled levels (%d)" % planned_better)
+	check(not zero_lost.is_empty(), "with zero upgrades the stored route loses at least one of L5-L10")
 	# Operation order (level 2, rows 2-3): +12 then x3 beats x3 then +12.
 	var l2 := Config.level(2)
 	var smart := LevelSim.new(l2, units)
@@ -893,6 +909,31 @@ func test_gang_within_priority_takes_fire_before_red_gate() -> void:
 	var far := _priority_sim(-25.0)
 	far._shoot(1.0 / 30.0)
 	eq(far.target_kind, "gate", "a gang outside 15 m: the nearer red gate is shot first")
+
+
+## Integration fix (calibration found it): gunmen stop at 26 m, outside the 15 m priority, and
+## the street halts for them, so a squad behind a climbing red gate shot the gate forever while
+## the gunmen killed it troop by troop. A gang that is firing at the squad (return fire in
+## range, or a stopped shooter) now takes the fire before any lane object.
+func test_a_gang_firing_at_the_squad_takes_fire_before_a_red_gate() -> void:
+	var lvl := {"events": [
+		{"at": 20, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 29}]},
+		{"at": 120, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": -70, "step": 30, "max": 85}]},
+		{"at": 121, "type": "wave", "groups": [{"enemy": "gunman", "n": 14}]},
+		{"at": 200, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	_step_until(sim, func(): return not sim.hordes.is_empty() and not sim.rows.is_empty())
+	sim.rows[0]["z"] = -10.0
+	for g in sim.rows[0]["gates"]:
+		g["z"] = -10.0
+	var h: Dictionary = sim.hordes[0]
+	h["z"] = -26.0 + LevelSim.killed_rows(h) * float(h["row_gap"])
+	check(LevelSim.fires_back(h), "gunmen at 26 m fire at the squad")
+	sim._shoot(1.0 / 30.0)
+	eq(sim.target_kind, "horde", "the gang firing at the squad is shot before the nearer red gate")
+	_step_until(sim, func(): return sim.state != "run" or sim.hordes.is_empty())
+	check(sim.squad.total() > 15, "the squad kills the gunmen instead of bleeding out (%d left)" % sim.squad.total())
 
 
 # ---------------------------------------------------------------- v2 §12.4: squad cap, big numbers

@@ -706,8 +706,10 @@ func _shoot(dt: float) -> void:
 	var h = _front_horde(fire_range)
 	var t = _lane_target()
 	# Bullets hit whichever is nearer in the lane: the gang's front or a lane object. A gang
-	# within gang_priority metres comes first, so the squad never shoots a gate while it walks in.
-	var gang_first: bool = h != null and front_z(h) >= -gang_priority
+	# within gang_priority metres comes first, so the squad never shoots a gate while it walks in;
+	# so does any gang while one is firing at the squad (stopped gunmen stand outside that reach
+	# and halt the street, so a nearer red gate would otherwise soak the fire forever).
+	var gang_first: bool = h != null and (front_z(h) >= -gang_priority or _under_fire())
 	if t != null and (h == null or (float(t["z"]) > front_z(h) and not gang_first)):
 		_shoot_lane(t, dt, which)
 		return
@@ -890,6 +892,21 @@ static func row_size(h: Dictionary) -> int:
 ## Position of the frontmost living row.
 static func front_z(h: Dictionary) -> float:
 	return float(h["z"]) - killed_rows(h) * float(h["row_gap"])
+
+
+## True while a gang's guns reach the squad (spec v2 §12.2 return fire: carries guns, front
+## within its range, not in melee).
+static func fires_back(h: Dictionary) -> bool:
+	return float(h.get("rf_rate", 0.0)) > 0.0 and not h["melee"] and int(h["count"]) > 0 \
+		and shooters(h) > 0 and front_z(h) >= -float(h.get("rf_range", 0.0))
+
+
+## True while any gang is shooting at the squad (return fire or a ranged attack).
+func _under_fire() -> bool:
+	for h in hordes:
+		if int(h["count"]) > 0 and (fires_back(h) or is_attacking(h)):
+			return true
+	return false
 
 
 ## True while a gang is attacking from range (stopped, or a boss inside its shoot range).
