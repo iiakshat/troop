@@ -1057,7 +1057,8 @@ func _under_fire() -> bool:
 	return false
 
 
-## True while a gang is attacking from range (stopped, or a boss inside its shoot range).
+## True while a gang is attacking from range: stopped, or its front inside its shoot_range (a
+## special's attack.start_m, a boss's gun range).
 static func is_attacking(h: Dictionary) -> bool:
 	if String(h.get("attack", "")) == "" or h["melee"]:
 		return false
