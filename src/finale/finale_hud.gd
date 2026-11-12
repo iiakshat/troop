@@ -42,6 +42,7 @@ var _combo_shown := 0
 var _combo_punch := 0.0
 var _combo_break := 0.0
 var ghosted := false            # a see-through copy drawn while the level loads (_ghost_all)
+const GHOST_ALPHA := 0.01       # still drawn (its pipelines compile), far too faint to see
 
 
 ## Sunburst behind the multiplier when it jumps.
@@ -320,8 +321,8 @@ func _ready() -> void:
 func _ghost_all() -> void:
 	for c in get_children():
 		(c as CanvasItem).visible = true
-		(c as CanvasItem).modulate.a = 0.02
-	_flash.color.a = 0.3   # full screen: keep it far below what an eye could catch
+		(c as CanvasItem).modulate.a = GHOST_ALPHA
+	_flash.color.a = 0.5   # full screen: keep it far below what an eye could catch
 	_rays.color.a = 1.0
 	_reticle.position = Vector2(300, 600)
 	_reload.offset_top = -330
