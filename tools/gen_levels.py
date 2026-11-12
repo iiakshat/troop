@@ -60,9 +60,78 @@ def cap_of(d: int) -> int:
 DISTRICTS = ["Downtown", "Market", "Docks", "Industrial", "Uptown"]
 BOSS_BANNERS = ["KINGPIN", "THE BUTCHER", "DOCK KING", "IRON BARON", "OVERLORD"]
 WAVE_BANNERS = ["BIG GANG", "STREET WAR", "RUSH", "AMBUSH", "LAST STAND", "GANG WAR"]
-NAMES = ["Main Street", "Back Alley", "Crossing", "Flyover", "Night Shift", "Heatwave",
-         "Rooftops", "Underpass", "Siren", "Standoff", "Blockade", "Payday", "Smoke",
-         "Gridlock", "Deadline", "Neon", "Riot Act", "Tailgate", "Low Tide", "Crosswind"]
+# Spec v2.1 §4.2: 50 unique level names (one per level, no cycle). Not shown on screen (icons and
+# numbers only); they name the level in analytics, logs and the design notes.
+NAMES = [
+    "First Blood", "Rush Hour", "Crossfire", "Night Shift", "The Enforcer",
+    "Hostage Run", "Mob Rule", "Downpour", "Gauntlet", "Kingpin",
+    "Market Day", "Express Lane", "Stall Ambush", "Lantern Row", "The Collector",
+    "Bazaar Rescue", "Stampede", "Monsoon", "Black Market", "The Butcher",
+    "Low Tide", "Cargo Rush", "Container Trap", "Fog Horn", "The Quartermaster",
+    "Cold Storage", "Dockside Riot", "Squall", "Breakwater", "Dock King",
+    "Steel Mill", "Conveyor", "Smoke Stack", "Graveyard Shift", "The Foreman",
+    "Boiler Room", "Meltdown", "Acid Rain", "Iron Works", "Iron Baron",
+    "Skyline", "Fast Lane", "Penthouse Trap", "Neon Nights", "The Consigliere",
+    "Gilded Cage", "Gala Riot", "Thunderhead", "Last Stand", "Overlord",
+]
+
+# Spec v2.1 §4.1: every level has an archetype by its slot in the district (1-10). Each one
+# changes the wave layout and the street's look, and has its own map-node icon.
+ARCHETYPES = {1: "gauntlet", 2: "rush", 3: "ambush", 4: "night", 5: "lieutenant",
+              6: "rescue", 7: "horde", 8: "storm", 9: "hard", 10: "boss"}
+# Layout knobs per archetype (missing = the gauntlet's standard mix):
+#   speed      scroll speed x the world's (level JSON scroll_speed)
+#   beats      gate-row + gang beats (else from the planned running time); min_secs = stretch floor
+#   combo_p    chance a beat has two gate rows; row_gap / wave_after / next_gap = metres
+#              between those rows, from the last row to its gang, and from a gang to the next row
+#   mixes      weight x per enemy mix; mul_w = weight of x gates (mul_every: one in every row);
+#              loss_k = x each gang's loss target
+#   opening    the first gang is on the squad before it reaches the first row (in fire range)
+#   pincer_p   chance a second gang follows a gang closely
+#   cages      hostage cages (Rescue) instead of that many gangs
+#   beats_k    x the number of beats (Horde: few, very large gangs)
+#   one_offer  extra chance a row has one offer (more obstacle lanes); guard_p = barricades
+#              guarding offers; obstacle_w = weight x per obstacle kind
+#   all_kinds  every enemy kind unlocked so far fights in the level (Hard gauntlet)
+#   look       per-level street look on top of the district's (config/world_look.json looks)
+ARCH = {
+    "gauntlet": {},
+    "rush": {"speed": 1.2, "beats": 6, "min_secs": 44.0, "combo_p": 0.85, "row_gap": 20, "wave_after": 26,
+             "next_gap": 24, "mixes": {"fast": 3.0, "bikers": 3.0, "crowd": 1.5}, "loss_k": 0.85, "look": "rush"},
+    "ambush": {"opening": True, "mixes": {"gunline": 3.0, "molotov": 3.0, "snipers": 3.0, "grenadiers": 3.0,
+               "warband": 2.5, "bikers": 2.0, "siege": 2.0}, "pincer_p": 0.35, "beats_k": 0.85},
+    "night": {"wave_after": 26, "look": "night"},
+    "lieutenant": {},
+    "rescue": {"cages": 2},
+    "horde": {"beats_k": 0.6, "combo_p": 0.7, "wave_after": 44, "next_gap": 40, "mul_w": 3.4, "mul_every": True,
+              "loss_k": 1.25,
+              "mixes": {"crowd": 3.0, "fast": 2.5, "brutes": 1.5, "riot": 1.5, "bikers": 1.2}},
+    "storm": {"one_offer": 0.35, "guard_p": 0.45, "obstacle_w": {"pothole": 2.0, "car": 1.6, "barricade": 1.5},
+              "look": "storm"},
+    "hard": {"all_kinds": True, "loss_k": 1.15},
+    "boss": {},
+}
+CAR_LEVEL = 9          # cars first show up here (spec v2.1 §4.2: their hint card at L9)
+CAGE_GUARDS = ("thug", "knifer", "brute", "riot", "gunman")   # gangs that stand guard over a cage
+
+
+def archetype(level: int) -> str:
+    return ARCHETYPES[index_in_district(level)]
+
+
+def debut_rank(level: int) -> str:
+    """The rank that unlocks at exactly this level ('' if none): its first recruit gate shows here."""
+    for r, u in ALLIES.items():
+        if r not in ("hero", "constable") and int(u["unlock"]) == level:
+            return r
+    return ""
+
+
+def debut_enemy(level: int) -> str:
+    for e, u in ENEMIES.items():
+        if e != "boss" and int(u["unlock"]) == level:
+            return e
+    return ""
 
 # Lucky rows (offers in all three lanes): at most one, only in every third level.
 LUCKY_EVERY = 3
@@ -499,9 +568,12 @@ def red_gate(rng: random.Random, sq: Sq, lane: int, level: int, early: bool = Fa
     return {"lane": lane, "op": "num", "v": -n, "step": round(2.6 * dps / steps, 1), "max": top, "inc": inc}
 
 
-def lane_obstacle(rng: random.Random, sq: Sq, lane: int, at: float, level: int, early: bool = False) -> dict | None:
+def lane_obstacle(rng: random.Random, sq: Sq, lane: int, at: float, level: int, early: bool = False,
+                  ctx: dict | None = None) -> dict | None:
     """An obstacle event for a lane with no offer (None = use a red gate instead). `early`
-    rows (the first beats, when a sloppy squad is still tiny) hit softly."""
+    rows (the first beats, when a sloppy squad is still tiny) hit softly. ctx: the archetype's
+    obstacle weights (Storm) and the car's debut (its first level always shows one)."""
+    ctx = ctx or {}
     t = min(sq.total(), 6) if early else sq.total()
     dps = max(sq.dps(0, 1000.0, 1), 3.0)
     pool = [("red", 3.0)]
@@ -511,9 +583,14 @@ def lane_obstacle(rng: random.Random, sq: Sq, lane: int, at: float, level: int, 
         pool.append(("barrel", 1.0))
     if level >= 4:
         pool.append(("barricade", 2.0))
-    if level >= 8:
+    if level >= CAR_LEVEL:
         pool.append(("car", 1.0))
+    ow = ctx.get("obstacle_w", {})
+    pool = [(k, w * ow.get(k, 1.0)) for k, w in pool]
     kind = rng.choices([k for k, _ in pool], [w for _, w in pool])[0]
+    if ctx.get("car_due") and not early:
+        kind = "car"
+        ctx["car_due"] = False
     if kind == "red":
         return None
     ev = {"at": at, "type": "obstacle", "kind": kind, "lane": lane}
@@ -574,8 +651,15 @@ def offer(rng: random.Random, kind: str, sq: Sq, lane: int, level: int, ctx: dic
         ranks.sort(key=lambda r: int(ALLIES[r]["unlock"]))
         weights = [1.0 + 2.0 * i for i in range(len(ranks))]  # newer ranks more often
         rank = rng.choices(ranks, weights)[0]
+        debut = bool(ctx.get("debut_rank")) and not ctx.get("debut_done")
+        if debut:
+            rank = ctx["debut_rank"]   # its unlock level: the new rank's first gate (and hint card)
+            ctx["debut_done"] = True
         value = sq_value(rank)
         n = max(2, int(round((b * rng.uniform(0.25, 0.45) + 4) / value)))
+        if debut:
+            # A generous first meeting: the new rank is the row's best pick, so players take it.
+            n = max(3, int(round((b * 0.7 + 9) / value)))
         return {"lane": lane, "op": "recruit", "unit": rank, "n": nice(n)}
     if kind == "pct":
         return {"lane": lane, "op": "pct", "v": rng.choice([30, 40, 50, 60])}
@@ -590,7 +674,10 @@ def offer(rng: random.Random, kind: str, sq: Sq, lane: int, level: int, ctx: dic
     if kind == "foe_div":
         return {"lane": lane, "op": "foe_div", "k": 2}
     if kind == "turncoat":
-        return {"lane": lane, "op": "turncoat", "n": nice(max(6, b * rng.uniform(0.3, 0.6)))}
+        n = nice(max(6, b * rng.uniform(0.3, 0.6)))
+        if n >= 10000:
+            n = int(round(n / 1000.0)) * 1000   # "34K", not "33.5K": the sign and its icon fit a lane
+        return {"lane": lane, "op": "turncoat", "n": n}
     raise ValueError(kind)
 
 
@@ -621,7 +708,13 @@ GROWTH = ("add", "mul", "recruit", "pct")
 
 
 def offer_kinds(rng: random.Random, level: int, n: int, ctx: dict) -> list[str]:
-    pool = [("add", 3.0), ("mul", 2.2)]
+    if ctx.get("debut_rank") and not ctx.get("debut_done"):
+        # The level a rank unlocks: its recruit gate is in the first row.
+        kinds = ["recruit"]
+        while len(kinds) < n:
+            kinds.append("mul" if "mul" not in kinds and rng.random() < 0.5 else "add")
+        return kinds
+    pool = [("add", 3.0), ("mul", float(ctx.get("mul_w", 2.2)))]
     if any(int(ALLIES[r]["unlock"]) <= level for r in ALLIES if r not in ("hero", "constable")):
         pool.append(("recruit", 2.4 + 0.04 * level))
     if level >= 11:
@@ -637,8 +730,10 @@ def offer_kinds(rng: random.Random, level: int, n: int, ctx: dict) -> list[str]:
     if level >= 11:
         pool.append(("turncoat", 0.7))
     kinds: list[str] = []
-    # At least one growth offer in every row.
+    # At least one growth offer in every row (Horde: a x gate in every row).
     first = rng.choices([k for k, _ in pool if k in GROWTH], [w for k, w in pool if k in GROWTH])[0]
+    if ctx.get("mul_every"):
+        first = "mul"
     kinds.append(first)
     while len(kinds) < n:
         k = rng.choices([k for k, _ in pool], [w for _, w in pool])[0]
@@ -685,6 +780,10 @@ def apply_scale(events: list[dict], k: float, kf: float = 1.0) -> None:
         for e in events:
             if e["type"] == "obstacle" and e.get("kind") == "barrel" and "kill" in e:
                 e["kill"] = scaled(int(e["kill"]), k, 5)
+            elif e["type"] == "cage":
+                # A cage's guards are a gang like the others (tests/tune.gd scaled_level should
+                # scale them the same way; followup for the TUNE task).
+                e["guards"]["n"] = scaled(int(e["guards"]["n"]), k, 1)
     waves = [e for e in events if e["type"] == "wave"]
     for e in waves:
         if e.get("fixed"):
@@ -786,40 +885,58 @@ def shift(ev: list[dict], m: int) -> list[dict]:
     return ev
 
 
+# Spec v2.1 §5: L1 for adults. 45-50 s, 5 gate rows. Danger beats: the hero alone against the
+# opening gang (the tap lesson: about 1.5 taps/s for 6-8 s), the gang right behind the trap row
+# (about 20 s), a big gang (about 35 s), and a gang leader at the end. The trap row: a x2 lane
+# next to a + lane that leaves a bigger squad; the doubled squad cannot beat the gang behind it.
+# Every gang is hand-sized ("fixed": calibration never rescales L1).
+# Sized with the sim (_local/levels/probe_l1.gd): 1.5 taps/s clears the opening in about 6.4 s and 0
+# taps falls at 3.6 s; at the trap the +40 lane loses nothing while x2 (or the red gate) loses
+# about 55%; the leader soaks the best route's fire and lands his blow, so a best-lane player
+# keeps about 81% of his peak (the tutorial band, spec v2.1 §2).
+L1 = {"open": (5, 5, 30), "trap": 345, "big": (260, 160), "last": 500, "leader_hp": 2000, "leader_power": 45,
+      "leader_gap": 14}
+
+
 def level_1() -> dict:
-    ev = opening(1) + [
+    o1, o2, gap = L1["open"]
+    big_t, big_k = L1["big"]
+    ev = [
+        {"at": 30, "type": "wave", "fixed": True, "groups": [
+            {"enemy": "thug", "n": o1}, {"enemy": "thug", "n": o2, "gap": gap}]},
         {"at": 34, "type": "hint", "id": "swipe", "icon": "swipe"},
-        {"at": 58, "type": "gates", "tutorial": "swipe", "gates": [
+        {"at": 84, "type": "gates", "tutorial": "swipe", "gates": [
             {"lane": 0, "op": "num", "v": 4}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 3},
             {"lane": 2, "op": "num", "v": 10}]},
-        {"at": 92, "type": "wave", "groups": [{"enemy": "thug", "n": 34}]},
-        {"at": 124, "type": "gates", "gates": [
-            {"lane": 0, "op": "num", "v": 6}, {"lane": 1, "op": "mul", "k": 2},
+        {"at": 112, "type": "wave", "fixed": True, "groups": [{"enemy": "thug", "n": 30}]},
+        {"at": 136, "type": "gates", "gates": [
+            {"lane": 0, "op": "num", "v": 5}, {"lane": 1, "op": "num", "v": 8},
             # a small red gate where the first gate choice (+10, lane 2) leaves the squad: the
             # red-gate lesson comes early for every new player (v1.1 tutorial fix)
             {"lane": 2, "op": "num", "v": -3, "step": 4, "max": 9}]},
-        {"at": 158, "type": "wave", "groups": [{"enemy": "thug", "n": 70}]},
-        {"at": 192, "type": "gates", "gates": [
-            {"lane": 0, "op": "num", "v": 12}, {"lane": 1, "op": "num", "v": -4, "step": 1.5, "max": 8},
-            {"lane": 2, "op": "mul", "k": 2}]},
-        {"at": 226, "type": "wave", "groups": [{"enemy": "thug", "n": 120}]},
-        {"at": 262, "type": "gates", "gates": [
-            {"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "num", "v": -10, "step": 2.5, "max": 20},
-            {"lane": 2, "op": "num", "v": 20}]},
-        {"at": 298, "type": "wave", "groups": [{"enemy": "thug", "n": 160}]},
-        {"at": 332, "type": "gates", "gates": [
-            {"lane": 0, "op": "num", "v": -12, "step": 3, "max": 24}, {"lane": 1, "op": "num", "v": 30},
-            {"lane": 2, "op": "mul", "k": 2}]},
-        {"at": 370, "type": "wave", "groups": [{"enemy": "thug", "n": 220}]},
-        {"at": 404, "type": "gates", "gates": [
+        # The trap row: x2 looks big, but +40 leaves more troops for the gang right behind it.
+        {"at": 164, "type": "gates", "trap": True, "gates": [
+            {"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "num", "v": 40},
+            {"lane": 2, "op": "num", "v": -10, "step": 2.5, "max": 20}]},
+        {"at": 188, "type": "wave", "fixed": True, "groups": [{"enemy": "thug", "n": L1["trap"]}]},
+        {"at": 236, "type": "gates", "gates": [
             {"lane": 0, "op": "num", "v": 25}, {"lane": 1, "op": "mul", "k": 2},
-            {"lane": 2, "op": "num", "v": -15, "step": 3, "max": 30}]},
-        {"at": 446, "type": "wave", "label": "BIG GANG", "groups": [{"enemy": "thug", "n": 300}]},
-        {"at": 474, "type": "finish"},
+            {"lane": 2, "op": "num", "v": -12, "step": 3, "max": 24}]},
+        {"at": 276, "type": "wave", "fixed": True, "label": "BIG GANG", "groups": [
+            {"enemy": "thug", "n": big_t}, {"enemy": "thug", "n": big_k, "gap": 12}]},
+        {"at": 314, "type": "gates", "gates": [
+            {"lane": 0, "op": "num", "v": -15, "step": 3, "max": 30}, {"lane": 1, "op": "num", "v": 40},
+            {"lane": 2, "op": "mul", "k": 2}]},
+        {"at": 344, "type": "wave", "fixed": True, "label": "LAST STAND", "groups": [
+            {"enemy": "thug", "n": L1["last"]},
+            {"enemy": "thug", "n": 1, "gap": L1["leader_gap"], "hp": L1["leader_hp"], "power": L1["leader_power"]}]},
+        {"at": 384, "type": "finish"},
     ]
-    return {"_design": "First Blood. Teaches: move, +N, x2, shooting a red gate until it flips. The squad grows "
-                       "past 100 in under a minute and mows down crowds of hundreds: power fantasy first.",
-            "events": ev, "charges": {}}
+    return {"_design": "First Blood. Teaches: tap to throw faster (the hero alone vs the opening gang), move, "
+                       "+N vs x2 (the trap row: x2 looks bigger, but the + lane leaves more troops for the gang "
+                       "right behind), shooting a red gate until it flips. Danger beats at about 8, 20 and 35 s "
+                       "and the gang's leader at the end.",
+            "events": ev, "charges": {}, "min_secs": 0.0}
 
 
 def level_2() -> dict:
@@ -899,51 +1016,121 @@ HAND = {1: level_1, 2: level_2, 3: level_3}
 
 # ------------------------------------------------------------------ generated levels
 
+def mix_kinds(name: str) -> set:
+    return {e for e, _, _ in MIXES[name]}
+
+
+def pick_mix(rng: random.Random, mixes: list[str], newest: str, rules: dict, need: set) -> str:
+    """The next gang's mix. `need` = enemy kinds the level still has to show (a debut, or every
+    kind for the Hard gauntlet): the mix covering most of them wins. Otherwise the newest enemy
+    shows up three times as often, times the archetype's own weights."""
+    if need:
+        best = max(mixes, key=lambda m: len(need & mix_kinds(m)))
+        if need & mix_kinds(best):
+            return best
+    weights = rules.get("mixes", {})
+    wts = [(3.0 if newest in mix_kinds(m) else 1.0) * weights.get(m, 1.0) for m in mixes]
+    return rng.choices(mixes, wts)[0]
+
+
+def _lieutenant_wave_stub(level: int, d: int, sq: Sq) -> dict:
+    """Placeholder until the FIGHT task's lieutenant_wave(level, d) lands: a crew and one big
+    brute marked as the lieutenant, about 6 s of the planned squad's fire."""
+    crew, after = size_wave(sq, MIXES["crowd"], 0.12, 1.0)
+    dps = max(after.dps(1, 400.0, 1), 5.0)
+    hp = nice(max(60, dps * 6.0))
+    return {"label": "LAST STAND", "groups": crew + [
+        {"enemy": "brute", "n": 1, "gap": 18, "hp": hp, "power": nice(max(8, after.total() * 0.15)), "lieutenant": True}]}
+
+
+def lieutenant(level: int, d: int, sq: Sq) -> dict:
+    """The mid-district lieutenant's wave (spec v2.1 §1.3): FIGHT's lieutenant_wave when present."""
+    real = globals().get("lieutenant_wave")
+    return real(level, d) if callable(real) else _lieutenant_wave_stub(level, d, sq)
+
+
+def make_cage(rng: random.Random, sq: Sq, level: int, at: float, diff: float) -> dict:
+    """A hostage cage (Rescue): guards sized so the planned squad needs about 3 s of fire to cut
+    them down (the cage reaches the squad about 5.5 s after they come in range), and hostages
+    worth a good gate. The planned (greedy) squad frees them."""
+    kinds = [e for e in CAGE_GUARDS if int(ENEMIES[e]["unlock"]) < level]
+    enemy = rng.choice(kinds)
+    n = screen_size(sq, enemy, 2.6 + 0.8 * diff)
+    hostages = nice(max(4, grow_base(sq) * rng.uniform(0.35, 0.55)))
+    sq.add("constable", hostages)
+    return {"at": at, "type": "cage", "lane": rng.randrange(3), "hostages": hostages,
+            "guards": {"enemy": enemy, "n": n}}
+
+
 def generate(level: int) -> dict:
     rng = random.Random(1000 + level)
     d = district(level)
     i = index_in_district(level)
     boss = is_boss(level)
+    arch = archetype(level)
+    R = ARCH.get(arch, {})
     diff = difficulty(level)
     sq = Sq(d)
     events: list[dict] = []
-    ctx: dict = {}
-    run_secs = 64 + 14 * (level - 1) / (LEVELS - 1)
-    track = run_secs * S0 - (60 if boss else 0)
+    ctx: dict = {"debut_rank": debut_rank(level), "car_due": level == CAR_LEVEL, "mul_every": bool(R.get("mul_every")),
+                 "mul_w": R.get("mul_w", 2.2), "obstacle_w": R.get("obstacle_w", {})}
+    speed = S0 * float(R.get("speed", 1.0))
+    run_secs = float(R.get("secs", 64 + 14 * (level - 1) / (LEVELS - 1)))
+    track = run_secs * speed - (60 if boss else 0)
+    row_gap = int(R.get("row_gap", 26))
+    wave_after = int(R.get("wave_after", 34))
+    next_gap = int(R.get("next_gap", 30))
+    combo_p = float(R.get("combo_p", 0.3))
+    loss_k = float(R.get("loss_k", 1.0))
     pos = 36
     lucky_left = 1 if level % LUCKY_EVERY == 1 else 0
     lucky_beat = rng.randrange(2, 5)
     mixes = [m for m in MIXES if mix_ok(m, level)]
     newest_enemy = max((e for e in ENEMIES if int(ENEMIES[e]["unlock"]) <= level and e != "boss"),
                        key=lambda e: int(ENEMIES[e]["unlock"]))
+    beats = int(R.get("beats", max(5, int(round((track - 70) / 68.0)))))
+    if "beats_k" in R:
+        beats = max(4, int(round(beats * float(R["beats_k"]))))
+    # Kinds the level must show: a debut (its unlock level), or every kind so far (Hard gauntlet).
+    need: set = set()
+    if debut_enemy(level):
+        need.add(debut_enemy(level))
+    if R.get("all_kinds"):
+        need |= {e for e in ENEMIES if e != "boss" and int(ENEMIES[e]["unlock"]) <= level}
+        beats = max(beats, len(need) // 2 + 2)
+    cage_beats: set = set()
+    if R.get("cages"):
+        cage_beats = set(rng.sample(range(2, beats - 1), min(int(R["cages"]), max(beats - 3, 0))))
     beat = 0
-    beats = max(5, int(round((track - 70) / 68.0)))
     prev_kinds: list[str] = []
     prev_add = None
     last_arrival = pos
     while beat < beats:
         last = beat == beats - 1
+        cage = beat in cage_beats
         # Next wave's mix first (foe mods in the row before it need to know it).
         if beat == 0:
+            # The first gang is the plain screen, except an Ambush's: armed or fast.
             mix_name = "crowd"
-        elif last and not boss:
+            if R.get("opening"):
+                mix_name = rng.choice([m for m in ("gunline", "fast", "bikers") if m in mixes] or ["crowd"])
+        elif last and not boss and not need:
             hard = [m for m in mixes if m in ("gunline", "grenadiers", "siege", "warband", "molotov", "snipers", "brutes", "riot")]
             mix_name = rng.choice(hard or mixes)
         else:
-            wts = [3.0 if newest_enemy in [e for e, _, _ in MIXES[m]] else 1.0 for m in mixes]
-            mix_name = rng.choices(mixes, wts)[0]
+            mix_name = pick_mix(rng, mixes, newest_enemy, R, need)
         mix = MIXES[mix_name]
-        ctx["next_armour"] = any(int(ENEMIES[e]["armour"]) > 0 for e, _, _ in mix)
+        ctx["next_armour"] = any(int(ENEMIES[e]["armour"]) > 0 for e, _, _ in mix) and not cage
 
-        combo = beat > 0 and not last and rng.random() < 0.3
+        combo = beat > 0 and not last and rng.random() < combo_p
         n_rows = 2 if combo else 1
         for r in range(n_rows):
-            at = pos + 26 * r
+            at = pos + row_gap * r
             n_off = 2
             if lucky_left and beat == lucky_beat and r == 0:
                 n_off = 3
                 lucky_left = 0
-            elif rng.random() < 0.12 + 0.3 * diff and not (beat == 0 and r == 0):
+            elif rng.random() < 0.12 + 0.3 * diff + float(R.get("one_offer", 0.0)) and not (beat == 0 and r == 0):
                 n_off = 1
             lanes = [0, 1, 2]
             rng.shuffle(lanes)
@@ -965,7 +1152,7 @@ def generate(level: int) -> dict:
             obstacles = []
             for lane in lanes[n_off:]:
                 first_row = beat == 0 and r == 0
-                ob = None if first_row else lane_obstacle(rng, sq, lane, at, level, beat < 2)
+                ob = None if first_row else lane_obstacle(rng, sq, lane, at, level, beat < 2, ctx)
                 if first_row:
                     # The squad is tiny at the start: only a small red gate the hero can flip.
                     gates.append({"lane": lane, "op": "num", "v": -rng.choice([1, 2]), "step": 0.5, "max": rng.choice([4, 5, 6])})
@@ -974,7 +1161,7 @@ def generate(level: int) -> dict:
                 else:
                     obstacles.append(ob)
             # A barricade guarding an offer: break it or lose the gate behind it.
-            if level >= 4 and beat > 0 and rng.random() < 0.18:
+            if level >= 4 and beat > 0 and rng.random() < float(R.get("guard_p", 0.18)):
                 g = rng.choice([g for g in gates if g["op"] not in ("num", "pct") or g.get("v", 0) > 0])
                 dps = max(sq.dps(0, 1000.0, 1), 3.0)
                 guard = {"at": at - 8, "type": "obstacle", "kind": "barricade", "lane": g["lane"],
@@ -992,19 +1179,55 @@ def generate(level: int) -> dict:
             pick = best_choice(sq, gates)
             if pick is not None:
                 apply_gate(sq, pick)
-        wave_at = pos + 26 * (n_rows - 1) + 34
+        wave_at = pos + row_gap * (n_rows - 1) + wave_after
+        if beat == 0 and R.get("opening"):
+            # Ambush: the gang is already in fire range while the squad runs at the first row.
+            wave_at = pos + 16
+        if cage:
+            events.append(make_cage(rng, sq, level, wave_at, diff))
+            last_arrival = wave_at
+            pos = int(wave_at + next_gap + rng.randint(-3, 3))
+            beat += 1
+            continue
+        need -= mix_kinds(mix_name)
         # Loss target for this wave: grows through the level and with difficulty.
         frac = beat / max(beats - 1, 1)
-        loss = (0.05 + 0.12 * diff) * (0.6 + 0.8 * frac)
+        loss = (0.05 + 0.12 * diff) * (0.6 + 0.8 * frac) * loss_k
         if last and not boss:
-            loss = 0.28 + 0.22 * diff
-        groups, sq = size_wave(sq, mix, loss, 0.8 + 1.6 * diff)
+            loss = (0.28 + 0.22 * diff) * loss_k
+        if last and arch == "lieutenant":
+            lw = lieutenant(level, d, sq)
+            wave = {"at": wave_at, "type": "wave", **{k: v for k, v in lw.items() if k not in ("at", "type")}}
+            if "groups" not in lw:
+                # FIGHT's helper may hand back the lieutenant's group alone: a crew walks ahead.
+                crew, _ = size_wave(sq, MIXES["crowd"], 0.12, 1.0)
+                wave = {"at": wave_at, "type": "wave", "groups": crew + [lw]}
+            gap = max(float(g.get("gap", 0)) for g in wave["groups"])
+            events.append(wave)
+            last_arrival = wave_at + gap
+            pos = int(wave_at + next_gap + rng.randint(-3, 3))
+            beat += 1
+            continue
+        pincer = 0 < beat < beats - 2 and rng.random() < float(R.get("pincer_p", 0.0))
+        groups, sq = size_wave(sq, mix, loss * (0.6 if pincer else 1.0), 0.8 + 1.6 * diff)
         wave = {"at": wave_at, "type": "wave", "groups": groups}
         if last and not boss:
-            wave["label"] = rng.choice(WAVE_BANNERS)
+            wave["label"] = rng.choice([b for b in WAVE_BANNERS if not (R.get("opening") and b == "AMBUSH")])
+        elif beat == 0 and R.get("opening"):
+            wave["label"] = "AMBUSH"
+        elif arch == "horde" and beat == 1:
+            wave["label"] = "BIG GANG"
         events.append(wave)
         last_arrival = wave_at + max(g.get("gap", 0) for g in groups)
-        pos = int(wave_at + 30 + rng.randint(-3, 3))
+        if pincer:
+            # A second gang right behind the first: the squad is caught between two fires.
+            mix2 = MIXES[pick_mix(rng, mixes, newest_enemy, R, set())]
+            groups2, sq = size_wave(sq, mix2, loss * 0.6, 0.8 + 1.6 * diff)
+            at2 = int(last_arrival + 16)
+            events.append({"at": at2, "type": "wave", "groups": groups2})
+            last_arrival = at2 + max(g.get("gap", 0) for g in groups2)
+            wave_at = at2
+        pos = int(wave_at + next_gap + rng.randint(-3, 3))
         beat += 1
 
     if boss:
@@ -1042,17 +1265,22 @@ def generate(level: int) -> dict:
         charges["shield"] = 1
     if level >= 6:
         charges["bomb"] = 2 if boss else 1
-    return {"_design": f"District {d} level {i}{' (boss)' if boss else ''}: generated (seed {1000 + level}), "
-                       f"difficulty {diff:.2f}, newest enemy {newest_enemy}.",
-            "events": events, "charges": charges}
+    out = {"_design": f"District {d} level {i}: {arch}{' (boss)' if boss else ''}, generated (seed {1000 + level}), "
+                      f"difficulty {diff:.2f}, newest enemy {newest_enemy}.",
+           "events": events, "charges": charges}
+    if "speed" in R:
+        out["scroll_speed"] = round(speed, 3)
+    if "min_secs" in R:
+        out["min_secs"] = float(R["min_secs"])
+    return out
 
 
 # ------------------------------------------------------------------ output
 
-def stretch(events: list[dict]) -> None:
-    """Spreads a short level out (every `at` x f) so it runs at least MIN_SECS."""
+def stretch(events: list[dict], min_m: float = MIN_SECS * S0) -> None:
+    """Spreads a short level out (every `at` x f) so its track is at least min_m metres."""
     finish = max(float(e["at"]) for e in events if e["type"] == "finish")
-    f = MIN_SECS * S0 / finish
+    f = min_m / finish
     if f <= 1.0:
         return
     for e in events:
@@ -1063,7 +1291,8 @@ def build(level: int, seen: set, cal_all: dict) -> dict:
     cal = cal_all.get(str(level), {})
     lv = HAND[level]() if level in HAND else generate(level)
     events = lv["events"]
-    stretch(events)
+    speed = float(lv.get("scroll_speed", S0))
+    stretch(events, float(lv.get("min_secs", MIN_SECS)) * speed)
     apply_scale(events, float(cal.get("k", 1.0)), float(cal.get("kf", 1.0)))
     # One-time icon hints: the first time ever each mechanic shows up. A bomb charge at the
     # start counts as the bomb's debut: point at its button before the first wave.
@@ -1095,14 +1324,20 @@ def build(level: int, seen: set, cal_all: dict) -> dict:
     out = {
         "_design": lv["_design"],
         "id": level,
-        "name": NAMES[(level * 7) % len(NAMES)] if not is_boss(level) else BOSS_BANNERS[d - 1].title(),
+        "name": NAMES[level - 1],
         "district": d,
         "boss": is_boss(level),
+        "archetype": archetype(level),
         "target_win": round(target_win(level), 2),
         "target_ratio": target_ratio(level),
         "stars": star_thresholds(level, cal),
         "charges": lv["charges"],
     }
+    look = ARCH.get(archetype(level), {}).get("look")
+    if look:
+        out["look"] = look
+    if "scroll_speed" in lv:
+        out["scroll_speed"] = lv["scroll_speed"]
     if need_upgrades(level):
         out["need_upgrades"] = True
     if level in START_HEAT:

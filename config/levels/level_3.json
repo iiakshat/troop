@@ -1,9 +1,10 @@
 {
   "_design": "Crossfire. Teaches: gunmen stop and shoot (SHIELD blocks them), barrels blow up gangs running past them, a power gate. Opens with the hero alone against a gang only a tapping hero beats.",
   "id": 3,
-  "name": "Back Alley",
+  "name": "Crossfire",
   "district": 1,
   "boss": false,
+  "archetype": "ambush",
   "target_win": 0.71,
   "target_ratio": -1.0,
   "stars": {"star2": 45, "star3": 85},

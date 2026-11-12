@@ -803,8 +803,10 @@ func test_generated_levels_follow_the_rules() -> void:
 		check(lucky <= 1, "L%d at most one lucky row" % n)
 		if lucky > 0:
 			lucky_levels.append(n)
-		var secs := finish / float(units["world"]["scroll_speed"])
-		check(secs >= 58.0 and secs <= 92.0, "L%d track %.0f s" % [n, secs])
+		# Spec v2.1 §4.1/§5: at the level's own pace; Rush levels and L1 (45-50 s) run shorter.
+		var secs := finish / float(lv.get("scroll_speed", units["world"]["scroll_speed"]))
+		var shortest := 43.0 if n == 1 or String(lv.get("archetype", "")) == "rush" and n > 3 else 58.0
+		check(secs >= shortest and secs <= 92.0, "L%d track %.0f s" % [n, secs])
 	for i in range(1, lucky_levels.size()):
 		check(int(lucky_levels[i]) - int(lucky_levels[i - 1]) >= 3, "lucky rows at most 1 per 3 levels (%s)" % str(lucky_levels))
 

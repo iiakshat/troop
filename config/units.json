@@ -36,8 +36,8 @@
     "sergeant":  { "name": "Sergeant",  "unlock": 4,  "dmg": 2,  "rate": 1.6,  "pierce": false, "proj": "pellet" },
     "inspector": { "name": "Inspector", "unlock": 7,  "dmg": 3,  "rate": 1.6,  "pierce": true,  "proj": "bullet_big" },
     "swat":      { "name": "SWAT",      "unlock": 13, "dmg": 1,  "rate": 3.2,  "pierce": false, "multi": 2, "proj": "bullet" },
-    "sniper":    { "name": "Sniper",    "unlock": 21, "dmg": 16, "rate": 0.4,  "pierce": true,  "target": "toughest", "one_per_shot": true, "proj": "sniper_round" },
-    "commando":  { "name": "Commando",  "unlock": 31, "dmg": 2,  "rate": 0.96, "pierce": false, "splash": 5, "proj": "rocket" }
+    "sniper":    { "name": "Sniper",    "unlock": 19, "dmg": 16, "rate": 0.4,  "pierce": true,  "target": "toughest", "one_per_shot": true, "proj": "sniper_round" },
+    "commando":  { "name": "Commando",  "unlock": 26, "dmg": 2,  "rate": 0.96, "pierce": false, "splash": 5, "proj": "rocket" }
   },
   "hero_weapons": {
     "pistol": { "name": "Pistol", "dmg": 2, "rate": 3.0, "pierce": false, "proj": "bullet" },
@@ -52,8 +52,8 @@
     "riot":       { "name": "Riot",      "unlock": 7,  "hp": 1, "armour": 0, "speed": 1.5,  "power": 2, "cols": 7, "row_gap": 1.2, "shield": 4 },
     "molotov":    { "name": "Molotovs",  "unlock": 9,  "hp": 2, "armour": 0, "speed": 2.5,  "power": 1, "cols": 6, "row_gap": 1.1, "stop_at": 22.0, "throw_every": 2.5, "first_shot": 0.6, "flight": 1.1, "burn": 2 },
     "boss":       { "name": "Kingpin",   "unlock": 10, "hp": 360, "armour": 1, "speed": 1.2, "power": 999, "cols": 1, "row_gap": 0.0, "boss": true, "shoot_range": 40.0, "shoot_every": 2.0, "shot_dmg": 4 },
-    "sniper_foe": { "name": "Snipers",   "unlock": 17, "hp": 3, "armour": 0, "speed": 2.5,  "power": 1, "cols": 5, "row_gap": 1.2, "stop_at": 40.0, "shoot_every": 1.8, "first_shot": 1.0, "aim": 0.7, "shot_dmg": 1 },
-    "grenadier":  { "name": "Grenadiers","unlock": 27, "hp": 3, "armour": 0, "speed": 2.5,  "power": 1, "cols": 6, "row_gap": 1.1, "stop_at": 26.0, "shoot_every": 2.0, "first_shot": 0.6, "shot_dmg": 3 }
+    "sniper_foe": { "name": "Snipers",   "unlock": 15, "hp": 3, "armour": 0, "speed": 2.5,  "power": 1, "cols": 5, "row_gap": 1.2, "stop_at": 40.0, "shoot_every": 1.8, "first_shot": 1.0, "aim": 0.7, "shot_dmg": 1 },
+    "grenadier":  { "name": "Grenadiers","unlock": 22, "hp": 3, "armour": 0, "speed": 2.5,  "power": 1, "cols": 6, "row_gap": 1.1, "stop_at": 26.0, "shoot_every": 2.0, "first_shot": 0.6, "shot_dmg": 3 }
   },
   "return_fire": {
     "_note": "Spec v2 section 12.2: gangs with guns keep firing at the squad while their front is within `range` metres (and not in melee). Per enemy: return_fire = {rate: shots per second per shooter, share: percent of the gang that carries guns (rounded up, so any gang with share > 0 has at least one), optional range and from_district}. Each hit kills one troop, lowest rank first; the hero falls only when no followers are left. SHIELD blocks it. Gangs fire back from from_district on (district 1 keeps v1 rules); an enemy's own from_district overrides it (gunmen: 1, they always fire this way).",

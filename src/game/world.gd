@@ -50,6 +50,14 @@ static func _vec3(a: Array) -> Vector3:
 	return Vector3(float(a[0]), float(a[1]), float(a[2]))
 
 
+## A per-level look's overrides (config/world_look.json "looks"), {} for none.
+static func level_look(id: String) -> Dictionary:
+	look(1)
+	if id == "":
+		return {}
+	return (_looks.get("looks", {}) as Dictionary).get(id, {})
+
+
 static func look_count() -> int:
 	var n := 0
 	while not look(n + 1).is_empty():
@@ -74,6 +82,22 @@ var _pool_mat: StandardMaterial3D
 var _refl_mat: StandardMaterial3D
 var _neon_mat: ShaderMaterial
 var _wet := 0.0
+## Spec v2.1 §4.1: a level's own look on top of its district's (config/world_look.json "looks":
+## night = dark, nearer fog, headlights; storm = rain, wet road, lightning; rush = speed lines).
+var look_id := ""
+var _headlights: SpotLight3D = null
+var _weather: MeshInstance3D = null    # rain or speed lines on a quad just in front of the camera
+var _weather_mat: ShaderMaterial = null
+var _lightning := 0.0                   # storm: flash strength of the next strike (0 = no storm)
+var _flash_t := 0.0                     # seconds of the current flash left
+var _flash_next := 5.0                  # seconds to the next one
+var _sky_base := 1.0
+var _amb_base := 0.7
+var _lines := 0.0                       # rush: speed-line strength (they fade while the street stops)
+var _lines_phase := 0.0
+var _frame_scroll := 0.0                # metres scrolled since the last frame
+const FLASH_S := 0.5
+const LINES_PACE := 8.0                 # m/s at which the speed lines run at their own pace
 
 
 func _ready() -> void:
@@ -89,14 +113,16 @@ func _ready() -> void:
 ## Switches the whole look to a district (1-5; out-of-range values clamp). Safe to call
 ## before or after the World enters the tree, and as often as needed (one World serves the
 ## whole session).
-func set_theme(d: int) -> void:
+func set_theme(d: int, level_look_id := "") -> void:
 	district = clampi(d, 1, look_count())
+	look_id = level_look_id
 	if is_node_ready():
 		_apply_theme()
 
 
 func scroll(dist: float) -> void:
 	_scroll += dist
+	_frame_scroll += dist
 	_road_mat.set_shader_parameter("offset", _scroll)
 	for m in _scroll_mats:
 		m.set_shader_parameter("offset", _scroll)
@@ -152,6 +178,33 @@ func _process(delta: float) -> void:
 		camera.transform = base
 	if _wet > 0.0:
 		_place_reflections()
+	_tick_look(delta)
+
+
+## Headlights ride with the squad; the weather quad hides while the finale has the camera;
+## a storm flashes now and then (one soft flash, never a strobe).
+func _tick_look(delta: float) -> void:
+	if _headlights and _headlights.visible:
+		_headlights.position.x = follow_x * 2.0
+	if _weather:
+		if _lines > 0.0:
+			var pace := clampf(_frame_scroll / maxf(delta, 1e-4) / LINES_PACE, 0.0, 1.6)
+			_lines_phase += delta * pace
+			_weather_mat.set_shader_parameter("phase", _lines_phase)
+			_weather_mat.set_shader_parameter("amount", _lines * clampf(pace, 0.0, 1.0))
+		_weather.visible = _cam_override == null and float(_weather_mat.get_shader_parameter("amount")) > 0.0
+	_frame_scroll = 0.0
+	if _lightning <= 0.0:
+		return
+	_flash_next -= delta
+	if _flash_next <= 0.0:
+		_flash_next = _rng.randf_range(7.0, 12.0)
+		_flash_t = FLASH_S
+	if _flash_t > 0.0:
+		_flash_t = maxf(_flash_t - delta, 0.0)
+		var f := pow(_flash_t / FLASH_S, 2.0) * _lightning
+		_sky_mat.sky_energy_multiplier = _sky_base * (1.0 + 2.5 * f)
+		_env.ambient_light_energy = _amb_base + 1.2 * f
 
 
 # ---------------------------------------------------------------- build
@@ -521,7 +574,11 @@ func _place_reflections() -> void:
 
 ## Applies the district's look (config/world_look.json) to the sky, lights, environment, materials and night extras.
 func _apply_theme() -> void:
-	var t: Dictionary = look(district)
+	var t: Dictionary = look(district).duplicate()
+	var over := level_look(look_id)
+	for k in over:
+		if not String(k).begins_with("_"):
+			t[k] = over[k]
 	_sky_mat.sky_top_color = Color(t["sky_top"])
 	_sky_mat.sky_horizon_color = Color(t["sky_hor"])
 	_sky_mat.ground_horizon_color = Color(t["ground_hor"])
@@ -569,6 +626,49 @@ func _apply_theme() -> void:
 		n.visible = neon > 0.0
 	if _wet > 0.0:
 		_place_reflections()
+	_apply_extras(t)
+
+
+## The per-level extras: headlights (night), rain and lightning (storm), speed lines (rush).
+func _apply_extras(t: Dictionary) -> void:
+	_sky_base = float(t["sky_energy"])
+	_amb_base = float(t["ambient_energy"])
+	var head := float(t.get("headlights", 0.0))
+	if head > 0.0 and _headlights == null:
+		_headlights = SpotLight3D.new()
+		_headlights.position = Vector3(0, 3.2, 5.0)
+		_headlights.spot_range = 75.0
+		_headlights.spot_angle = 17.0
+		_headlights.spot_attenuation = 0.6
+		_headlights.light_color = Color("fff1d2")
+		_headlights.shadow_enabled = false
+		add_child(_headlights)
+		_headlights.rotation_degrees = Vector3(-7.0, 0, 0)
+	if _headlights:
+		_headlights.visible = head > 0.0
+		_headlights.light_energy = head
+	var rain := float(t.get("rain", 0.0))
+	var lines := float(t.get("speed_lines", 0.0))
+	if (rain > 0.0 or lines > 0.0) and _weather == null and camera:
+		_weather = MeshInstance3D.new()
+		var q := QuadMesh.new()
+		q.size = Vector2(2.4, 2.4)
+		_weather.mesh = q
+		_weather_mat = ShaderMaterial.new()
+		_weather_mat.shader = load("res://src/game/weather.gdshader")
+		_weather_mat.render_priority = 20
+		_weather.material_override = _weather_mat
+		_weather.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_weather.position = Vector3(0, 0, -0.9)
+		camera.add_child(_weather)
+	_lines = lines if rain <= 0.0 else 0.0
+	if _weather:
+		_weather_mat.set_shader_parameter("mode", 0 if rain > 0.0 else 1)
+		_weather_mat.set_shader_parameter("amount", rain if rain > 0.0 else lines)
+		_weather.visible = rain > 0.0 or lines > 0.0
+	_lightning = float(t.get("lightning", 0.0))
+	_flash_t = 0.0
+	_flash_next = 4.0
 
 
 static func _box(size: Vector3, color: Color) -> MeshInstance3D:

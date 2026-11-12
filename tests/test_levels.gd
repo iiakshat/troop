@@ -73,9 +73,12 @@ func test_archetype_by_slot() -> void:
 					check(_of(lv, "gates").size() >= _of(gaunt, "gates").size(), "L%d rush has at least as many gate rows" % n)
 			"ambush":
 				if not hand:
+					# The first gang is already in fire range while the squad runs at the first row.
 					var first: Dictionary = _waves(lv)[0]
 					var first_row := _of(lv, "gates")[0] as Dictionary
-					check(float(first["at"]) < float(first_row["at"]), "L%d ambush: a gang is on the squad before any gate" % n)
+					var reach := float(units["world"]["fire_range"]) * _speed(lv) / (_speed(lv) + float(units["enemies"][first["groups"][0]["enemy"]]["speed"]))
+					check(float(first["at"]) - float(first_row["at"]) < reach, "L%d ambush: the first gang is in range before the first row" % n)
+					eq(String(first.get("label", "")), "AMBUSH", "L%d ambush banner" % n)
 					var specials := 0
 					for w in _waves(lv):
 						for g in w["groups"]:
@@ -251,21 +254,20 @@ func test_rescue_cage_frees_or_loses() -> void:
 
 
 ## Plays L1 at `taps`/s with zero upgrades, taking Tutorial.best_lane at every row except the
-## trap row, where it takes `trap_lane`. Returns {state, troops, peak, trap_before, trap_after,
+## trap row, where it takes `trap_lane`. Returns {state, troops, peak, trap_before (the squad
+## just past the trap row), trap_after (just before the next row: the gang behind it fought),
 ## opening_t (seconds from the first gang in range to the opening's last kill)}.
 func _l1(lv: Dictionary, trap_row: int, trap_lane: int, taps: float) -> Dictionary:
 	var sim := LevelSim.new(lv, units)
 	var pilot := Autopilot.new([], false, false, taps)
-	var trap_wave_at := -1.0
 	var rows: Array = _of(lv, "gates")
-	for w in _waves(lv):
-		if trap_row >= 0 and float(w["at"]) > float(rows[trap_row]["at"]):
-			trap_wave_at = float(w["at"])
-			break
 	var before := -1
 	var after := -1
 	var first_in := -1.0
 	var opening_done := -1.0
+	var opening_n := 0
+	for g in _waves(lv)[0]["groups"]:
+		opening_n += int(g["n"])
 	for i in 40000:
 		if sim.state != "run":
 			break
@@ -282,14 +284,15 @@ func _l1(lv: Dictionary, trap_row: int, trap_lane: int, taps: float) -> Dictiona
 		sim.drain()
 		if first_in < 0.0 and not sim.hordes.is_empty() and sim.hordes.any(func(h): return LevelSim.front_z(h) >= -sim.fire_range):
 			first_in = sim.time
-		if opening_done < 0.0 and sim.rows_passed == 0 and first_in >= 0.0 and sim.hordes.is_empty() and sim.traveled > 40.0:
+		if opening_done < 0.0 and first_in >= 0.0 and sim.kills >= opening_n:
 			opening_done = sim.time
-		if trap_wave_at > 0.0 and before < 0 and sim.traveled >= float(rows[trap_row]["at"]) + 0.5:
-			before = sim.squad.total()
-		if trap_wave_at > 0.0 and after < 0 and before >= 0 and sim.traveled >= trap_wave_at + 6.0:
+		# The squad right after the trap row, and just before the next row (the gang is behind).
+		if trap_row >= 0 and sim.rows_passed == trap_row + 1:
+			if before < 0:
+				before = sim.squad.total()
 			after = sim.squad.total()
 	return {"state": sim.state, "troops": sim.squad.total(), "peak": sim.peak_squad, "trap_before": before,
-		"trap_after": after if after >= 0 else sim.squad.total(), "opening_t": opening_done - first_in, "time": sim.time}
+		"trap_after": after, "opening_t": opening_done - first_in if opening_done >= 0.0 else -1.0, "time": sim.time}
 
 
 func test_l1_trap_row_and_beats() -> void:
@@ -339,7 +342,7 @@ func test_l1_trap_row_and_beats() -> void:
 	check(doubled["state"] == "lost" or int(doubled["trap_after"]) * 2 <= int(doubled["trap_before"]),
 		"the doubled squad cannot beat that gang (%s, %d -> %d)" % [doubled["state"], int(doubled["trap_before"]), int(doubled["trap_after"])])
 	var ratio := float(greedy["troops"]) / maxf(float(greedy["peak"]), 1.0)
-	check(ratio >= 0.6 and ratio <= 0.95, "the best-lane player keeps a tutorial-band share of his peak (%.2f)" % ratio)
+	check(ratio >= 0.7 and ratio <= 0.85, "the best-lane player keeps a tutorial-band share of his peak (%.2f)" % ratio)
 	# The tap lesson: the hero alone needs about 1.5 taps/s for 6-8 s; not tapping loses.
 	var light := _l1(lv, trap, add_lane, 1.5)
 	eq(light["state"], "strike", "1.5 taps/s wins L1")
@@ -347,3 +350,18 @@ func test_l1_trap_row_and_beats() -> void:
 	check(t >= 5.5 and t <= 9.0, "the hero-alone opening lasts 6-8 s (%.1f)" % t)
 	var cold := _l1(lv, trap, add_lane, 0.0)
 	check(cold["state"] == "lost" and float(cold["time"]) < 12.0, "a hero who never taps falls in the opening")
+
+
+func test_map_badge_per_archetype() -> void:
+	# Spec v2.1 §4.1: every archetype has its own map-node icon (no words); bosses keep the crown.
+	var icons := {}
+	for n in range(1, Config.LEVEL_COUNT + 1):
+		var icon := CityMap.archetype_icon(n)
+		if _slot(n) == 10:
+			eq(icon, "", "L%d boss: the crown, no badge" % n)
+			continue
+		eq(icon, "arch_" + ARCH[_slot(n) - 1], "L%d badge" % n)
+		icons[icon] = true
+	eq(icons.size(), 9, "nine archetype badges")
+	for icon in icons:
+		check(ResourceLoader.exists("res://assets/icons/%s.svg" % icon), "%s.svg exists" % icon)

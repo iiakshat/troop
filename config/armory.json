@@ -256,7 +256,7 @@
   },
   "sniper_rifle": {
    "owner": "sniper",
-   "unlock_level": 21,
+   "unlock_level": 19,
    "steps_per_tier": 5,
    "cost": {
     "base": 380,
@@ -304,7 +304,7 @@
   },
   "launcher": {
    "owner": "commando",
-   "unlock_level": 31,
+   "unlock_level": 26,
    "steps_per_tier": 5,
    "cost": {
     "base": 520,
