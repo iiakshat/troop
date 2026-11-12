@@ -1,0 +1,126 @@
+extends "res://tests/test_case.gd"
+## LevelView combat visuals (spec v2 §12.2, §12.4, §12.5), checked on a real view, headless.
+
+
+var _keep: Array = []
+
+
+## A playing LevelView for `level` with its own World and Fx under the root. Returns
+## [view, world, fx]; free them with _drop.
+func _view(level: Dictionary) -> Array:
+	var tree := Engine.get_main_loop() as SceneTree
+	var game: Node = tree.root.get_node("Game")
+	_keep = [game.save.duplicate(true), game.save_path]
+	game.save_path = ""
+	game.boot({})
+	var world := World.new()
+	tree.root.add_child(world)
+	var fx := Fx.new()
+	fx.font = UiKit.FONT
+	tree.root.add_child(fx)
+	for node in [world, fx]:
+		if not node.is_node_ready():
+			node._ready()
+	var view := LevelView.new().setup(level, {}, world, fx, UiKit.FONT)
+	view.input_enabled = false
+	tree.root.add_child(view)
+	if not view.is_node_ready():
+		view._ready()
+	return [view, world, fx]
+
+
+func _drop(parts: Array) -> void:
+	for n in parts:
+		(n as Node).get_parent().remove_child(n)
+		(n as Node).free()
+	var game: Node = (Engine.get_main_loop() as SceneTree).root.get_node("Game")
+	game.save = _keep[0]
+	game.save_path = _keep[1]
+
+
+func _proj_kinds(fx: Fx) -> Array:
+	var out: Array = []
+	for p in fx._proj:
+		out.append(String(p["kind"]))
+	return out
+
+
+func _frames(view: LevelView, n: int) -> void:
+	for i in n:
+		if view.sim.state != "run":
+			break
+		view._process(1.0 / 60.0)
+		view.fx._process(1.0 / 60.0)   # the tree is not processing in a --script run
+
+
+func test_bomb_is_thrown_with_the_throw_clip_and_a_visible_arc() -> void:
+	var parts := _view({"id": 3, "district": 1, "charges": {"bomb": 1}, "events": [{"at": 300, "type": "finish"}]})
+	var view: LevelView = parts[0]
+	var fx: Fx = parts[2]
+	_frames(view, 3)
+	check(view.use_power("bomb"), "the bomb button works with nothing in reach")
+	check(view._bomb_throw_t >= 0.0, "the hero starts his throw clip")
+	check(_proj_kinds(fx).has("bomb"), "a bomb flies (with its fuse)")
+	_frames(view, 70)
+	check(not _proj_kinds(fx).has("bomb"), "it landed")
+	check(view._bomb_throw_t < 0.0, "the throw clip ended")
+	eq(int(view.sim.charges["bomb"]), 0, "spent")
+	_drop(parts)
+
+
+func test_return_fire_shows_tracers_and_followers_fall() -> void:
+	var parts := _view({"id": 3, "district": 1, "events": [
+		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 19}]},
+		{"at": 80, "type": "wave", "groups": [{"enemy": "gunman", "n": 4, "hp": 100000}]},
+		{"at": 300, "type": "finish"}]})
+	var view: LevelView = parts[0]
+	var fx: Fx = parts[2]
+	view.sim.set_lane(1)
+	var fired := false
+	var shown_before := -1
+	for i in 2400:
+		if view.sim.state != "run":
+			break
+		var before := view.sim.squad.total()
+		view.sim.step(1.0 / 60.0)
+		var evs := view.sim.drain()
+		var rf := evs.filter(func(e): return e["type"] == "return_fire" and int(e["lost"]) > 0)
+		if not rf.is_empty() and not fired:
+			shown_before = view._allies.size()
+			fx._proj.clear()
+		view._handle_events(evs)
+		if not rf.is_empty() and not fired:
+			fired = true
+			check(_proj_kinds(fx).has("tracer"), "tracers fly at the squad")
+			check(view._allies.size() < shown_before, "hit followers fall (%d -> %d)" % [shown_before, view._allies.size()])
+			check(view._dying.size() > 0, "they topple")
+			eq(view.sim.squad.total(), before - int(rf[0]["lost"]), "one troop per hit")
+			break
+	check(fired, "the gunmen fired back")
+	_drop(parts)
+
+
+func test_huge_gang_figures_are_capped_and_rows_match_the_sim() -> void:
+	var parts := _view({"id": 31, "district": 4, "events": [
+		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 24999}]},
+		{"at": 150, "type": "wave", "groups": [{"enemy": "thug", "n": 18000}]},
+		{"at": 300, "type": "finish"}]})
+	var view: LevelView = parts[0]
+	var spawned := false
+	for i in 4000:
+		view.sim.step(1.0 / 60.0)
+		view._handle_events(view.sim.drain())
+		if not view._hordes.is_empty():
+			spawned = true
+			break
+	check(spawned, "the gang spawned")
+	if spawned:
+		var hv: Dictionary = view._hordes.values()[0]
+		eq((hv["offs"] as Array).size(), int(Config.units()["world"]["gang_figures"]), "figures capped")
+		eq(int(hv["per"]), 100, "each figure is 100 people")
+		var cols := int(hv["h"]["cols"])
+		var dz: float = (hv["offs"][cols] as Vector3).z - (hv["offs"][0] as Vector3).z
+		check(absf(dz - float(hv["h"]["row_gap"])) < 0.3, "a figure row is one sim row (%.2f m)" % dz)
+		view._process(1.0 / 60.0)
+		eq((hv["label"] as Label3D).text, NumFormat.fmt(int(hv["h"]["count"])), "its count label is short (18K)")
+	_drop(parts)

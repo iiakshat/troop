@@ -90,6 +90,8 @@ var _hq: Node3D
 var _hq_fill: MeshInstance3D
 var finale: BottleShot = null
 var _hero_throw_t := -1.0
+var _bomb_throw_t := -1.0          # seconds into the hero's bomb throw (-1: none; spec v2 §12.5)
+var _rf_sfx_t := 0.0               # return fire plays its shot sound at most this often
 var _hero_knife_t := 9.0         # seconds since the hero's last in-level knife throw
 var _spotlight := 0.0            # seconds of new-rank spotlight left (real time)
 var _spot_kind := ""             # the rank in the spotlight
@@ -508,6 +510,10 @@ func _handle_events(events: Array) -> void:
 					Sfx.play("flip")
 			"bomb":
 				_on_bomb(e)
+			"bomb_throw":
+				_on_bomb_throw(e)
+			"return_fire":
+				_on_return_fire(e)
 			"shield_on":
 				Sfx.play("shield")
 			"hint":
@@ -625,11 +631,13 @@ func _on_row_pass(e: Dictionary) -> void:
 func _on_horde_spawn(h: Dictionary) -> void:
 	var kind := String(h["enemy"])
 	var n := int(h["count"])
-	var per := maxi(1, int(ceil(n / float(HORDE_CAP))))
+	# The sim stands a gang in at most world.gang_figures figures of `per` people each
+	# (LevelSim._spawn_horde); one figure row is one of its rows, so rows sit row_gap apart.
+	var per := maxi(int(h.get("per", ceili(n / float(HORDE_CAP)))), 1)
 	var vis := int(ceil(n / float(per)))
 	var cols := int(h["cols"])
 	var dx := 9.0 / maxf(cols, 1)
-	var dz := float(h["row_gap"]) * per
+	var dz := float(h["row_gap"]) * (1 if h.has("per") else per)
 	var offs: Array = []
 	for i in vis:
 		var r := i / cols
@@ -700,7 +708,7 @@ func _on_barrel_boom(e: Dictionary) -> void:
 	# Spec v2 §5: a big, readable blast count (exactly the gang members it killed).
 	var killed := int(e.get("killed", 0))
 	if killed > 0:
-		fx.float_text("-%d" % killed, p + Vector3(0, 3.2, 0), Color("ffd23f"), 2.2, 3.0, 1.5)
+		fx.float_text("-" + NumFormat.fmt(killed), p + Vector3(0, 3.2, 0), Color("ffd23f"), 2.2, 3.0, 1.5)
 	world.shake(1.1)
 	Sfx.play("boom")
 	Game.vibrate(150)
@@ -741,16 +749,61 @@ func _gun_tracers(horde_id: int, blocked: bool) -> void:
 		world.shake(0.5)
 
 
+## Spec v2 §12.5, the throw: the hero plays the overhand `throw` clip and a bomb with a
+## sparking fuse arcs from his hand down the lane to where its target will be at landing.
+func _on_bomb_throw(e: Dictionary) -> void:
+	_bomb_throw_t = 0.0
+	var from := Vector3(_squad_x + 0.35, 1.7, -0.9)
+	if not _allies.is_empty() and _allies[0]["kind"] == "hero":
+		from = (_allies[0]["pos"] as Vector3) + Vector3(0.35, 1.7, -0.3)
+	var to := Vector3(float(e.get("x", _squad_x)), 0.35, float(e["z"]))
+	fx.bomb(from, to, float(e["t"]), clampf(-float(e["z"]) * 0.12, 1.5, 6.0))
+	Sfx.play("swoosh", -3.0, 0.8)
+
+
+## The landing: the blast where the sim set it off (a gang's front, a wreck, the road),
+## a shock ring and the exact number it killed.
 func _on_bomb(e: Dictionary) -> void:
-	var hv: Dictionary = _hordes.get(e["horde"], {})
-	var p := Vector3(0, 0.5, float(e["z"]) - 2.0)
-	if not hv.is_empty():
-		p = _horde_front(hv) + Vector3(0, 0.5, -2.0)
-	fx.shoot("bullet_big", Vector3(_squad_x, 2.0, -1.0), p, 30.0)
-	fx.explosion(p, 1.6)
+	var hv: Dictionary = _hordes.get(e.get("horde", -1), {})
+	var p := Vector3(float(e.get("x", _squad_x)), 0.5, float(e["z"]))
+	if not hv.is_empty() and String(e.get("target", "horde")) == "horde":
+		p.z = _horde_front(hv).z
+	fx.explosion(p, 1.8)
+	fx.ring(p + Vector3(0, 0.2, 0), Color("ffb347"), 40, 11.0, 0.28)
+	var killed := int(e.get("killed", 0))
+	if killed > 0:
+		fx.float_text("-" + NumFormat.fmt(killed), p + Vector3(0, 3.0, 0), Color("ffd23f"), 2.0, 3.0, 1.3)
 	world.shake(1.0)
 	Sfx.play("boom")
 	Game.vibrate(150)
+
+
+## Spec v2 §12.2: a gang firing back. Muzzle flashes on its front shooters, tracers into the
+## squad (or onto the shield), and the followers it hit fall.
+func _on_return_fire(e: Dictionary) -> void:
+	var hv: Dictionary = _hordes.get(e["horde"], {})
+	if hv.is_empty():
+		return
+	var offs: Array = hv["offs"]
+	if offs.is_empty():
+		return
+	hv["shoot_flash"] = 0.12
+	var blocked := bool(e["blocked"])
+	var front := mini(offs.size(), maxi(int(hv["h"]["cols"]) * 2, 1))
+	for i in mini(int(e["shots"]), 5):
+		var from := _fig_pos(hv, offs[randi() % front]) + Vector3(0.22, 1.3, 0.55)
+		fx.muzzle(from)
+		var to := Vector3(_squad_x + randf_range(-1.2, 1.2), 1.0, randf_range(-0.2, 1.8))
+		if blocked:
+			to = Vector3(_squad_x + randf_range(-1.4, 1.4), 1.2 + randf(), -2.2)
+		fx.shoot("tracer", from, to, 75.0)
+	if _rf_sfx_t <= 0.0:
+		_rf_sfx_t = 0.09
+		Sfx.play("shot", -9.0, randf_range(0.8, 0.95))
+	if blocked:
+		fx.burst(Vector3(_squad_x, 1.6, -2.2), Color("9fc6ff"), 4, 4.0, 0.15, 0.25)
+	elif int(e["lost"]) > 0:
+		_sync_allies(Vector3(_squad_x, 0, 0))
 
 
 # ---------------------------------------------------------------- v1 threats and moments
@@ -766,7 +819,7 @@ func _on_pothole(e: Dictionary) -> void:
 	fx.burst(hole + Vector3(0, 0.3, 0), Color(0.42, 0.36, 0.3), 16, 4.0, 0.22, 0.5)
 	var lost := int(e["lost"])
 	if lost > 0:
-		fx.float_text("-%d" % lost, hole + Vector3(0, 2.6, 0), Color("ff5a5f"), 0.9)
+		fx.float_text("-" + NumFormat.fmt(lost), hole + Vector3(0, 2.6, 0), Color("ff5a5f"), 0.9)
 		Game.vibrate(70)
 	# The troops the hole took drop into it (obstacle_hit picks exactly which ones).
 	_death_at = hole
@@ -780,7 +833,7 @@ func _on_barricade_hit(e: Dictionary) -> void:
 	Game.vibrate(90)
 	var lost := int(e["lost"])
 	if lost > 0:
-		fx.float_text("-%d" % lost, p + Vector3(0, 2.8, 0), Color("ff5a5f"), 0.9)
+		fx.float_text("-" + NumFormat.fmt(lost), p + Vector3(0, 2.8, 0), Color("ff5a5f"), 0.9)
 	var g = e.get("blocked_gate")
 	if g == null:
 		return
@@ -848,7 +901,7 @@ func _on_firebomb_hit(e: Dictionary) -> void:
 		Sfx.play("hurt", -3.0)
 		world.shake(0.45)
 		Game.vibrate(60)
-		fx.float_text("-%d" % lost, at + Vector3(0, 2.8, 0), Color("ff8a3d"), 0.9)
+		fx.float_text("-" + NumFormat.fmt(lost), at + Vector3(0, 2.8, 0), Color("ff8a3d"), 0.9)
 		_sync_allies(Vector3(_squad_x, 0, 0))
 
 
@@ -1339,6 +1392,11 @@ func _update_visuals(d: float) -> void:
 	var target_pos = _target_point()
 	_anim_t += d
 	_hero_knife_t += d
+	_rf_sfx_t = maxf(_rf_sfx_t - d, 0.0)
+	if _bomb_throw_t >= 0.0:
+		_bomb_throw_t += d
+		if _bomb_throw_t > Crowd.clip_length(_throw_clip()) or _state != "play":
+			_bomb_throw_t = -1.0
 	var moving := demo or _state == "play" or _state == "done"
 
 	for k in _crowds:
@@ -1389,6 +1447,10 @@ func _update_visuals(d: float) -> void:
 			var throw := _throw_clip()
 			var clip := throw if _hero_throw_t >= 0.0 else "idle"
 			(_crowds["hero"] as Crowd).push(Transform3D(basis, pos), clip, maxf(_hero_throw_t, 0.0) if clip == throw else _anim_t)
+		elif a["kind"] == "hero" and _bomb_throw_t >= 0.0:
+			# Spec v2 §12.5: one full overhand throw for the bomb (any weapon he holds).
+			var throw := _throw_clip()
+			(_crowds["hero"] as Crowd).push(Transform3D(basis, pos), throw, minf(_bomb_throw_t, Crowd.clip_length(throw)), float(a["flash"]))
 		elif aim > 0.0 and a["kind"] == "hero" and sim.squad.hero_weapon == "":
 			# Knives: a real overhand throw per knife, the clip sped up to fit the throw rate.
 			var throw := _throw_clip()
@@ -1466,7 +1528,7 @@ func _update_visuals(d: float) -> void:
 		lab.position = Vector3(0, ly, lz)
 		if int(h["count"]) != int(hv["shown"]):
 			hv["shown"] = int(h["count"])
-			lab.text = str(int(h["count"]))
+			lab.text = NumFormat.fmt(int(h["count"]))
 		# Closing in while the squad's fire goes elsewhere (a red gate, an obstacle): the count
 		# pulses so the threat behind the gate is visible before it arrives.
 		var ignored: bool = _state == "play" and not is_same(sim.target_ref, h) and LevelSim.front_z(h) > -18.0 and not h["melee"]
@@ -1605,7 +1667,7 @@ func _update_visuals(d: float) -> void:
 
 	# Squad label and shield.
 	_label_pop = maxf(_label_pop - d * 4.0, 0.0)
-	_squad_label.text = str(sim.squad.total())
+	_squad_label.text = NumFormat.fmt(sim.squad.total())
 	_squad_label.position = Vector3(_squad_x, 3.9, -0.8)
 	if _key_light:
 		_key_light.position = Vector3(_squad_x, 4.5, 2.5)
@@ -1757,7 +1819,7 @@ func _spawn_obstacle(ob: Dictionary) -> void:
 		tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		tag.modulate = Color("ff5a5f")
 		tag.position = Vector3(0, 0.5, 0.9 if kind == "barrel" else 1.5)
-		tag.text = ("-%d%%" % int(ob["dmg_pct"])) if ob.has("dmg_pct") else ("-%d" % int(ob.get("dmg", 0)))
+		tag.text = ("-%d%%" % int(ob["dmg_pct"])) if ob.has("dmg_pct") else ("-" + NumFormat.fmt(int(ob.get("dmg", 0))))
 		n.add_child(tag)
 		od["tag"] = tag
 	add_child(n)
@@ -1789,7 +1851,7 @@ func _build_pothole(n: Node3D, od: Dictionary) -> void:
 	lab.modulate = Color("ff5a5f")
 	# On the hole's near lip, in front of any gate sign sharing the lane.
 	lab.position = Vector3(0, 0.55, 1.5)
-	lab.text = ("-%d%%" % int(ob["fall_pct"])) if ob.has("fall_pct") else ("-%d" % int(ob.get("fall", 0)))
+	lab.text = ("-%d%%" % int(ob["fall_pct"])) if ob.has("fall_pct") else ("-" + NumFormat.fmt(int(ob.get("fall", 0))))
 	n.add_child(lab)
 	od["tag"] = lab
 
@@ -2074,7 +2136,9 @@ func _begin_strike() -> void:
 	strike_ready.emit()
 	var hero := _slot_pos(0, _allies.size())
 	_hq.visible = false   # the squad bursts in: the finale is played inside the stash
-	finale = BottleShot.new().setup(world, fx, font, level_id, sim.squad.total(), hero, Game.coin_bonus())
+	# Coins count the squad as district-1 troops (LevelSim.coin_troops), so a 100K squad in
+	# district 5 pays like a full squad in district 1 and the economy's curve holds.
+	finale = BottleShot.new().setup(world, fx, font, level_id, sim.coin_troops(), hero, Game.coin_bonus())
 	finale.on_throw = func(): _hero_throw_t = 0.0
 	finale.done.connect(_on_finale_done)
 	add_child(finale)

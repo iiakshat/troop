@@ -221,9 +221,9 @@ static func describe(g: Dictionary) -> Dictionary:
 	match String(g["op"]):
 		"num":
 			var v := int(g["v"])
-			return {"text": ("+%d" % v) if v >= 0 else ("-%d" % -v), "color": GREEN if v > 0 else RED}
+			return {"text": ("+" if v >= 0 else "") + NumFormat.fmt(v), "color": GREEN if v > 0 else RED}
 		"recruit":
-			return {"text": "+%d" % int(g.get("n", 1)), "color": GREEN}
+			return {"text": "+" + NumFormat.fmt(int(g.get("n", 1))), "color": GREEN}
 		"mul":
 			return {"text": "×%d" % int(g["k"]), "color": GREEN}
 		"div":
@@ -236,7 +236,7 @@ static func describe(g: Dictionary) -> Dictionary:
 		"foe_strip":
 			return {"text": "", "icon": "armour_break", "color": BLUE}
 		"turncoat":
-			return {"text": "%d" % int(g.get("n", 1)), "icon": "turncoat", "color": BLUE}
+			return {"text": NumFormat.fmt(int(g.get("n", 1))), "icon": "turncoat", "color": BLUE}
 		"weapon":
 			return {"text": "", "icon": String(g["id"]), "color": GOLD}
 		"power":
