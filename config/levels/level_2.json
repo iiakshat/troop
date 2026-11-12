@@ -32,7 +32,7 @@
     {"at": 364, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 20},
     {"at": 402, "type": "wave", "groups": [{"enemy": "knifer", "n": 61}]},
     {"at": 434, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -20, "step": 4, "max": 30, "inc": 2}, {"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "num", "v": 40}]},
-    {"at": 476, "type": "wave", "label": "RUSH", "groups": [{"enemy": "thug", "n": 49}, {"enemy": "knifer", "n": 49, "gap": 8}]},
+    {"at": 476, "type": "wave", "label": "RUSH", "groups": [{"enemy": "thug", "n": 74}, {"enemy": "knifer", "n": 74, "gap": 8}]},
     {"at": 508, "type": "finish"}
   ]
 }
