@@ -605,8 +605,11 @@ func test_obstacle_hits_spatially() -> void:
 	eq((hit[0]["slots"] as Array).size() > 0, true, "the event names the slots that fell")
 	var away := _obstacle_row(2.8)
 	seen = _step_until(away, func(): return away.state != "run")
-	eq(_events_of(seen, "obstacle_hit").size(), 0, "steered fully into the next lane: missed")
-	eq(away.squad.total(), 40, "nobody lost")
+	# Spec v2 §4: the squad is about one lane wide, so from the next lane's centre only its
+	# outermost figures brush the barricade (intended: steering matters more).
+	var brushed := 40 - away.squad.total()
+	check(brushed <= 3, "steered fully into the next lane: at most the outer edge brushes it (lost %d)" % brushed)
+	eq(away.state, "strike", "and the level goes on")
 	# Capacity: centred on a cost-6 barricade loses exactly 6.
 	var six := _obstacle_row(0.0, 6)
 	_step_until(six, func(): return six.state != "run")

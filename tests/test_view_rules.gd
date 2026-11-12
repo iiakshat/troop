@@ -60,3 +60,83 @@ func test_level_view_never_slows_time() -> void:
 	eq(slow, 0, "frames run at anything but full speed")
 	_drop(parts)
 
+
+## Spec v2 §5: the explosive barrel is a drum with a fuse ring, never a box.
+func test_barrel_is_a_drum_with_a_fuse_ring() -> void:
+	var bm := GateRowView.barrel_model()
+	var root: Node3D = bm["root"]
+	var boxes := 0
+	var drums := 0
+	for c in root.get_children():
+		if c is MeshInstance3D:
+			if (c as MeshInstance3D).mesh is BoxMesh:
+				boxes += 1
+			if (c as MeshInstance3D).mesh is CylinderMesh:
+				drums += 1
+	eq(boxes, 0, "box parts in the barrel")
+	check(drums >= 1, "the barrel is a cylinder drum")
+	check(bm["fuse"] is ShaderMaterial, "the barrel has a fuse ring")
+	root.free()
+
+
+## Shooting a barrel fills its fuse ring; once armed the ring is full.
+func test_barrel_fuse_fills_with_hits() -> void:
+	var parts := _view(4)
+	var view: LevelView = parts[0]
+	var ob := {"id": 900, "kind": "barrel", "lane": 2, "z": -30.0, "hp": 10.0, "hp_max": 10.0, "dmg": 4}
+	view._spawn_obstacle(ob)
+	var od: Dictionary = view._obstacles[900]
+	var fm: ShaderMaterial = od["fuse"]
+	view._update_obstacle(od, 0.016)
+	eq(float(fm.get_shader_parameter("fill")), 0.0, "an untouched barrel's fuse is empty")
+	ob["hp"] = 4.0
+	view._update_obstacle(od, 0.016)
+	check(absf(float(fm.get_shader_parameter("fill")) - 0.6) < 0.001, "6 of 10 hits fill 60% of the fuse")
+	ob["hp"] = 0.0
+	ob["armed"] = true
+	view._update_obstacle(od, 0.016)
+	eq(float(fm.get_shader_parameter("fill")), 1.0, "an armed barrel's fuse is full")
+	_drop(parts)
+
+
+## Spec v2 §2: the heat arc at the hero's feet fills with taps and empties again.
+func test_heat_arc_follows_taps() -> void:
+	var parts := _view(1)
+	var view: LevelView = parts[0]
+	view._process(1.0 / 60.0)
+	check(view._heat_ring.visible, "the heat arc shows during play")
+	var idle := float(view._heat_mat.get_shader_parameter("fill"))
+	for i in 4:
+		view.tap()
+		view._process(1.0 / 60.0)
+	var hot := float(view._heat_mat.get_shader_parameter("fill"))
+	check(hot > idle + 0.5, "four quick taps heat the arc (%.2f -> %.2f)" % [idle, hot])
+	for i in 150:
+		view._process(1.0 / 60.0)
+	check(float(view._heat_mat.get_shader_parameter("fill")) < hot - 0.5, "the heat decays without taps")
+	_drop(parts)
+
+
+## Spec v2 §4: a full squad spreads about one lane wide (formation_half_width), not a blob.
+func test_full_squad_is_about_one_lane_wide() -> void:
+	var w: Dictionary = Config.units()["world"]
+	var half := float(w["formation_half_width"])
+	var lane := float(w["lane_width"])
+	var n := int(w["formation_figures"])
+	var lo := 0.0
+	var hi := 0.0
+	for i in n:
+		var o := Squad.slot_offset(i, n, half)
+		lo = minf(lo, o.x)
+		hi = maxf(hi, o.x)
+	check(hi - lo >= lane * 0.9, "a full squad spans %.2f m, about one lane (%.1f m)" % [hi - lo, lane])
+	check(hi - lo <= lane * 1.2, "a full squad stays within about one lane (%.2f m)" % (hi - lo))
+
+
+## Spec v2 §5: every district has a full colour grade in config/world_look.json.
+func test_world_look_has_every_district() -> void:
+	for d in range(1, 6):
+		var t := World.look(d)
+		for k in ["fog", "fog_density", "sun_color", "exposure", "saturation", "contrast", "tint"]:
+			check(t.has(k), "district %d look has %s" % [d, k])
+	eq(World.look_count(), 5, "districts with a look")

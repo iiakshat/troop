@@ -99,6 +99,13 @@ var _touching := false
 var _touch: TouchClassifier = null   # tap vs swipe per finger (spec v2 §2)
 var _steer_id := -1              # the finger that steers (-1: none)
 var _flick_t := 9.0              # seconds since the last tap (the hero's hand flick)
+const FLICK_S := 0.14            # the flick's length (s)
+var _heat_ring: MeshInstance3D   # spec v2 §2: the tap-heat arc at the hero's feet
+var _heat_mat: ShaderMaterial
+var _heat_local := 0.0           # visual heat while the sim has no tap_heat (before CORE's merge)
+const HEAT_COLD := Color("5ab4ff")
+const HEAT_WARM := Color("ffd23f")
+const HEAT_HOT := Color("ff4a24")
 var _drag_from_x := 0.0          # finger x when the drag (re)started
 var _steer_from := 0.0           # squad target x at that moment
 var _steer_x := 0.0              # where the finger wants the squad
@@ -179,6 +186,7 @@ func _ready() -> void:
 	_squad_label.modulate = Color("8fd0ff")
 	add_child(_squad_label)
 	_build_shield()
+	_build_heat_ring()
 	_prewarm()
 	var outfit := Game.outfit()
 	var hc: Dictionary = Game.economy["hero_colors"]
@@ -265,13 +273,52 @@ func tap() -> void:
 		return
 	if sim.has_method("tap"):
 		sim.call("tap")
+	else:
+		var tc: Dictionary = Game.units.get("hero", {}).get("tap", {})
+		_heat_local = minf(_heat_local + float(tc.get("per_tap", 0.3)), 1.0)
 	_flick_t = 0.0
+	# The flick: a pinch of sparks off his throwing hand.
+	if not _allies.is_empty() and _allies[0]["kind"] == "hero" and sim.squad.hero_alive():
+		fx.burst((_allies[0]["pos"] as Vector3) + Vector3(0.32, 1.35, -0.25), Color(1.0, 0.9, 0.6), 3, 2.2, 0.07, 0.16, 1.0, 0.0)
 
 
-## The hero's tap heat 0..1 (LevelSim.tap_heat; 0 until the sim has it).
+## The hero's tap heat 0..1 (LevelSim.tap_heat; the view's own estimate until the sim has it).
 func tap_heat() -> float:
 	var h: Variant = sim.get("tap_heat") if sim else null
-	return float(h) if h != null else 0.0
+	return float(h) if h != null else _heat_local
+
+
+func _build_heat_ring() -> void:
+	_heat_ring = MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(1.9, 1.9)
+	_heat_ring.mesh = pm
+	_heat_mat = ShaderMaterial.new()
+	_heat_mat.shader = GateRowView.ARC
+	_heat_mat.set_shader_parameter("track", Color(HEAT_COLD, 0.3))
+	_heat_mat.set_shader_parameter("inner", 0.74)
+	_heat_mat.set_shader_parameter("outer", 0.92)
+	_heat_ring.material_override = _heat_mat
+	_heat_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_heat_ring)
+
+
+## The heat arc follows the hero's feet: it fills and warms (blue, gold, red-hot) with tapping.
+func _update_heat_ring(d: float) -> void:
+	_flick_t += d
+	if sim.get("tap_heat") == null:
+		var tc: Dictionary = Game.units.get("hero", {}).get("tap", {})
+		_heat_local = maxf(_heat_local - d / maxf(float(tc.get("decay_s", 1.0)), 0.05), 0.0)
+	var show: bool = not demo and _state == "play" and not _allies.is_empty() \
+		and _allies[0]["kind"] == "hero" and sim.squad.hero_alive()
+	_heat_ring.visible = show
+	if not show:
+		return
+	var h := clampf(tap_heat(), 0.0, 1.0)
+	_heat_ring.position = (_allies[0]["pos"] as Vector3) + Vector3(0, 0.05, 0)
+	_heat_mat.set_shader_parameter("fill", h)
+	var c := HEAT_COLD.lerp(HEAT_WARM, h * 2.0) if h < 0.5 else HEAT_WARM.lerp(HEAT_HOT, h * 2.0 - 1.0)
+	_heat_mat.set_shader_parameter("color", c)
 
 
 ## The hero's fire-rate multiplier from the heat (1 until the sim has it).
@@ -480,6 +527,11 @@ func _handle_events(events: Array) -> void:
 				Sfx.play("hurt")
 				var hit_ob: Dictionary = e["ob"]
 				var hole := String(hit_ob.get("kind", "")) == "pothole"
+				if String(hit_ob.get("kind", "")) == "barrel":
+					# The squad smashes an unarmed drum: metal and oil fly (never "rubber").
+					var bp := _obstacle_pos(hit_ob) + Vector3(0, 0.7, 0)
+					fx.burst(bp, GateRowView.BARREL_RED, 16, 6.0, 0.22, 0.6, 4.0)
+					fx.burst(bp, Color(0.08, 0.07, 0.06), 12, 4.0, 0.3, 0.7, 2.0)
 				# Exactly the figures that stood on its footprint fall; the rest close ranks.
 				_kill_overlap(e, hole)
 				# A pothole stays in the road and rides away; anything solid was smashed.
@@ -636,9 +688,15 @@ func _on_turncoat(e: Dictionary) -> void:
 
 func _on_barrel_boom(e: Dictionary) -> void:
 	var ob: Dictionary = e["ob"]
-	var p := _obstacle_pos(ob)
+	var od: Dictionary = _obstacles.get(int(ob["id"]), {})
+	var p: Vector3 = (od["node"] as Node3D).position if not od.is_empty() else _obstacle_pos(ob)
 	_free_obstacle(int(ob["id"]))
 	fx.explosion(p + Vector3(0, 0.8, 0), 2.2)
+	fx.ring(p + Vector3(0, 0.3, 0), Color("ff8a2a"), 48, 13.0, 0.3)
+	# Spec v2 §5: a big, readable blast count (exactly the gang members it killed).
+	var killed := int(e.get("killed", 0))
+	if killed > 0:
+		fx.float_text("-%d" % killed, p + Vector3(0, 3.2, 0), Color("ffd23f"), 2.2, 3.0, 1.5)
 	world.shake(1.1)
 	Sfx.play("boom")
 	Game.vibrate(150)
@@ -1269,6 +1327,10 @@ func _update_visuals(d: float) -> void:
 			dir.y = 0
 			if dir.length() > 0.5:
 				basis = Basis.looking_at(dir.normalized(), Vector3.UP)
+		if a["kind"] == "hero" and _flick_t < FLICK_S and _state == "play":
+			# The hand flick on a tap: a quick twist into the throw and back.
+			var fk := sin(PI * _flick_t / FLICK_S)
+			basis = basis * Basis(Vector3.UP, 0.2 * fk) * Basis(Vector3.RIGHT, -0.08 * fk)
 		var ph := float(a["phase"]) * 3.0
 		if a["kind"] == "hero" and _state == "finale":
 			if finale != null and is_instance_valid(finale) and finale.camera_in_head():
@@ -1447,6 +1509,7 @@ func _update_visuals(d: float) -> void:
 		(_crowds[fd["kind"]] as Crowd).push(Transform3D(basis, p), "hit", 0.1, 0.0)
 		i += 1
 
+	_update_heat_ring(d)
 	if _warm_left > 0:
 		_warm_frame()
 	for k in _crowds:
@@ -1622,8 +1685,11 @@ func _spawn_obstacle(ob: Dictionary) -> void:
 		"pothole":
 			_build_pothole(n, od)
 		"barrel":
-			n.add_child(_part(Vector3(1.0, 1.3, 1.0), Color("c8352b"), Vector3(0, 0.65, 0)))
-			n.add_child(_part(Vector3(1.06, 0.18, 1.06), Color("f2c14e"), Vector3(0, 0.95, 0)))
+			var bm := GateRowView.barrel_model()
+			n.add_child(bm["root"])
+			od["fuse"] = bm["fuse"]
+			od["body"] = bm["body"]
+			od["kick"] = 0.0
 		"car":
 			var car := World.model(["cars/sedan.glb", "cars/taxi.glb", "cars/van.glb", "cars/suv.glb"][int(ob["id"]) % 4], 1.45)
 			car.rotation.y = PI * (0.5 if int(ob["id"]) % 2 == 0 else -0.5)
@@ -1716,6 +1782,8 @@ func _update_obstacle(od: Dictionary, d: float) -> void:
 		on.scale = Vector3.ONE * (1.0 + 0.12 * absf(sin(_anim_t * 16.0)))
 		if od.has("tag"):
 			(od["tag"] as Node3D).visible = false  # an armed barrel no longer hurts the squad
+	if od.has("fuse"):
+		_update_barrel(od, on, armed, d)
 	od["chip_t"] = float(od["chip_t"]) - d
 	var lab = od["label"]
 	if lab == null:
@@ -1735,6 +1803,30 @@ func _update_obstacle(od: Dictionary, d: float) -> void:
 	var cracks: Array = od["cracks"]
 	for ci in cracks.size():
 		(cracks[ci] as Node3D).visible = frac < (0.67 if ci == 0 else 0.34)
+
+
+## Spec v2 §5 barrel states: the fuse ring fills with the shots it takes; armed, ring and drum
+## blink. An armed barrel is no longer solid (the sim lets the squad through), so one the squad
+## walks into is kicked rolling to the kerb instead of the troops passing through it.
+func _update_barrel(od: Dictionary, on: Node3D, armed: bool, d: float) -> void:
+	var ob: Dictionary = od["ob"]
+	var fm: ShaderMaterial = od["fuse"]
+	var frac := 1.0 if armed else 1.0 - float(ob["hp"]) / maxf(float(ob.get("hp_max", 1.0)), 1.0)
+	fm.set_shader_parameter("fill", frac)
+	var bl := (0.5 + 0.5 * sin(_anim_t * 18.0)) if armed else 0.0
+	fm.set_shader_parameter("blink", bl)
+	fm.set_shader_parameter("color", Color("ff3b2a") if armed else GateRowView.FUSE_COLOR)
+	(od["body"] as StandardMaterial3D).albedo_color = GateRowView.BARREL_RED.lerp(Color("ffd23f"), bl * 0.55)
+	var kick := float(od["kick"])
+	var lane_x: float = LANE_X[int(ob["lane"])]
+	if armed and kick == 0.0 and absf(lane_x - _squad_x) < 1.9 and on.position.z > -1.2 and on.position.z < 1.5:
+		kick = 0.01 * (1.0 if lane_x >= _squad_x else -1.0)
+		Sfx.play("clink", -4.0, 0.7)
+	if kick != 0.0:
+		kick = signf(kick) * minf(absf(kick) + d * 7.0, 4.0)
+		od["kick"] = kick
+		on.position.x = clampf(lane_x + kick, -World.ROAD_HALF + 0.5, World.ROAD_HALF - 0.5)
+		(on.get_child(0) as Node3D).rotation = Vector3(0, 0, -kick * 1.2)
 
 
 ## `ride`: leave the node on the road (it scrolls away under the squad) instead of vanishing.
