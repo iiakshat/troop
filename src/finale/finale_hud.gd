@@ -41,6 +41,8 @@ var _punch_gold := false
 var _combo_shown := 0
 var _combo_punch := 0.0
 var _combo_break := 0.0
+var ghosted := false            # a see-through copy drawn while the level loads (_ghost_all)
+const GHOST_ALPHA := 0.01       # still drawn (its pipelines compile), far too faint to see
 
 
 ## Sunburst behind the multiplier when it jumps.
@@ -309,6 +311,23 @@ func _ready() -> void:
 	add_child(_reticle)
 	_wind_max = wind_max(logic)
 	refresh()
+	if ghosted:
+		_ghost_all()
+
+
+## Level-load prewarm (BottleShot dormant): every part at once, nearly see-through, with every
+## character the finale writes at each size, so the canvas pipelines and the font's glyphs are
+## ready before the burst into the stash and the first bottle (this copy is freed after).
+func _ghost_all() -> void:
+	for c in get_children():
+		(c as CanvasItem).visible = true
+		(c as CanvasItem).modulate.a = GHOST_ALPHA
+	_flash.color.a = 0.5   # full screen: keep it far below what an eye could catch
+	_rays.color.a = 1.0
+	_reticle.position = Vector2(300, 600)
+	_reload.offset_top = -330
+	for l in [_bottle_n, _ammo_n, _mult_label, _combo_label, _wind_label]:
+		(l as Label).text = "×+.0123456789"
 
 
 ## Re-reads counts from the logic (call after a shot is visually resolved or a reload).

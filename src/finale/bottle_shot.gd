@@ -34,12 +34,24 @@ const CLOSE_DIST := 1.3         # close-up distance from the bottle
 const CLOSE_DOLLY := 0.5       # extra pull-back while the glass flies
 const MISS_DIST := 0.75         # close-up distance from a knife stuck in the wood
 const BOTTLE_SCALE := 1.3
-## LevelView's level-load prewarm (spec v2 §3): built out of sight for a few frames so the
-## stash, bottles and weapon compile their GPU pipelines then, not on the burst into the stash.
-## Never plays: no camera, sound, input or HUD.
-var warm := false
 const STAGE_KNIFE_IN := 0.04    # metres a stuck knife's tip sinks into the planks
 const INTRO := 0.75             # real seconds of the burst-in camera move
+
+## LevelView's level-load prewarm (spec v2 §3): the finale is built while the level loads
+## (`dormant`: stash, bottles, HUD, weapon), drawn out of sight for the first frames with one of
+## each thing a shot makes later (a shattered bottle, the knife, tracers, casings...) so every
+## pipeline compiles then, and rests hidden (`rest`) until the squad reaches the stash, when
+## `wake` moves it in front of the hero and plays it. The burst into the stash builds nothing.
+var dormant := false
+var _built: Array = []          # the set as built (stash, rack, bottles, plates): `_place` moves it
+var _built_hero := Vector3.ZERO # the hero the set was built around
+var _ghost: FinaleHud = null    # a see-through HUD drawn while warming (canvas pipelines, glyphs)
+var _warm_root: Node3D = null   # the warm-only extras; hidden after warming, kept so their
+                                # materials' shaders stay compiled for the finale
+var _took_camera := false       # the finale holds the street camera (given back when it ends)
+var _lens_warm := false         # the street camera carries an unseen depth of field while warming
+const WARM_FOCUS := 1000.0      # warm depth of field: focused past everything the street shows
+const WARM_BLUR := 0.001        # ... and far too faint to see; only its pipelines matter
 
 var logic: BottleLogic
 var world: World
@@ -134,21 +146,27 @@ func setup(w: World, f: Fx, fnt: Font, level_id: int, troop_count: int, hero: Ve
 
 
 func _ready() -> void:
-	if warm:
-		set_process(false)
-		set_process_unhandled_input(false)
-		_build_wall()
-		var gun := warm_weapon(logic.weapon)
-		if gun != null:
-			gun.position = Vector3(hero_pos.x, 1.5, _wall_z + 2.0)
-			add_child(gun)
+	_build()
+	if dormant:
+		process_mode = Node.PROCESS_MODE_DISABLED   # no process, no input until `wake`
+		_warm_up()
 		return
+	_begin()
+
+
+## Everything the finale shows, before it starts: the stash and bottles, the HUD, the weapon.
+func _build() -> void:
 	var ks: Dictionary = Game.knife_skin()
 	_blade_color = Color(String(ks.get("blade", "e6eaf0")))
 	if String(ks.get("trail", "")) != "":
 		_trail_color = Color(String(ks["trail"]))
 		_cord_color = _trail_color.darkened(0.35)
+	_built_hero = hero_pos
+	var n0 := get_child_count()
 	_build_wall()
+	for c in get_children().slice(n0):
+		if c is Node3D:
+			_built.append(c)
 	_build_trail()
 	hud = FinaleHud.new().setup(logic)
 	hud.layer = 2
@@ -161,8 +179,11 @@ func _ready() -> void:
 	if _mode:
 		_mode.setup(self)
 		add_child(_mode)
+
+
+## Burst in: the squad kicks the door; the camera rushes from the street into the stash.
+func _begin() -> void:
 	_aim_lens()
-	# Burst in: the squad kicks the door; the camera rushes from the street into the stash.
 	_intro_from = world.camera.transform
 	_cam = _intro_from
 	_intro_fov = world.camera.fov
@@ -174,7 +195,165 @@ func _ready() -> void:
 	Sfx.play("punch", 2.0, 0.8)
 	Sfx.play("boom", -6.0, 1.3)
 	_later.append({"t": 0.25, "id": "swoosh", "vol": 0.0})
+	_took_camera = true
 	_apply_camera()
+
+
+## True when `s` is a resting finale built for `level_id` that can play now.
+static func reusable(s, level_id: int) -> bool:
+	if not is_instance_valid(s) or not (s is BottleShot):
+		return false
+	var b := s as BottleShot
+	return not b.is_queued_for_deletion() and b.dormant and b.logic != null and b.logic.level == level_id
+
+
+## The squad bursts into the stash: the finale built at load moves in front of `hero` (a dormant
+## finale only) and plays, exactly as a fresh one built here would.
+func wake(troop_count: int, hero: Vector3, bonus: float) -> void:
+	troops = troop_count
+	station_bonus = bonus
+	_end_warm()
+	dormant = false
+	position = Vector3.ZERO
+	_place(hero)
+	if _mode:
+		_mode.position = Vector3.ZERO
+	visible = true
+	_show_layers(true)
+	process_mode = Node.PROCESS_MODE_INHERIT
+	_begin()
+
+
+## After the warm frames: hidden and still until `wake` (the HUD and weapon overlays too).
+func rest() -> void:
+	if not dormant:
+		return
+	_end_warm()
+	visible = false
+	_show_layers(false)
+
+
+## Moves the set built around `_built_hero` to stand around `hero`. The set is the same around
+## any hero (everything is placed from hero_pos, _wall_z and _floor_y), so this is a pure shift
+## of its pieces; bottles and plates are placed from hero_pos every frame anyway.
+func _place(hero: Vector3) -> void:
+	var d := hero - _built_hero
+	hero_pos = hero
+	_wall_z = hero.z - logic.distance - 0.25
+	_wall_front = _wall_z + 0.025
+	_built_hero = hero
+	if d == Vector3.ZERO:
+		return
+	for n in _built:
+		# The aim ring is placed every aiming frame; bottles and plates by _move_bottles below.
+		if is_instance_valid(n) and n != _reticle and not (n as Node3D).top_level:
+			(n as Node3D).position += d
+	if _dust_mat:
+		# The motes test themselves against the two spotlights in world space.
+		for k in ["spot_a", "spot_b"]:
+			_dust_mat.set_shader_parameter(k, (_dust_mat.get_shader_parameter(k) as Vector3) + d)
+	_move_bottles()
+
+
+## The HUD and the weapon's own overlays (scope, swipe line) on or off.
+func _show_layers(on: bool) -> void:
+	var layers: Array = [hud] if hud != null else []
+	if _mode:
+		layers.append_array(_mode.find_children("*", "CanvasLayer", true, false))
+	for l in layers:
+		(l as CanvasLayer).visible = on
+
+
+## Dormant, the first frames: everything stands where LevelView put this node (out of sight),
+## the HUD stays hidden behind a see-through copy, and one of each thing a shot makes later
+## stands in front of the wall, so their pipelines and glyphs are ready before the stash.
+func _warm_up() -> void:
+	_show_layers(false)
+	var at := Vector3(hero_pos.x, 1.5, _wall_z + 2.0)   # in front of the wall, on LevelView's view ray
+	_ghost = FinaleHud.new().setup(logic)
+	_ghost.layer = 2
+	_ghost.ghosted = true
+	add_child(_ghost)
+	_warm_root = Node3D.new()
+	_warm_root.name = "Warm"
+	add_child(_warm_root)
+	# A bottle as a knife leaves it: the jagged stump, the flying neck, shards, spray and stain.
+	var b := BottleMesh.make(false, 0.31, 0)
+	b.position = at + Vector3(0.6, 0, 0)
+	b.scale = Vector3.ONE * _bscale
+	_warm_root.add_child(b)
+	var neck := BottleMesh.break_apart(b, true, true)
+	var sh := Shatter.new().setup(b.position, _bscale, Vector3.FORWARD, BottleMesh.glass_color(b),
+		BottleMesh.drink_color(b), false, b.position.z - 0.3, {}, neck, BottleMesh.height(0))
+	sh.top_level = false   # placed in this node's frame (it is out of sight down here)
+	_warm_root.add_child(sh)
+	sh.tick(0.02, at + Vector3(0, 0.5, 3.0))
+	# The knife's aim and close-ups blur the background (depth of field): those post-process
+	# pipelines compile now too, on an invisible lens (it was a 30-50 ms frame as the burst-in
+	# camera settled).
+	if world != null and world.camera != null:
+		world.set_lens(world.camera.fov, WARM_FOCUS, -1.0, WARM_BLUR)
+		_lens_warm = true
+	var at_world := global_transform * at if is_inside_tree() else at
+	if _mode == null:
+		# Knives: the thrown knife, a scrap of its air streak (drawn in world space) and the aim
+		# ring (placed every aiming frame once playing).
+		var knife := FinaleKnife.make(_blade_color, _cord_color)
+		knife.position = at + Vector3(-0.6, 0, 0)
+		_warm_root.add_child(knife)
+		_reticle.position = at + Vector3(0, 0.6, 0)
+		_reticle.visible = true
+		_trail_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP, _trail_mat)
+		for p in [Vector3(-0.3, 0, 0), Vector3(0.3, 0, 0), Vector3(-0.3, 0.05, 0), Vector3(0.3, 0.05, 0)]:
+			_trail_mesh.surface_set_color(Color(_trail_color, 0.4))
+			_trail_mesh.surface_add_vertex(at_world + (p as Vector3))
+		_trail_mesh.surface_end()
+	elif _mode.is_node_ready():
+		# The weapon in hand stands in front of the wall too (its tick places it once playing),
+		# with its fill light, and one of each thing it fires or throws off.
+		_mode.position = at
+		_mode.place_fill(Transform3D(Basis(), at_world))
+		_mode.warm(true)
+		var k := 0
+		for part in _mode.warm_parts():
+			var n := part as Node3D
+			n.top_level = false
+			n.position = at + Vector3(-1.2 + 0.4 * k, 0.4, 0)
+			_warm_root.add_child(n)
+			k += 1
+
+
+## The warm frames are over: the see-through HUD goes, the extras hide, the trail is cleared.
+func _end_warm() -> void:
+	if _ghost:
+		_ghost.visible = false
+		_ghost.queue_free()
+		_ghost = null
+	if _warm_root:
+		_warm_root.visible = false
+	if _trail_mesh:
+		_trail_mesh.clear_surfaces()
+	if _reticle:
+		_reticle.visible = false
+	if _mode and _mode.is_node_ready():
+		_mode.warm(false)
+	if _lens_warm:
+		_lens_warm = false
+		if is_instance_valid(world):
+			world.set_lens(-1.0)
+
+
+## Leaving mid-finale (restart or home from the pause menu) gives the street its camera and
+## lens back (also a level left while its finale is still warming).
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_EXIT_TREE and what != NOTIFICATION_PREDELETE:
+		return
+	if (_took_camera or _lens_warm) and is_instance_valid(world):
+		if _took_camera:
+			world.set_camera_override(null)
+		world.set_lens(-1.0)
+	_took_camera = false
+	_lens_warm = false
 
 
 # ---------------------------------------------------------------- input
@@ -330,6 +509,7 @@ func _process(delta: float) -> void:
 				_focus = lerpf(_focus, _aim_focus, k)
 			if _wait <= 0.0:
 				_state = "finished"
+				_took_camera = false
 				world.set_camera_override(null)
 				world.set_lens(-1.0)
 				hud.queue_free()
@@ -911,7 +1091,8 @@ func _add_beam(from: Vector3, to: Vector3, angle_deg: float) -> void:
 	if x.length_squared() < 0.001:
 		x = Vector3.RIGHT
 	var z := x.cross(y).normalized()
-	cone.global_transform = Transform3D(Basis(x, y, z), from + dir * length * 0.5)
+	# In this node's frame, like the rest of the set (it is built out of sight at level load).
+	cone.transform = Transform3D(Basis(x, y, z), from + dir * length * 0.5)
 
 
 ## Dust motes drifting through the two beams (only the ones inside a beam show).
@@ -958,23 +1139,6 @@ func _build_trail() -> void:
 	_trail_mat.vertex_color_use_as_albedo = true
 	_trail_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	add_child(_trail)
-
-
-## The weapon model a district's Bottle Shot uses (null for knives: those are Fx's), for the
-## prewarm.
-static func warm_weapon(weapon: String) -> Node3D:
-	match weapon:
-		"pistol":
-			return WeaponModels.pistol()
-		"bow":
-			var b := WeaponModels.bow()
-			b.add_child(WeaponModels.arrow())
-			return b
-		"stars":
-			return WeaponModels.star()
-		"sniper":
-			return WeaponModels.rifle()
-	return null
 
 
 ## Air streak behind the flying knife: the last few positions (in finale time).

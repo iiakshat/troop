@@ -262,6 +262,10 @@ func _tick_stuck(delta: float) -> void:
 		node.global_transform = Transform3D(b, (s["tip"] as Vector3) - (-b.z.normalized()) * WeaponModels.ARROW_LEN * FLY_SCALE)
 
 
+func warm_parts() -> Array:
+	return [WeaponModels.arrow()]
+
+
 func finish() -> void:
 	visible = false
 	if is_instance_valid(shot.hud):
