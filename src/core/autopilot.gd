@@ -3,19 +3,24 @@ extends RefCounted
 ## Plays a LevelSim with a fixed lane choice per gate row. Used by tests, the tuning
 ## tool and the debug --autoplay flag. `use_powers` fires shield/bomb at sensible moments;
 ## `dodge` steps out of a firebomb's lane when that is safe (a skilled player).
+## `tap_rate` taps the fire zone that many times per second of sim time (0 = a non-tapper).
 
 var choices: Array      # lane per gate row, in arrival order
 var use_powers := true
 var dodge := false
+var tap_rate := 4.0
+var _next_tap := 0.0    # sim time of the next tap
 
 
-func _init(lane_choices: Array, powers := true, dodges := false) -> void:
+func _init(lane_choices: Array, powers := true, dodges := false, taps := 4.0) -> void:
 	choices = lane_choices
 	use_powers = powers
 	dodge = dodges
+	tap_rate = taps
 
 
 func drive(sim: LevelSim) -> void:
+	_tap(sim)
 	# Aim for the next gate row that hasn't passed yet.
 	var want := sim.lane
 	if sim.rows_passed < choices.size():
@@ -38,6 +43,15 @@ func drive(sim: LevelSim) -> void:
 			sim.use_power("bomb")
 	if danger and int(sim.charges.get("shield", 0)) > 0 and sim.shield_t <= 0.0:
 		sim.use_power("shield")
+
+
+## Taps at tap_rate per second of sim time. A fresh pilot on a cloned sim starts tapping now.
+func _tap(sim: LevelSim) -> void:
+	if tap_rate <= 0.0 or sim.time < _next_tap:
+		return
+	sim.tap()
+	var gap := 1.0 / tap_rate
+	_next_tap = _next_tap + gap if sim.time - _next_tap < gap else sim.time + gap
 
 
 ## Leaves the lane a firebomb is about to land in, if a neighbouring lane is clear.
@@ -68,9 +82,9 @@ func _clear(sim: LevelSim, l: int) -> bool:
 
 
 ## Runs a whole level headless. Returns {state, troops, kills, time, peak, stars}.
-static func run(level: Dictionary, units_cfg: Dictionary, lanes: Array, upgrades := {}, powers := true, dt := 1.0 / 30.0, dodges := false) -> Dictionary:
+static func run(level: Dictionary, units_cfg: Dictionary, lanes: Array, upgrades := {}, powers := true, dt := 1.0 / 30.0, dodges := false, tap_rate := 4.0) -> Dictionary:
 	var sim := LevelSim.new(level, units_cfg, upgrades)
-	return play(sim, Autopilot.new(lanes, powers, dodges), dt)
+	return play(sim, Autopilot.new(lanes, powers, dodges, tap_rate), dt)
 
 
 ## Plays `sim` to the end (or `max_rows` gate rows) with `pilot`.
