@@ -206,6 +206,32 @@ func test_keyart_cover_keeps_focus() -> void:
 	check((a.get_center() - b.get_center()).length() < 0.5, "the push-in grows about the focal point")
 
 
+## The loading bar warms what the first screen loads: a brand-new player's level 1 builds
+## every crowd (their meshes and animation textures); anyone else opens on the map.
+func test_boot_warms_the_first_screen() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	var game: Node = tree.root.get_node_or_null("Game")
+	var keep: Dictionary = game.save.duplicate(true)
+	game.save["unlocked"] = 1
+	game.save["stars"] = {}
+	var level := BootSequence.default_warm()
+	check(level.size() >= 3, "a new player warms the crowds (got %d paths)" % level.size())
+	var all_crowds := true
+	for p in level:
+		all_crowds = all_crowds and p.begins_with(BootSequence.CROWDS) and p.ends_with(".res") and ResourceLoader.exists(p)
+	check(all_crowds, "every warmed path is a crowd resource that exists")
+	check(level.has(BootSequence.CROWDS + "hero_vat.res"), "the hero's animation texture is warmed")
+	game.save["unlocked"] = 5
+	game.save["stars"] = {"1": 3}
+	var map := BootSequence.default_warm()
+	check(not map.is_empty(), "a returning player warms the map")
+	var all_map := true
+	for p in map:
+		all_map = all_map and p.begins_with("res://assets/city/") and ResourceLoader.exists(p)
+	check(all_map, "every warmed map path exists")
+	game.save = keep
+
+
 ## No wordmark is left anywhere: the logo screen and its art are gone, the light-bar stays
 ## (the loading bar's front).
 func test_no_wordmark_left() -> void:
