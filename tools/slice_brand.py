@@ -160,8 +160,8 @@ def main():
     fit_width(bar, 512).save(OUT / "lightbar.png")
     badge.save(SRC / "badge.png")
     # Adaptive icon: 108 dp layers; the launcher mask may show only the centre 72 dp (288 of
-    # 432 px) and the safe circle is 66 dp (264 px), so the badge fills ~270 px.
-    fg = square(badge, 432, 272)
+    # 432 px) and the safe circle is 66 dp (264 px), so the badge (star tips included) fits in it.
+    fg = square(badge, 432, 258)
     fg.save(OUT / "icon_fg.png")
     bg = burst(432, 432, (216, 200))
     bg.convert("RGB").save(OUT / "icon_bg.png")
