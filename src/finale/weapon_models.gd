@@ -125,7 +125,7 @@ static func pistol() -> Node3D:
 	support.rotation.z = deg_to_rad(-12)
 	var cuff := box(hand, Vector3(0.05, 0.03, 0.05), Vector3(0.0, -0.165, -0.185), sk)
 	cuff.rotation.x = deg_to_rad(-16)
-	return root
+	return WeaponLook.tint_view_model(root, "finale_pistol")  # v2 Armory tier colours
 
 
 ## A brass pistol/rifle casing (local Y = the case axis).
@@ -198,7 +198,7 @@ static func rifle() -> Node3D:
 	a1.rotation.x = deg_to_rad(25)
 	var a2 := box(root, Vector3(0.065, 0.065, 0.32), Vector3(-0.06, -0.21, -0.22), sk)
 	a2.rotation = Vector3(deg_to_rad(28), deg_to_rad(-22), 0)
-	return root
+	return WeaponLook.tint_view_model(root, "finale_sniper")  # v2 Armory tier colours
 
 
 ## Recurve bow, held upright. Origin = the grip; the string's nock point starts at
@@ -249,7 +249,7 @@ static func bow() -> Node3D:
 	var g := glove()
 	box(root, Vector3(0.042, 0.075, 0.05), Vector3(0.004, -0.005, 0.01), g)
 	# No forearm: it filled the left third of the view. The riser, string and arrow are enough.
-	return root
+	return WeaponLook.tint_view_model(root, "finale_bow")  # v2 Armory tier colours
 
 
 ## Redraws the bow string through the nock point (bow-local).
@@ -316,7 +316,7 @@ static func star() -> Node3D:
 	root.add_child(mi)
 	var hub := tube(root, 0.012, 0.01, Vector3.ZERO, mat(Color("2a2d33"), 0.6, 0.4))
 	hub.rotation.x = PI * 0.5
-	return root
+	return WeaponLook.tint_view_model(root, "finale_stars")  # v2 Armory tier colours
 
 
 ## Bullet: a small copper ogive along -Z.

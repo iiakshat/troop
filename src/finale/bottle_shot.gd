@@ -117,7 +117,8 @@ func setup(w: World, f: Fx, fnt: Font, level_id: int, troop_count: int, hero: Ve
 	troops = troop_count
 	hero_pos = hero
 	station_bonus = bonus
-	var cfg: Dictionary = Config.load_json("res://config/finale.json")
+	# v2 Armory: the Bottle Shot weapon's handling steps (magazine, kick, draw, sway...).
+	var cfg: Dictionary = Armory.apply_finale(Config.load_json("res://config/finale.json"), Game.save)
 	logic = BottleLogic.new(cfg, level_id)
 	theme = String((cfg.get("district_stash", {}) as Dictionary).get(str(logic.district), FinaleStash.theme_of(logic.district)))
 	_floor_y = float(logic.wcfg.get("elevation", 0.0))

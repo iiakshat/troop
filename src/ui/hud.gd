@@ -12,6 +12,7 @@ var _troops: HBoxContainer
 var _troops_pop := 0.0
 var _cap_bar: ProgressBar
 var _power_buttons: Dictionary = {}
+var _power_ready_ms: Dictionary = {}   # v2: power id -> ticks when its free charge is back
 var _banner: Label
 var _banner_t := 0.0
 var _hint_root: Control
@@ -131,6 +132,23 @@ func _add_power(id: String, color: String, left: bool) -> void:
 	b.visible = false
 	add_child(b)
 	_power_buttons[id] = b
+	# v2 powers: an empty button shows a clock and the time until the free charge is back.
+	var timer := HBoxContainer.new()
+	timer.alignment = BoxContainer.ALIGNMENT_CENTER
+	timer.add_theme_constant_override("separation", 2)
+	timer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	timer.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	timer.offset_left = -90
+	timer.offset_right = 90
+	timer.offset_top = -10
+	timer.offset_bottom = 34
+	timer.add_child(UiKit.icon("clock", 38))
+	var tl := UiKit.label("", 32, Color.WHITE, 8)
+	timer.add_child(tl)
+	timer.visible = false
+	b.add_child(timer)
+	b.set_meta("timer", timer)
+	b.set_meta("timer_label", tl)
 
 
 ## A rank joined the squad for the first time ever: its stat card in the corner (2.5 s).
@@ -163,9 +181,22 @@ func set_charges(charges: Dictionary) -> void:
 	for id in _power_buttons:
 		var b: Button = _power_buttons[id]
 		var n := int(charges.get(id, 0))
-		b.visible = n > 0 or b.visible
+		# v2: out of charges, the free one is recharging (it was used here, or the save's timer
+		# still runs): the button stays, dimmed, with the countdown.
+		var secs := 0
+		if n <= 0 and SaveData.POWERS.has(id):
+			secs = int(Game.power_state(id)["seconds_left"])
+			if secs <= 0 and b.visible:
+				secs = int(Game.economy.get("powers", {}).get("recharge_s", 18000))
+		b.visible = n > 0 or b.visible or secs > 0
 		b.disabled = n <= 0
 		UiKit.set_badge(b, n)
+		if secs > 0:
+			_power_ready_ms[id] = Time.get_ticks_msec() + secs * 1000
+		else:
+			_power_ready_ms.erase(id)
+		(b.get_meta("timer") as Control).visible = secs > 0
+		(b.get_meta("timer_label") as Label).text = BoosterPanel.time_text(secs)
 
 
 ## A one-time icon cue. `ev` = {"id", "icon", "power"?}.
@@ -219,6 +250,9 @@ func _process(delta: float) -> void:
 		_banner_t -= delta
 		if _banner_t <= 0.0:
 			_banner.visible = false
+	for id in _power_ready_ms:
+		var left := ceili((int(_power_ready_ms[id]) - Time.get_ticks_msec()) / 1000.0)
+		((_power_buttons[id] as Button).get_meta("timer_label") as Label).text = BoosterPanel.time_text(left)
 	for id in _pulse.keys():
 		_pulse[id] = float(_pulse[id]) - delta
 		var b: Button = _power_buttons[id]

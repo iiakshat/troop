@@ -19,7 +19,7 @@ extends Node
 ##   popup even under autoplay)
 ##   tutor=auto (the first-run tutorials run even under autoplay and act themselves out
 ##   after 1.6 s, for screenshots)
-##   panel=station|style|settings|daily|missions|spin|codex|booster|chest|welcome|revive|
+##   panel=station|armory|style|settings|daily|missions|spin|codex|booster|chest|welcome|revive|
 ##         liberation|map   (open that screen over the map; map = the map alone)
 ## Autoplay skips boosters, the revive offer, the ad popups and the tutorials.
 
@@ -226,6 +226,8 @@ func _debug_panel(name: String) -> void:
 	match name:
 		"station":
 			lobby.open_panel(StationPanel.new())
+		"armory":
+			lobby.open_panel(ArmoryPanel.new())
 		"style":
 			lobby.open_panel(StylePanel.new())
 		"settings":

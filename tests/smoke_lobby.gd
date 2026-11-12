@@ -72,6 +72,14 @@ func _run() -> void:
 	_check(not _lobby.close_overlay(), "nothing left to close")
 	_lobby.open_panel(load("res://src/ui/station_panel.gd").new())
 	_check(_lobby.close_overlay(), "back closes the station")
+	# v2: the Armory opens from its own button and from the Station's weapon card.
+	_lobby.open_panel(load("res://src/ui/armory_panel.gd").new())
+	_check(_lobby.close_overlay(), "back closes the armory")
+	var st: Control = load("res://src/ui/station_panel.gd").new()
+	_lobby.open_panel(st)
+	st.call("_open_armory")
+	_check(String(_lobby._overlay.get_script().resource_path).ends_with("armory_panel.gd"), "the station's weapon card opens the armory")
+	_check(_lobby.close_overlay(), "back closes the armory opened from the station")
 
 	# A drag scrolls and does not tap.
 	var before: float = map._scroll

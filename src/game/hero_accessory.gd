@@ -22,7 +22,7 @@ var _r := 0.11                                    # head radius (m)
 ## nothing when the outfit has none or the bake cannot be read.
 static func attach(crowd: Crowd, outfit: Dictionary) -> HeroAccessory:
 	var kind := String(outfit.get("accessory", ""))
-	if crowd == null or not KINDS.has(kind):
+	if crowd == null or not KINDS.has(kind) or DisplayServer.get_name() == "headless":
 		return null
 	var a := HeroAccessory.new()
 	if not a._setup(crowd):
