@@ -17,8 +17,9 @@ extends SceneTree
 ##        pace's upgrades, taps 2/s, powers on, telegraphs dodged at dodge_p=0.7. The report and
 ##        calibrate=1 use the four §2 targets below; profile=noisy also prints the noisy runs'
 ##        loss causes] [dodge_p=0.7]
-##       [checks=1 (spec v2.1 §2 guard checks, asserted: exits 1 on any failure; full=1 adds the
-##        noisy first-try fail rate and the random-route wins. With profile=paced: the v2 table,
+##       [checks=1 (spec v2.1 §2 guard checks with the greedy profile unless another is named,
+##        asserted: exits 1 on any failure; full=1 adds the noisy first-try fail rate and the
+##        random-route wins, flagged with !! but not asserted. With profile=paced: the v2 table,
 ##        per level the stored route paced / non-tapper / L1 at 1.5 taps/s, and the best route
 ##        with zero upgrades; no calibration)]
 ##
@@ -37,6 +38,8 @@ extends SceneTree
 ## and 2/s, at 1.5/s on L1, and not tapping at all from L6). The plain run with the same
 ## profile stores that no-power route. When units.json carries the v2.1 boss rule (boss
 ## hp_secs), boss and lieutenant hp are left out of k x kf, as tools/gen_levels.py does.
+## `need_upgrades` levels are not refitted under these profiles (the no-ad pace is the gate).
+## A level costs about 20 s to report and 2-4 min to calibrate: run 3 processes over ranges.
 
 const DT := 1.0 / 30.0
 const BRUTE_MAX := 6     # rows up to which every route is played
@@ -103,8 +106,11 @@ func _initialize() -> void:
 			use_powers = false
 		elif a == "profile=greedy" or a == "profile=noisy":
 			profile = a.substr(8)
-			tap_rate = GreedyPilot.TAPS
-			use_powers = true
+	if profile == "" and OS.get_cmdline_user_args().has("checks=1"):
+		profile = "greedy"  # checks=1 alone: the v2.1 guard checks
+	if profile == "greedy" or profile == "noisy":
+		tap_rate = GreedyPilot.TAPS
+		use_powers = true
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("level="):
 			lo = int(a.substr(6))
@@ -631,7 +637,8 @@ static func band(n: int, level: Dictionary) -> String:
 		return "hard"
 	var arch := String(level.get("archetype", "")).strip_edges().to_lower().replace(" ", "_").replace("-", "_")
 	if arch != "":
-		return "hard" if HARD_ARCHETYPES.has(arch) else "normal"
+		var hard := HARD_ARCHETYPES.has(arch) or arch.begins_with("hard") or arch.contains("lieutenant") or arch.contains("boss")
+		return "hard" if hard else "normal"
 	return "hard" if HARD_SLOTS.has((n - 1) % 10 + 1) else "normal"
 
 
@@ -918,12 +925,20 @@ func calibrate_harder(n: int, base: Dictionary) -> Dictionary:
 			kf = KF_FALLBACK
 			k = _fit_fail(n, base, kf, fail_t)
 			break
+	if verbose:
+		print("      L%d fit k %.3f kf %.3f (noisy fails -> %.0f%%, greedy keeps -> %.0f%%)" % [n, k, kf, fail_t * 100.0, keep_t * 100.0])
 	for i in 14:
 		var lv := scaled_level(base, k, kf)
 		var g := greedy_result(n, lv)
 		var won: bool = g["state"] == "strike"
-		if won and float(g["time"]) <= MAX_TIME and _win_share(lv, routes) >= RANDOM_FLOOR - 1e-9 and noad(n, lv)["ok"]:
+		var share := _win_share(lv, routes) if won else 0.0
+		var floor_ok := share >= RANDOM_FLOOR - 1e-9
+		var na: bool = won and floor_ok and noad(n, lv)["ok"]
+		if won and float(g["time"]) <= MAX_TIME and na:
 			break
+		if verbose:
+			print("      L%d back off from k %.3f kf %.3f: greedy %s %.0fs, random wins %.0f%%, no-ad %s" % [n, k, kf,
+				g["state"], float(g["time"]), share * 100.0, "ok" if na else ("fails" if won and floor_ok else "-")])
 		if won and float(g["time"]) > MAX_TIME:
 			kf = maxf(kf * 0.8, 0.4)  # the last gang takes too long to clear
 		else:

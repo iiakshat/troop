@@ -114,6 +114,8 @@ func test_band_classification() -> void:
 	eq(Tune.band(9, {"archetype": "storm"}), "normal", "a storm level in slot 9")
 	eq(Tune.band(13, {"archetype": "hard_gauntlet"}), "hard", "hard gauntlet")
 	eq(Tune.band(13, {"archetype": "Hard gauntlet"}), "hard", "archetype names are matched loosely")
+	eq(Tune.band(13, {"archetype": "hard-gauntlet"}), "hard", "hard gauntlet, dashed")
+	eq(Tune.band(5, {"archetype": "gauntlet"}), "normal", "a plain gauntlet in slot 5")
 	eq(Tune.band(17, {"archetype": "lieutenant"}), "hard", "lieutenant")
 	eq(Tune.band(18, {"archetype": "boss"}), "hard", "boss archetype")
 	eq(Tune.band(18, {"boss": true}), "hard", "a boss level")
