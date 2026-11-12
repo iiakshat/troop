@@ -56,6 +56,8 @@ var _perf_pipes: Array = []   # pipeline compilations so far per kind (Performan
 var _perf_max := 0.0         # the slowest level frame after the first 2 s
 var _perf_done := false      # the level's PERF report is printed
 var _perf_finale_t := 0.0    # seconds into the finale (its first 2 s count in the report)
+var _perf_shatters := 0      # bottles shattered so far in the finale (perf marks)
+var _perf_shatter_t := 0.0   # seconds since the first shatter (1 s of it counts in the report)
 
 
 func _ready() -> void:
@@ -368,6 +370,8 @@ func _start_level(n: int, boosters: Dictionary = {}) -> void:
 	view.perf_on = _perf != null
 	_perf_level_t = 0.0
 	_perf_finale_t = 0.0
+	_perf_shatters = 0
+	_perf_shatter_t = 0.0
 	_perf_done = false
 	_perf_max = 0.0
 	_perf_worst.clear()
@@ -706,10 +710,17 @@ func _perf_frame() -> void:
 		_perf_level_t += 1.0 / 60.0  # by frames: the loading frame itself must not count as 2 s
 		st = "%s:%d" % [view._state, view.sim.squad.total()]
 		playing = view._state == "play"
-		# Spec v2 §3: the burst into the stash counts too (the finale's first 2 s).
+		# Spec v2 §3: the burst into the stash counts too (the finale's first 2 s), and the
+		# finale on to 1 s after its first bottle shatters (marked "shatter:N").
 		if view._state == "finale":
 			_perf_finale_t += 1.0 / 60.0
-			playing = _perf_finale_t <= 2.0
+			var sh: int = view.finale._shatters.size() if is_instance_valid(view.finale) else 0
+			if sh != _perf_shatters:
+				view.perf_marks.append("shatter:%d" % sh)
+				_perf_shatters = sh
+			if sh > 0:
+				_perf_shatter_t += 1.0 / 60.0
+			playing = _perf_finale_t <= 2.0 or _perf_shatter_t <= 1.0
 		marks = " ".join(view.perf_marks)
 		view.perf_marks.clear()
 	var proc := Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0

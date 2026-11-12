@@ -508,7 +508,10 @@ func _update_time_scale(delta: float) -> void:
 func _handle_events(events: Array) -> void:
 	for e in events:
 		if perf_on and String(e["type"]) in PERF_EVENTS:
-			perf_marks.append(String(e["type"]) + ("" if not e.has("unit") else ":" + String(e["unit"])))
+			var tag := "" if not e.has("unit") else ":" + String(e["unit"])
+			if e.get("horde") is Dictionary:
+				tag = ":" + String((e["horde"] as Dictionary).get("enemy", ""))
+			perf_marks.append(String(e["type"]) + tag)
 		if _log_events and not String(e["type"]) in ["kill", "gate_tick", "boss_hit"]:
 			print("EV %d %s %s" % [Engine.get_process_frames(), e["type"], e["horde"].get("enemy", "") if e.get("horde") is Dictionary else ""])
 		match String(e["type"]):
