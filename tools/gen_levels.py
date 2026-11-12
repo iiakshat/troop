@@ -1493,6 +1493,16 @@ def merge(paths: list[str]) -> None:
                      "kf": round(float(old.get("kf", 1.0)) * float(r.get("kf", 1.0)), 4),
                      "best_ratio": round(float(r["best_ratio"]), 3),
                      "win_rate": round(float(r["win_rate"]), 3)}
+            # Spec v2.1 §2 fits (tune.gd profile=greedy|noisy): the level's band, the greedy
+            # player's end / peak squad, the noisy player's first-try fail rate, and whether
+            # the no-ad route held. A record for the next calibration; build() ignores them.
+            if r.get("band"):
+                entry["band"] = str(r["band"])
+            for fk in ("greedy_keep", "noisy_fail"):
+                if fk in r:
+                    entry[fk] = round(float(r[fk]), 3)
+            if "noad" in r:
+                entry["noad"] = bool(r["noad"])
             # Routes are only valid for the exact level they were found on: keep them from
             # a plain report (k = kf = 1), drop them when the gangs were rescaled.
             if abs(float(r["k"]) - 1.0) < 1e-9 and abs(float(r.get("kf", 1.0)) - 1.0) < 1e-9:
@@ -1500,9 +1510,11 @@ def merge(paths: list[str]) -> None:
                     if r.get(rk):
                         entry[rk] = [int(x) for x in r[rk]]
                 # The stored route's finishing squad: LevelSim.coin_troops pays it like a full
-                # district-1 squad (most levels end far below their district's cap).
-                if r.get("route") and int(r.get("best_troops", 0)) > 0:
-                    entry["coin_ref"] = int(r["best_troops"])
+                # district-1 squad (most levels end far below their district's cap). A v2.1
+                # report's stored route is its no-power route (route_troops), not its best.
+                troops = int(r.get("route_troops", r.get("best_troops", 0)))
+                if r.get("route") and troops > 0:
+                    entry["coin_ref"] = troops
             # Spec v2.1 section 1.3: the boss HP rule's expected dps (Autopilot.boss_dps), kept
             # until a report measures it again.
             if float(r.get("boss_dps", 0.0)) > 0:
