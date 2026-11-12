@@ -1,5 +1,7 @@
 """Cuts the Gemini icon sheets (art_src/gen/icons_*.png, grids on magenta) into transparent
-PNGs in assets/icons/gloss/<name>.png. UiKit prefers these over the SVGs.
+PNGs in assets/icons/gloss/<name>.png. UiKit prefers these over the SVGs. The v2 Armory
+sheets (armory_a/b.png: one weapon per row, tiers 1-4 left to right) go to
+assets/armory/<track>_t<n>.png (the "out" key).
   python -I tools/slice_icons.py              # every sheet
   python -I tools/slice_icons.py icons_c.png  # just one sheet
 
@@ -40,6 +42,13 @@ SHEETS = {
                              ["rank_commando", "music", "music_off", "_"],
                              ["sound", "_", "_", "_"],
                              ["_", "sound_off", "_", "_"]]},
+    # v2 Armory: tier art per weapon track (config/armory.json "art": "armory/<id>_t<n>").
+    "armory_a.png": {"loose": True, "out": "armory", "size": 256,
+                     "grid": [[f"{w}_t{t}" for t in range(1, 5)] for w in
+                              ["knives", "service_pistol", "shotgun", "revolver", "rifle", "sniper_rifle"]]},
+    "armory_b.png": {"loose": True, "out": "armory", "size": 256,
+                     "grid": [[f"{w}_t{t}" for t in range(1, 5)] for w in
+                              ["launcher", "finale_pistol", "finale_bow", "finale_stars", "finale_sniper"]]},
 }
 
 
@@ -118,7 +127,7 @@ def paint_out_text(c, alpha):
     return c
 
 
-def save(c, alpha, name):
+def save(c, alpha, name, out=OUT, size=SIZE):
     ys, xs = np.where(alpha > 0.05)
     y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
     rgba = np.dstack([c, alpha * 255]).astype(np.uint8)[y0:y1, x0:x1]
@@ -126,7 +135,7 @@ def save(c, alpha, name):
     side = max(img.width, img.height)
     canvas = Image.new("RGBA", (side, side), (0, 0, 0, 0))
     canvas.paste(img, ((side - img.width) // 2, (side - img.height) // 2))
-    canvas.resize((SIZE, SIZE), Image.LANCZOS).save(OUT / f"{name}.png")
+    canvas.resize((size, size), Image.LANCZOS).save(out / f"{name}.png")
 
 
 def cut(sheet, spec):
@@ -152,7 +161,9 @@ def cut(sheet, spec):
                 alpha = outline_only(c, alpha)
             if name == "swat":
                 c = paint_out_text(c, alpha)
-            save(c, alpha, name)
+            out = ROOT / "assets" / spec["out"] if "out" in spec else OUT
+            out.mkdir(parents=True, exist_ok=True)
+            save(c, alpha, name, out, spec.get("size", SIZE))
             print("icon", name)
 
 
