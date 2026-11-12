@@ -89,6 +89,17 @@ func _ready() -> void:
 	result.station_pressed.connect(_open_station_from_result)
 	ui.add_child(result)
 	result.visible = false
+	if AgeScreen.needed(_args):
+		# v2 §8: the neutral age screen comes first, once, before any ad or analytics SDK starts.
+		var age := AgeScreen.new()
+		age.done.connect(_begin, CONNECT_ONE_SHOT)
+		ui.add_child(age)
+		return
+	_begin()
+
+
+## The first screen after boot (and after the age screen on a first launch).
+func _begin() -> void:
 	if _args.has("level"):
 		_start_level(int(_args["level"]), _debug_boosters())
 	elif _is_new_player() and not _args.has("lobby") and not _args.has("panel"):
