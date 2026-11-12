@@ -188,6 +188,23 @@ func active_hits() -> int:
 func hit(from: Vector3, to: Vector3) -> Vector3:
 	if not is_up():
 		return to
+	var p := entry(from, to)
+	_add_hit(p, radii * scale_now())
+	return p
+
+
+## A shot still in the air (incoming tracers take about 1 s) lands on the bubble at world
+## point `p`, which ripples there (where it is now: the bubble moved with the squad).
+func ripple_at(p: Vector3) -> void:
+	if is_up():
+		_add_hit(p, radii * scale_now())
+
+
+## Where a shot from `from` aimed at `to` would stop on the bubble as it is now, without a
+## ripple (`to` when no bubble is up).
+func entry(from: Vector3, to: Vector3) -> Vector3:
+	if not is_up():
+		return to
 	var r := radii * scale_now()
 	var u := ray_entry(centre, r, from, to)
 	var p: Vector3
@@ -199,7 +216,6 @@ func hit(from: Vector3, to: Vector3) -> Vector3:
 	else:
 		p = from.lerp(to, u)
 	p.y = maxf(p.y, 0.15)
-	_add_hit(p, r)
 	return p
 
 

@@ -7,7 +7,7 @@ var _keep: Array = []
 
 ## Builds a playing LevelView for level n with its own World and Fx under the root.
 ## Returns [view, world, fx]; free them with _drop.
-func _view(n: Variant) -> Array:
+func _view(n: Variant, upgrades: Dictionary = {}) -> Array:
 	var tree := Engine.get_main_loop() as SceneTree
 	var game: Node = tree.root.get_node("Game")
 	_keep = [game.save.duplicate(true), game.save_path]
@@ -21,7 +21,7 @@ func _view(n: Variant) -> Array:
 	for node in [world, fx]:
 		if not node.is_node_ready():
 			node._ready()   # a SceneTree script's root is not live yet: ready by hand
-	var view := LevelView.new().setup(n if n is Dictionary else Config.level(n), {}, world, fx, UiKit.FONT)
+	var view := LevelView.new().setup(n if n is Dictionary else Config.level(n), upgrades, world, fx, UiKit.FONT)
 	view.input_enabled = false
 	tree.root.add_child(view)
 	if not view.is_node_ready():
@@ -264,3 +264,205 @@ func test_boss_towers_over_escorts_while_walking_in() -> void:
 					return
 	check(seen > 0, "an escort gang walked ahead of the boss")
 	_drop(parts)
+
+
+# ---------------------------------------------------------------- v2.1 fights (FIGHTVIEW)
+# The sim's v2.1 events (return_fire, telegraph, attack_land, boss_shot) are fed to the view by
+# hand here, in the Task 1 interface's shape, so these checks hold whatever the sim's numbers.
+
+## A district-2 street with one armed gang far up the road and nothing else.
+func _fight_level() -> Dictionary:
+	return {"id": 11, "district": 2, "events": [
+		{"at": 60, "type": "wave", "groups": [{"enemy": "gunman", "n": 30}]},
+		{"at": 400, "type": "finish"}]}
+
+
+## Plays `secs` of view and effects (the tree is not processing in a --script run).
+func _tick(view: LevelView, fx: Fx, secs: float) -> void:
+	for i in maxi(int(round(secs * 60.0)), 1):
+		view._process(1.0 / 60.0)
+		fx._process(1.0 / 60.0)
+
+
+## Steps the view until the first gang is on the street; its horde id (-1: none came).
+func _first_gang(view: LevelView) -> int:
+	for f in 1200:
+		if not view._hordes.is_empty():
+			return int(view._hordes.keys()[0])
+		view._process(1.0 / 60.0)
+	return -1
+
+
+## Spec v2.1 §1.1: incoming fire has its own tracer pool. A full squad volley (320) never hides
+## it and it never takes the squad's projectiles; one event draws at most 8 tracers, each on
+## screen for about a second.
+func test_enemy_tracers_have_own_pool() -> void:
+	var parts := _view(_fight_level(), {"squad": 40})
+	var view: LevelView = parts[0]
+	var fx: Fx = parts[2]
+	var id := _first_gang(view)
+	check(id >= 0, "a gang came")
+	fx.clear()
+	for i in Fx.MAX_PROJ + 20:
+		fx.shoot("bullet", Vector3(0, 1, 0), Vector3(0, 1, -90), 10.0)
+	eq(fx.squad_projectiles(), Fx.MAX_PROJ, "the squad's pool is full")
+	view._handle_events([{"type": "return_fire", "horde": id, "x": 0.0, "z": -48.0, "shots": 40, "lost": 0,
+		"blocked": false, "opening": true}])
+	var one := fx.enemy_projectiles()
+	check(one >= 1 and one <= 8, "one volley draws 1 to 8 tracers (%d)" % one)
+	eq(fx.squad_projectiles(), Fx.MAX_PROJ, "the squad's pool is untouched")
+	view._handle_events([{"type": "return_fire", "horde": id, "x": 0.0, "z": -48.0, "shots": 3, "lost": 0,
+		"blocked": true, "opening": false}])
+	eq(fx.enemy_projectiles(), one + 3, "three shots, three more tracers")
+	_tick(view, fx, 0.6)
+	eq(fx.enemy_projectiles(), one + 3, "still on screen after 0.6 s")
+	_tick(view, fx, 0.9)
+	eq(fx.enemy_projectiles(), 0, "landed within about 1.5 s")
+	_drop(parts)
+
+
+## Spec v2.1 §1.1: the red -N over the squad sums what is lost within 0.3 s; a loss after that
+## starts a new -N; it fades out on its own.
+func test_minus_n_sums_window() -> void:
+	var parts := _view(_fight_level(), {"squad": 40})
+	var view: LevelView = parts[0]
+	var fx: Fx = parts[2]
+	_tick(view, fx, 1.0 / 60.0)
+	check(not view._minus_label.visible, "no -N before any loss")
+	view._add_loss(2)
+	_tick(view, fx, 0.1)
+	view._add_loss(3)
+	_tick(view, fx, 0.1)
+	view._add_loss(1)
+	check(view._minus_label.visible, "the -N shows")
+	eq(view._minus_label.text, "-6", "losses within 0.3 s add up")
+	_tick(view, fx, 0.15)
+	view._add_loss(4)
+	eq(view._minus_label.text, "-4", "a loss after the window starts a new -N")
+	view._add_loss(0)
+	eq(view._minus_label.text, "-4", "a zero loss changes nothing")
+	_tick(view, fx, 1.5)
+	check(not view._minus_label.visible, "the -N fades out")
+	_drop(parts)
+
+
+## Spec v2.1 §1.1: a volley's loss lands with its tracers: the count, the figures and the red -N
+## drop when the shots arrive, not before, exactly once.
+func test_volley_loss_lands_with_its_tracers() -> void:
+	var parts := _view(_fight_level(), {"squad": 40})
+	var view: LevelView = parts[0]
+	var fx: Fx = parts[2]
+	var id := _first_gang(view)
+	_tick(view, fx, 0.2)
+	var shown := view._allies.size()
+	var total := view.sim.squad.total()
+	view.sim.squad.lose(3)   # what the sim's volley took
+	view._handle_events([{"type": "return_fire", "horde": id, "x": 0.0, "z": -48.0, "shots": 3, "lost": 3,
+		"blocked": false, "opening": true}])
+	eq(view.shown_total(), total, "the count holds while the shots fly")
+	eq(view._allies.size(), shown, "nobody falls before the tracers land")
+	var landed := -1.0
+	for i in 90:
+		_tick(view, fx, 1.0 / 60.0)
+		if view.shown_total() < total:
+			landed = (i + 1) / 60.0
+			break
+	check(landed > 0.2 and landed <= 1.1, "the loss lands with the tracers (%.2f s)" % landed)
+	eq(view.shown_total(), total - 3, "exactly the volley's loss")
+	eq(view._minus_label.text, "-3", "a red -3 over the squad")
+	check(view._allies.size() < shown, "hit figures fall (%d -> %d)" % [shown, view._allies.size()])
+	_tick(view, fx, 1.0)
+	eq(view.shown_total(), view.sim.squad.total(), "nothing left pending")
+	_drop(parts)
+
+
+## Spec v2.1 §1.2-1.3: a telegraph marks its lane (a sniper also draws his laser) until it lands;
+## its countdown runs on the street's clock; the landing clears the mark and shows the loss; a
+## revive clears whatever was pending.
+func test_telegraph_marks_its_lane_until_it_lands() -> void:
+	var parts := _view(_fight_level(), {"squad": 40})
+	var view: LevelView = parts[0]
+	var fx: Fx = parts[2]
+	var id := _first_gang(view)
+	var t := view.sim.time
+	view._handle_events([{"type": "telegraph", "kind": "grenade", "lane": 2, "src": id, "x": 0.0, "z": -50.0,
+		"land_t": t + 1.0}])
+	_tick(view, fx, 1.0 / 60.0)
+	check(view.lane_marked(2), "the grenade's lane is marked")
+	check(not view.lane_marked(0) and not view.lane_marked(1), "and no other lane")
+	check(fx.enemy_projectiles() >= 1, "the grenade is in the air")
+	view._handle_events([{"type": "telegraph", "kind": "snipe", "lane": 0, "src": id, "x": 0.0, "z": -60.0,
+		"land_t": t + 1.2}])
+	_tick(view, fx, 1.0 / 60.0)
+	check(view.lasers_shown() > 0, "the sniper's laser shows")
+	check(view.lane_marked(0), "on the lane he aims at")
+	var f0 := view.lane_fill(2)
+	view.paused = true
+	_tick(view, fx, 0.3)
+	view.paused = false
+	eq(view.lane_fill(2), f0, "the countdown waits while the street is paused")
+	_tick(view, fx, 0.3)
+	check(view.lane_fill(2) > f0, "and runs in play (%.2f -> %.2f)" % [f0, view.lane_fill(2)])
+	view._handle_events([{"type": "attack_land", "kind": "grenade", "lane": 2, "lost": 3, "blocked": false, "hit": true}])
+	_tick(view, fx, 0.3)
+	check(not view.lane_marked(2), "the landing clears its mark")
+	check(view.lane_marked(0), "the sniper's mark stays")
+	eq(view._minus_label.text, "-3", "the landing's loss shows")
+	view._on_revive({})
+	_tick(view, fx, 1.0 / 60.0)
+	check(not view.lane_marked(0) and view.lasers_shown() == 0, "a revive clears what was pending")
+	_drop(parts)
+
+
+## Spec v2.1 §1.3: the lieutenant is the boss's rig at 2.4x (the boss is 3.2x) in his own
+## colours, with a smaller bar.
+func test_lieutenant_is_a_smaller_tinted_boss() -> void:
+	var lvl := {"id": 15, "district": 2, "events": [
+		{"at": 60, "type": "wave", "groups": [{"enemy": "boss", "n": 1, "hp": 900}]},
+		{"at": 400, "type": "finish"}]}
+	var parts := _view(lvl)
+	var view: LevelView = parts[0]
+	var fx: Fx = parts[2]
+	var id := _first_gang(view)
+	var lt: Dictionary = (view._hordes[id]["h"] as Dictionary).duplicate(true)
+	lt["id"] = 9001
+	lt["lieutenant"] = true
+	view._handle_events([{"type": "horde_spawn", "horde": lt}])
+	_tick(view, fx, 1.0 / 60.0)
+	var boss: Dictionary = view._hordes[id]
+	var lv: Dictionary = view._hordes[9001]
+	eq(String(lv["kind"]), "lieutenant", "drawn as the lieutenant")
+	near(view._boss_scale(lv), LevelView.LT_SCALE, "at the lieutenant's scale")
+	near(LevelView.LT_SCALE, 2.4, "2.4x")
+	check(view._boss_scale(lv) < view._boss_scale(boss), "smaller than the district boss")
+	check(lv.has("bar"), "he has a health bar")
+	if lv.has("bar"):
+		check((lv["bar"] as Node3D).scale.x < (boss["bar"] as Node3D).scale.x * 0.9, "a smaller one")
+	var lc: Crowd = view._crowds.get("lieutenant", null)
+	check(lc != null, "his own crowd")
+	if lc != null:
+		check(lc.multimesh.visible_instance_count >= 1, "drawn on the street")
+		check(lc.multimesh.mesh != (view._crowds["boss"] as Crowd).multimesh.mesh, "in his own colours")
+	_drop(parts)
+
+
+## Spec v2.1 §1.1: the HUD's troop pill pulses red when troops are lost (not on a gain).
+func test_troop_pill_pulses_red_on_a_loss() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	var hud := Hud.new()
+	tree.root.add_child(hud)
+	if not hud.is_node_ready():
+		hud._ready()
+	hud.set_troops(50)
+	hud._process(0.05)
+	eq(hud._troops.modulate, Color.WHITE, "no pulse at the start")
+	hud.set_troops(60)
+	hud._process(0.05)
+	eq(hud._troops.modulate, Color.WHITE, "a gain is not red")
+	hud.set_troops(55)
+	hud._process(0.05)
+	check(hud._troops.modulate.r > 0.9 and hud._troops.modulate.g < 0.8, "a loss pulses the pill red (%s)" % hud._troops.modulate)
+	hud._process(1.0)
+	eq(hud._troops.modulate, Color.WHITE, "then it settles")
+	tree.root.remove_child(hud)
+	hud.free()
