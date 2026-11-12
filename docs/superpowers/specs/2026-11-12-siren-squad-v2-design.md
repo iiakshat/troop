@@ -342,3 +342,13 @@ The owner played v1.1 on a phone. Verdict: "okayish, promising, but it feels bui
      - firepower = nominal damage per second against an unarmoured target, with current upgrades and the hero's current tap heat
      - It rises when troops join and when the player taps, and drops on losses.
    - **Same unit everywhere:** the lobby's Squad Power and each level's recommended power use the same lightning icon and the same unit (firepower at level start, with the hero at full tap rate). Refit the recommended curve. Never show two different numbers under one icon.
+5. **The bomb is thrown, anytime** (owner). Tapping the bomb button works at any moment of a level (never in Bottle Shot), not only when a gang is in reach.
+   - The hero plays the `throw` clip.
+   - A bomb with a sparking fuse flies in a visible arc down the squad's lane. It lands on the nearest target in that lane within reach (gang front, obstacle, barrel), otherwise on the road at max reach.
+   - It explodes on landing:
+     - gang kills as `powers.bomb` says, plus boss damage
+     - a barricade or car in the blast is destroyed
+     - a barrel is set off
+   - Flight time and blast radius go in config. The sim applies the effect at landing time, so the arithmetic stays exact.
+   - A bomb thrown at an empty road still spends the charge and still shows the explosion; it is the player's choice.
+   - No slow-down.
