@@ -441,6 +441,11 @@ func room_power_gain(room: String) -> float:
 
 
 ## Squad Power the next step of weapon track `id` adds (0 for Bottle Shot tracks or maxed).
+## units.json allies with the player's Armory multipliers (the Codex's "= N constables").
+func upgraded_allies() -> Dictionary:
+	return Economy.upgraded_allies(units.get("allies", {}), Armory.sim_upgrades(save)["weapons"])
+
+
 func weapon_power_gain(id: String) -> float:
 	return Economy.weapon_power_gain(save, id, units, economy)
 

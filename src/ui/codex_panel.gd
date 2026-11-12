@@ -82,7 +82,8 @@ func _show_tab(t: String) -> void:
 	for c in _list.get_children():
 		c.queue_free()
 	if t == "ranks":
-		var allies: Dictionary = Game.units.get("allies", {})
+		# v2 rule 6: values and numbers compare the player's upgraded stats (Armory).
+		var allies: Dictionary = Game.upgraded_allies()
 		for id in ranks_by_value(allies):
 			_list.add_child(_rank_card(String(id), allies[id]))
 	else:

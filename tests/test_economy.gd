@@ -242,6 +242,22 @@ func test_squad_power_is_level_start_firepower() -> void:
 	eq(Economy.fmt_power(1250000.0), "1.25M", "then M")
 
 
+## Spec v2 calibration rule 6: the Codex's "= N constables" compares the player's upgraded stats.
+func test_upgraded_allies_for_the_codex() -> void:
+	var units := Config.units()
+	var s := _armory_save(100000, 10)
+	for i in 5:
+		Armory.buy(s, "shotgun")
+	var w: Dictionary = Armory.sim_upgrades(s)["weapons"]
+	var up := Economy.upgraded_allies(units["allies"], w)
+	var m: Dictionary = w["sergeant"]
+	near(float(up["sergeant"]["dmg"]), float(units["allies"]["sergeant"]["dmg"]) * float(m["dmg_mult"]), "sergeant dmg upgraded")
+	near(float(up["sergeant"]["rate"]), float(units["allies"]["sergeant"]["rate"]) * float(m["rate_mult"]), "sergeant rate upgraded")
+	near(float(up["constable"]["dmg"]), float(units["allies"]["constable"]["dmg"]), "constable untouched")
+	eq(float(units["allies"]["sergeant"]["dmg"]), 2.0, "the units table is not changed")
+	check(CodexPanel.value_of(up, "sergeant") > CodexPanel.value_of(units["allies"], "sergeant"), "the Codex value grows with the shotgun")
+
+
 func _purchase(s: Dictionary, kind: String, id: String, units: Dictionary) -> Dictionary:
 	for p in Economy.purchases(s, 1_800_000_000, eco, units):
 		if String(p["kind"]) == kind and String(p["id"]) == id:

@@ -180,6 +180,19 @@ static func _value(fx: Dictionary, unlocked: int, units: Dictionary, economy: Di
 	return v
 
 
+## A copy of units.json "allies" with each owner's dmg and rate times its Armory multipliers
+## (`weapons` = Armory.sim_upgrades()["weapons"]), the way LevelSim._init applies them. The
+## Codex compares ranks on it (spec v2 rule 6: the player's current upgraded stats).
+static func upgraded_allies(allies: Dictionary, weapons: Dictionary) -> Dictionary:
+	var out := allies.duplicate(true)
+	for owner in weapons:
+		if out.has(owner) and weapons[owner] is Dictionary:
+			var u: Dictionary = out[owner]
+			u["dmg"] = float(u["dmg"]) * float(weapons[owner].get("dmg_mult", 1.0))
+			u["rate"] = float(u["rate"]) * float(weapons[owner].get("rate_mult", 1.0))
+	return out
+
+
 static func _dps_mult(w: Dictionary, owner: String) -> float:
 	var m: Variant = w.get(owner)
 	if not (m is Dictionary):
