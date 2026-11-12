@@ -33,6 +33,8 @@ const ALLY_SFX := {
 }
 const CHAR_H := 1.85            # baked character height (config/characters.json)
 const BOSS_SCALE := 2.6         # bosses are drawn this much bigger than a thug
+const INK_W := 0.028            # crowd ink outline width (crowd_outline.gdshader default)
+const INK_W_PACKED := 0.012     # a full squad's followers: thinner ink, no grey-purple smudge
 const DEPTH_SPREAD := 1.3       # a full squad's rows open up this much in depth (view only; smudge fix)
 const ENEMY_SCALE := 1.3        # gang members are drawn bigger than troops so far fights read
 const BOSS_BEAT_Z := -35.0      # a boss closer than this pulls the camera in (World.beat)
@@ -1293,6 +1295,12 @@ func _slot_pos(slot: int, n: int) -> Vector3:
 	return Vector3(_squad_x + o.x, 0.012 * (slot % 4), o.y + lift)
 
 
+## Followers' ink outline width for a squad of n shown figures: full ink while the squad is
+## small, thinner once heads overlap (the hero keeps full ink and stands out).
+static func ink_width(n: int) -> float:
+	return lerpf(INK_W, INK_W_PACKED, clampf((n - 30) / 40.0, 0.0, 1.0))
+
+
 ## How much a squad of n shown figures opens up in depth (1 = the sim's rows).
 static func depth_spread(n: int) -> float:
 	return lerpf(1.0, DEPTH_SPREAD, clampf((n - 30) / 40.0, 0.0, 1.0))
@@ -1339,6 +1347,10 @@ func _update_visuals(d: float) -> void:
 	# Allies
 	var n := _allies.size()
 	var troop_k := crowd_scale(_allies.size())
+	var ink := ink_width(n)
+	for k in ALLY_KINDS:
+		if k != "hero" and _crowds.has(k):
+			(_crowds[k] as Crowd).set_ink_width(ink)
 	for a in _allies:
 		var target := _slot_pos(int(a["slot"]), n)
 		var pos: Vector3 = a["pos"]

@@ -13,6 +13,7 @@ static var clips: Dictionary = {}
 
 var _n := 0
 var _cap := 0
+var _ink_w := 0.028  # crowd_outline.gdshader's default width
 
 
 ## A missing bake falls back to `fallback` (a role that always exists), never a crash.
@@ -64,6 +65,17 @@ func recolor(map: Dictionary) -> void:
 	var am := ArrayMesh.new()
 	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	multimesh.mesh = am
+
+
+## Ink outline width in model metres (crowd_outline.gdshader). A packed squad draws thinner ink,
+## or the outlines between overlapping heads merge into a grey-purple smudge (spec v2 §4).
+func set_ink_width(w: float) -> void:
+	if is_equal_approx(_ink_w, w):
+		return
+	_ink_w = w
+	var ink := (material_override as ShaderMaterial).next_pass as ShaderMaterial
+	if ink:
+		ink.set_shader_parameter("width", w)
 
 
 func begin() -> void:

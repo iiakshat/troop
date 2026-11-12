@@ -14,7 +14,7 @@
     "hero":      { "base": "Casual2_Male", "weapon": "knife",
                    "colors": { "Skin": "e3b08a", "Shirt": "21c7b5", "Pants": "3d5f9e", "Belt": "3b2a20", "Hair": "3b2a20" } },
     "constable": { "base": "Worker_Male", "weapon": "pistol",
-                   "colors": { "Skin": "c99772", "Shirt": "3a62b0", "Vest": "1d2f57", "Pants": "1d2f57", "Hat": "1d2f57" } },
+                   "colors": { "Skin": "c99772", "Shirt": "3a62b0", "Vest": "1d2f57", "Pants": "1d2f57", "Hat": "2e5096" } },
     "inspector": { "base": "Suit_Male", "weapon": "revolver",
                    "colors": { "Skin": "b9875f", "Black": "9a7b4f", "Shirt": "f2f2f2", "Details": "e0b23a", "Belt": "3b2a20", "Hair": "7048b8" } },
     "swat":      { "base": "BlueSoldier_Male", "weapon": "rifle",

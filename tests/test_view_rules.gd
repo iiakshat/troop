@@ -168,3 +168,17 @@ func test_big_squad_keeps_sim_x_and_opens_in_depth() -> void:
 	check(view._slot_pos(0, n).z < z_view[0], "the hero stays in front of every follower")
 	eq(LevelView.depth_spread(10), 1.0, "a small squad keeps the sim's rows")
 	_drop(parts)
+
+
+## Spec v2 §4 smudge: a packed squad's followers draw thinner ink, so the outlines between
+## overlapping heads do not merge into a grey-purple blob; a small squad keeps full ink.
+func test_packed_squad_draws_thin_ink() -> void:
+	eq(LevelView.ink_width(10), LevelView.INK_W, "a small squad keeps full ink")
+	check(LevelView.ink_width(72) <= LevelView.INK_W * 0.5, "a full squad draws at most half the ink")
+	var parts := _view(1)
+	var view: LevelView = parts[0]
+	var c: Crowd = view._crowds["constable"]
+	c.set_ink_width(0.012)
+	var ink := (c.material_override as ShaderMaterial).next_pass as ShaderMaterial
+	check(is_equal_approx(float(ink.get_shader_parameter("width")), 0.012), "the crowd's ink pass takes the width")
+	_drop(parts)
