@@ -18,7 +18,7 @@
     {"at": 101, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 32, "dmg": 3},
     {"at": 135, "type": "wave", "groups": [{"enemy": "thug", "n": 5}, {"enemy": "brute", "n": 1, "gap": 6}]},
     {"at": 163, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 11}, {"lane": 1, "op": "num", "v": 10}, {"lane": 2, "op": "recruit", "unit": "inspector", "n": 2}]},
-    {"at": 189, "type": "hint", "id": "riot", "icon": "riot"},
+    {"at": 189, "type": "hint", "id": "riot", "icon": "riot", "enemy": "riot"},
     {"at": 197, "type": "wave", "groups": [{"enemy": "thug", "n": 9}, {"enemy": "riot", "n": 7, "gap": 6}]},
     {"at": 222, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 55, "block_reach": 12, "dmg_pct": 15},
     {"at": 230, "type": "gates", "gates": [{"lane": 1, "op": "mul", "k": 3}, {"lane": 2, "op": "weapon", "id": "pistol"}]},

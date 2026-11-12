@@ -123,6 +123,26 @@ func test_boosters() -> void:
 	g.free()
 
 
+func test_moving_the_clock_back_mid_level_still_charges_the_free_bomb() -> void:
+	# Review: the free bomb was used in a level while the clock was set back an hour; settle
+	# ran at the earlier time (before ready_at), spent nothing, and the bomb stayed free.
+	var g := _game()
+	var R := int(g.economy["powers"]["recharge_s"])
+	check(g.use_power("bomb"), "the free bomb is used at T0")
+	g.clock_override = T0 + R + 60
+	eq(g.power_available("bomb"), 1, "ready again after the recharge")
+	var up: Dictionary = g.level_upgrades({})
+	eq(int(up["bomb"]), 1, "it comes along")
+	g.clock_override = T0 + R - 3600   # the player winds the clock back during the level
+	g.lose_level(1, {}, {"charges": {"shield": int(up["shield"]), "bomb": 0}})
+	g.clock_override = T0 + R + 120
+	eq(g.power_available("bomb"), 0, "it was charged: recharging, not free again")
+	eq(BoosterPanel.time_text(5 * 3600), "5:00:00", "an h:mm:ss countdown")
+	eq(BoosterPanel.time_text(3599), "59:59", "m:ss below an hour")
+	eq(BoosterPanel.time_text(0), "", "nothing when ready")
+	g.free()
+
+
 func test_daily_shield_reward_is_stored() -> void:
 	var g := _game()
 	g._grant({"shield": 2})

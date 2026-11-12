@@ -64,6 +64,9 @@ var tap_per := 1.0
 var tap_hold_s := 0.0
 var tap_decay_s := 1.0
 var _tap_hold := 0.0       # seconds left before the heat starts to drain
+var tap_coin_pct := 0.0    # hero.tap.coin_pct: Bottle Shot coins + this % x the level's mean heat
+var heat_sum := 0.0        # tap heat integrated over the run (heat x seconds)
+var heat_t := 0.0          # seconds of run the mean heat is taken over
 
 var stats: Dictionary   # effective ally stats after upgrades
 var weapons: Dictionary
@@ -110,6 +113,8 @@ var _wave_mods: Dictionary = {}  # wave index -> {"div": k, "strip": true}
 var _next_id := 1
 var _armour_note_t := 0.0
 var _joined: Dictionary = {}     # rank -> true once it arrived this level
+var _enemy_hints: Array = []     # enemy "new" hints waiting for their gang to come in range
+var _hints_done: Dictionary = {} # hint id -> true once reported
 
 
 func _init(level: Dictionary = {}, units_cfg: Dictionary = {}, upgrades: Dictionary = {}) -> void:
@@ -141,6 +146,7 @@ func _init(level: Dictionary = {}, units_cfg: Dictionary = {}, upgrades: Diction
 	tap_per = float(tap.get("per_tap", tap_per))
 	tap_hold_s = float(tap.get("hold_s", tap_hold_s))
 	tap_decay_s = maxf(float(tap.get("decay_s", tap_decay_s)), 0.001)
+	tap_coin_pct = maxf(float(tap.get("coin_pct", 0.0)), 0.0)
 	stats = units_cfg["allies"].duplicate(true)
 	weapons = units_cfg["hero_weapons"]
 	enemy_defs = units_cfg["enemies"]
@@ -238,7 +244,20 @@ func hero_rate_mult() -> float:
 	return lerpf(tap_auto, 1.0, tap_heat)
 
 
+## The level's mean tap heat (0..1) so far: how hard the player tapped, start to finish.
+func mean_heat() -> float:
+	return clampf(heat_sum / heat_t, 0.0, 1.0) if heat_t > 0.0 else 0.0
+
+
+## Spec v2 §2, "tapping adds finale coins": the whole-percent coin bonus this run earned
+## (hero.tap.coin_pct x the mean heat). Bottle Shot adds it to the station's coin bonus.
+func tap_coin_bonus_pct() -> int:
+	return int(round(tap_coin_pct * mean_heat()))
+
+
 func _cool(dt: float) -> void:
+	heat_sum += tap_heat * dt
+	heat_t += dt
 	var held := minf(dt, _tap_hold)
 	_tap_hold -= held
 	tap_heat = maxf(tap_heat - (dt - held) / tap_decay_s, 0.0)
@@ -274,6 +293,8 @@ func _build_spawns(events: Array) -> void:
 				_spawns.append({"kind": "finish", "ev": e, "at": at, "spawn_at": at - spawn_dist})
 			"hint":
 				_spawns.append({"kind": "hint", "ev": e, "at": at, "spawn_at": at})
+				if e.has("enemy"):
+					_enemy_hints.append({"ev": e, "enemy": String(e["enemy"])})
 			"wave":
 				_wave_ats.append(at)
 				for g in e.get("groups", []):
@@ -328,6 +349,8 @@ func use_power(id: String) -> bool:
 			shield_t = float(powers["shield"]["duration"])
 			out.append({"type": "shield_on", "dur": shield_t})
 		"bomb":
+			if not can_throw_bomb():
+				return false
 			_throw_bomb()
 		_:
 			return false
@@ -335,36 +358,67 @@ func use_power(id: String) -> bool:
 	return true
 
 
+## Seconds from the tap to the blast: the hero's wind-up (the throw clip until the bomb
+## leaves his hand) plus the flight.
+func bomb_time() -> float:
+	var cfg: Dictionary = powers["bomb"]
+	return float(cfg.get("windup", 0.0)) + float(cfg.get("flight", 0.8))
+
+
+## One bomb at a time (a second tap while one is in the air is ignored and spends nothing),
+## and none that would still be in the air when the squad bursts into the stash: with no gang
+## left the street runs on to the finish (Bottle Shot never sees a bomb).
+func can_throw_bomb() -> bool:
+	if state != "run" or not bombs.is_empty():
+		return false
+	if finish_at > 0.0 and hordes.is_empty() and _pending_hordes <= 0:
+		return traveled + S_base * bomb_time() < finish_at
+	return true
+
+
 ## Spec v2 §12.5: the hero throws a bomb down the squad's lane. It aims at the nearest thing
-## in that lane within reach (a gang's front, or a barricade, car or barrel), else the road at
-## max reach, and lands `flight` s later (_land_bombs applies the blast then).
+## in that lane that is within reach when it lands (a gang's front, or a barricade, car or
+## barrel the squad will not have reached by then), else the road at max reach. It lands
+## windup + flight s after the tap (_land_bombs applies the blast then).
 func _throw_bomb() -> void:
 	var cfg: Dictionary = powers["bomb"]
 	var reach := float(cfg.get("reach", 50.0))
-	var flight := float(cfg.get("flight", 0.8))
+	var total := bomb_time()
 	var kind := "road"
 	var ref := 0
-	var z := -reach
-	var land_z := -reach + S * flight   # where that point of the road will be at landing
-	var h = _front_horde(reach)
-	if h != null and front_z(h) < 0.0:
+	var z := -reach - S * total   # the road point that is at max reach when the bomb lands
+	var land_z := -reach
+	var best = null
+	for h in hordes:
+		if int(h["count"]) <= 0 or front_z(h) >= 0.0:
+			continue
+		var hz := front_z(h)
+		var lz := hz if (h["stopped"] or h["melee"]) else minf(hz + float(h["vrel"]) * total, contact_z)
+		if lz >= -reach and (best == null or hz > front_z(best)):
+			best = h
+			land_z = lz
+	if best != null:
 		kind = "horde"
-		ref = h["id"]
-		z = front_z(h)
-		land_z = z if (h["stopped"] or h["melee"]) else z + float(h["vrel"]) * flight
+		ref = best["id"]
+		z = front_z(best)
 	for ob in obstacles:
 		var oz := float(ob["z"])
-		if int(ob["lane"]) != lane or oz >= 0.0 or oz < -reach or oz <= z or not _bombable(ob):
+		if int(ob["lane"]) != lane or oz >= 0.0 or not _bombable(ob):
+			continue
+		var lz := oz + S * total
+		# Out of reach at landing, or the squad gets there before the bomb does.
+		if lz < -reach or lz >= contact_z or oz <= z:
 			continue
 		kind = "obstacle"
 		ref = ob["id"]
 		z = oz
-		land_z = oz + S * flight
-	var b := {"id": _new_id(), "lane": lane, "x": lane_x(lane), "land": time + flight,
+		land_z = lz
+	var b := {"id": _new_id(), "lane": lane, "x": lane_x(lane), "land": time + total,
 		"target": kind, "ref": ref, "z": z}
 	bombs.append(b)
-	out.append({"type": "bomb_throw", "id": b["id"], "lane": lane, "x": b["x"], "t": flight,
-		"target": kind, "ref": ref, "z": minf(land_z, contact_z)})
+	out.append({"type": "bomb_throw", "id": b["id"], "lane": lane, "x": b["x"], "t": total,
+		"windup": float(cfg.get("windup", 0.0)), "target": kind, "ref": ref,
+		"z": minf(land_z, contact_z), "radius": float(cfg.get("radius", 4.0))})
 
 
 ## A bomb can hit barricades, cars and barrels (a pothole is a hole, not a target).
@@ -402,6 +456,7 @@ func _blast(b: Dictionary, bz: float, target) -> void:
 	var cfg: Dictionary = powers["bomb"]
 	var radius := float(cfg.get("radius", 4.0))
 	var killed := 0
+	var boss_dmg := 0
 	var hit_ids: Array = []
 	for h in hordes.duplicate():
 		if int(h["count"]) <= 0 or (not is_same(h, target) and absf(front_z(h) - bz) > radius):
@@ -410,8 +465,13 @@ func _blast(b: Dictionary, bz: float, target) -> void:
 		var n: int = h["count"]
 		var k := 0
 		if float(h["hp"]) >= float(cfg.get("big_hp", 50)):
-			# Big single targets (the boss) take flat damage instead of dying outright.
-			h["acc"] = float(h["acc"]) + float(cfg.get("big_dmg", 120))
+			# Big single targets take flat damage instead of dying outright; a boss loses
+			# big_pct % of its full health (at least big_dmg), so a late boss feels it too.
+			var dmg := int(cfg.get("big_dmg", 120))
+			if h["boss"]:
+				dmg = maxi(dmg, int(h.get("max_hp", h["hp"])) * int(cfg.get("big_pct", 0)) / 100)
+				boss_dmg += dmg
+			h["acc"] = float(h["acc"]) + float(dmg)
 			k = mini(int(floor(float(h["acc"]) / float(h["hp"]))), n)
 			h["acc"] = float(h["acc"]) - k * float(h["hp"])
 		else:
@@ -422,7 +482,8 @@ func _blast(b: Dictionary, bz: float, target) -> void:
 		if h["boss"] and int(h["count"]) > 0:
 			_boss_hit(h, true)
 	out.append({"type": "bomb", "id": b["id"], "lane": b["lane"], "x": b["x"], "z": bz, "killed": killed,
-		"horde": hit_ids[0] if not hit_ids.is_empty() else -1, "target": b["target"]})
+		"horde": hit_ids[0] if not hit_ids.is_empty() else -1, "target": b["target"], "boss_dmg": boss_dmg,
+		"radius": radius})
 	for ob in obstacles.duplicate():
 		if not _bombable(ob) or Vector2(lane_x(int(ob["lane"])) - float(b["x"]), float(ob["z"]) - bz).length() > radius:
 			continue
@@ -514,9 +575,35 @@ func step(dt: float) -> void:
 	if state != "run":
 		return
 	peak_squad = maxi(peak_squad, squad.total())
+	_enemy_hints_due()
 	if finish_at > 0.0 and traveled >= finish_at and hordes.is_empty() and _pending_hordes <= 0:
+		# Safety net (can_throw_bomb keeps this rare): a bomb still in the air goes off now,
+		# before the squad bursts into the stash, so Bottle Shot never sees it.
+		for b in bombs.duplicate():
+			bombs.erase(b)
+			_blast(b, float(b["z"]), null)
 		state = "strike"
 		out.append({"type": "finish"})
+
+
+## Enemy "new" hints show when the first gang of that kind comes within fire_range + 10 m
+## (its numbers are on the street then), not by distance travelled: a boss halts the street
+## before its wave's `at`, and a strong squad kills a gang at range before it.
+func _enemy_hints_due() -> void:
+	for eh in _enemy_hints.duplicate():
+		for h in hordes:
+			if String(h["enemy"]) == String(eh["enemy"]) and int(h["count"]) > 0 and front_z(h) >= -(fire_range + 10.0):
+				_enemy_hints.erase(eh)
+				_report_hint(eh["ev"])
+				break
+
+
+func _report_hint(ev: Dictionary) -> void:
+	var id := String(ev.get("id", ""))
+	if id != "" and _hints_done.has(id):
+		return
+	_hints_done[id] = true
+	out.append({"type": "hint", "ev": ev})
 
 
 ## True while the squad must plant its feet and fight: a boss within boss_halt metres, or a
@@ -605,7 +692,9 @@ func _spawn_one(sp: Dictionary, early := false) -> void:
 		"finish":
 			out.append({"type": "finish_spawn", "at": sp["at"]})
 		"hint":
-			out.append({"type": "hint", "ev": ev})
+			# The distance is the fallback; an enemy hint usually went out when its gang came in.
+			_enemy_hints = _enemy_hints.filter(func(x): return not is_same(x["ev"], ev))
+			_report_hint(ev)
 		"horde":
 			_pending_hordes -= 1
 			_spawn_horde(sp, early)
@@ -833,7 +922,7 @@ func _check_barrels() -> void:
 
 ## An armed barrel blows up the gangs whose front is within its blast radius, nearest to
 ## the squad first, killing up to `kill` gang members in total.
-func _explode(b: Dictionary) -> void:
+func _explode(b: Dictionary, extra: Dictionary = {}) -> void:
 	var radius := float(b.get("radius", 7.0))
 	var left := int(b.get("kill", 30))
 	var total := 0
@@ -847,7 +936,9 @@ func _explode(b: Dictionary) -> void:
 		left -= k
 		total += k
 		_kill(h, k)
-	out.append({"type": "barrel_boom", "ob": b, "killed": total})
+	var ev := {"type": "barrel_boom", "ob": b, "killed": total}
+	ev.merge(extra)
+	out.append(ev)
 
 
 func _kill(h: Dictionary, k: int) -> void:
@@ -1186,6 +1277,11 @@ func _pass_obstacles() -> void:
 			continue
 		obstacles.erase(ob)
 		var kind := String(ob.get("kind", "barricade"))
+		if kind == "barrel" and ob.get("armed", false):
+			_barrel_on_squad(ob)
+			if state != "run":
+				return
+			continue
 		var solid: bool = kind == "pothole" or (float(ob["hp"]) > 0.0 and not ob.get("armed", false))
 		var hit := {}
 		if solid:
@@ -1207,6 +1303,21 @@ func _pass_obstacles() -> void:
 		out.append(ev)
 		if state != "run":
 			return
+
+
+## Spec v2 §5: a lit barrel that reaches the squad (its gang died first) goes off on it, never
+## rolls by as "rubber": the troops on its footprint fall, up to armed_pct % of its number
+## (units.obstacles.barrel), and any gang near it is caught too.
+func _barrel_on_squad(ob: Dictionary) -> void:
+	var cost := obstacle_cost(ob) * int(ob.get("armed_pct", 100)) / 100
+	var hit := obstacle_hits(ob, cost) if cost > 0 else {}
+	var lost := 0
+	if not hit.is_empty() and int(hit["lost"]) > 0:
+		lost = _hurt(int(hit["lost"]), "barrel", ob["id"], false)
+	_explode(ob, {"on_squad": true, "lost": lost})
+	if lost > 0:
+		out.append({"type": "obstacle_hit", "ob": ob, "lost": lost, "slots": hit["slots"],
+			"figures": hit["figures"], "x": squad_x})
 
 
 ## The most troops an obstacle can take (the number shown on it): `fall`/`dmg`, or
@@ -1263,7 +1374,7 @@ func clone() -> LevelSim:
 			"boss_halt", "finish_hold", "boss_hit_every", "weapons", "enemy_defs", "obstacle_defs",
 			"powers", "rf_cfg", "revive_cfg", "star_cfg", "lane", "squad_x", "_x_driven", "lane_w", "form_half",
 			"fig_cap", "fig_r", "gate_clear_s", "gang_priority", "gang_figs", "district", "caps",
-			"coin_ref", "tap_heat", "tap_auto", "tap_per",
+			"coin_ref", "tap_heat", "tap_auto", "tap_per", "tap_coin_pct", "heat_sum", "heat_t",
 			"tap_hold_s", "tap_decay_s", "_tap_hold", "traveled", "time", "state", "lose_cause",
 			"finish_at", "halted", "peak_squad", "revived", "shield_t", "kills", "rows_passed",
 			"_spawns", "_next_spawn", "_pending_hordes", "_wave_ats", "_next_id", "_armour_note_t"]:
@@ -1278,6 +1389,8 @@ func clone() -> LevelSim:
 	c.charges = charges.duplicate()
 	c._wave_mods = _wave_mods.duplicate(true)
 	c._joined = _joined.duplicate()
+	c._enemy_hints = _enemy_hints.duplicate()
+	c._hints_done = _hints_done.duplicate()
 	return c
 
 

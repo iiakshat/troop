@@ -19,7 +19,7 @@
     {"at": 121, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 50, "block_reach": 12, "dmg_pct": 10},
     {"at": 129, "type": "gates", "gates": [{"lane": 1, "op": "mul", "k": 3}, {"lane": 2, "op": "num", "v": 12}]},
     {"at": 129, "type": "obstacle", "kind": "car", "lane": 0, "hp": 120, "dmg": 4},
-    {"at": 155, "type": "hint", "id": "sniper_foe", "icon": "sniper_foe"},
+    {"at": 155, "type": "hint", "id": "sniper_foe", "icon": "sniper_foe", "enemy": "sniper_foe"},
     {"at": 163, "type": "wave", "groups": [{"enemy": "knifer", "n": 77}, {"enemy": "sniper_foe", "n": 39, "gap": 14}]},
     {"at": 191, "type": "gates", "gates": [{"lane": 0, "op": "pct", "v": -50, "inc": 10, "step": 39.7, "max": 20}, {"lane": 1, "op": "recruit", "unit": "inspector", "n": 5}, {"lane": 2, "op": "num", "v": 28}]},
     {"at": 225, "type": "wave", "groups": [{"enemy": "knifer", "n": 109}, {"enemy": "sniper_foe", "n": 77, "gap": 14}]},

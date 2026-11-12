@@ -14,7 +14,7 @@
     {"at": 30, "type": "wave", "fixed": true, "groups": [{"enemy": "thug", "n": 9}]},
     {"at": 64, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 10}, {"lane": 2, "op": "mul", "k": 3}]},
     {"at": 64, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 3},
-    {"at": 90, "type": "hint", "id": "shield", "icon": "shield", "power": "shield"},
+    {"at": 90, "type": "hint", "id": "shield", "icon": "shield", "power": "shield", "enemy": "gunman"},
     {"at": 98, "type": "wave", "groups": [{"enemy": "thug", "n": 9}, {"enemy": "gunman", "n": 2, "gap": 10}]},
     {"at": 132, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "num", "v": 14}, {"lane": 2, "op": "num", "v": -8, "step": 2, "max": 14, "inc": 2}]},
     {"at": 138, "type": "hint", "id": "barrel", "icon": "barrel"},

@@ -1081,6 +1081,10 @@ def build(level: int, seen: set, cal_all: dict) -> dict:
             h = {"at": max(4, int(round(at))), "type": "hint", "id": hid, "icon": icon}
             if power:
                 h["power"] = power
+            if e["type"] == "wave":
+                # The sim shows an enemy hint when that gang comes within fire range + 10 m
+                # (its `at` is only the fallback): a boss halts the street before its wave's at.
+                h["enemy"] = mech
             hints.append(h)
             have.add(hid)
     events = sorted(events + hints, key=lambda e: (float(e["at"]), e["type"] != "hint"))

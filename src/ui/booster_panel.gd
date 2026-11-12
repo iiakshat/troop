@@ -117,11 +117,14 @@ static func is_power(id: String) -> bool:
 
 
 ## A recharge countdown as h:mm (minutes rounded up), next to the clock icon.
+## A recharge countdown that cannot be misread: h:mm:ss from an hour up ("4:59:59", it
+## visibly ticks), m:ss below ("59:59"). Used by the HUD and this panel.
 static func time_text(seconds: int) -> String:
 	if seconds <= 0:
 		return ""
-	var m := ceili(seconds / 60.0)
-	return "%d:%02d" % [m / 60, m % 60]
+	if seconds >= 3600:
+		return "%d:%02d:%02d" % [seconds / 3600, (seconds / 60) % 60, seconds % 60]
+	return "%d:%02d" % [seconds / 60, seconds % 60]
 
 
 static func _effect_text(id: String, cfg: Dictionary) -> String:

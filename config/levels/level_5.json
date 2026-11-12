@@ -19,7 +19,7 @@
     {"at": 163, "type": "wave", "groups": [{"enemy": "thug", "n": 8}, {"enemy": "knifer", "n": 31, "gap": 8}]},
     {"at": 194, "type": "gates", "gates": [{"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "num", "v": 22}]},
     {"at": 194, "type": "obstacle", "kind": "pothole", "lane": 0, "fall": 5},
-    {"at": 220, "type": "hint", "id": "armour", "icon": "armour"},
+    {"at": 220, "type": "hint", "id": "armour", "icon": "armour", "enemy": "brute"},
     {"at": 228, "type": "wave", "groups": [{"enemy": "thug", "n": 16}, {"enemy": "brute", "n": 4, "gap": 6}]},
     {"at": 260, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 24}, {"lane": 2, "op": "num", "v": 32}]},
     {"at": 260, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 190, "dmg": 8},

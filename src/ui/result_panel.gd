@@ -98,6 +98,10 @@ func show_win(level: int, r: Dictionary, has_next: bool) -> void:
 	coins_row.add_child(_coin_label)
 	_coins = int(r.get("coins", 0))
 	_coins_shown = 0
+	# Spec v2 §2: what tapping all level long added to the coins (fire-rate icon, +N %).
+	if int(r.get("tap_pct", 0)) > 0:
+		coins_row.add_child(UiKit.icon("fire_rate", 56, UiKit.YELLOW))
+		coins_row.add_child(UiKit.label("+%d%%" % int(r["tap_pct"]), 48, UiKit.YELLOW, 12))
 	_x2 = _ad_button("x2_coins", "×2")
 	_x2.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_x2.pressed.connect(_on_x2)

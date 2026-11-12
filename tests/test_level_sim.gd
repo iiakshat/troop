@@ -204,13 +204,129 @@ func test_bomb_with_no_gang_still_spends_and_explodes() -> void:
 	if throw.size() == 1:
 		eq(int(throw[0]["lane"]), 2, "down the squad's lane")
 		eq(String(throw[0]["target"]), "road", "nothing in reach: the road")
-		check(absf(float(throw[0]["t"]) - float(cfg["flight"])) < 1e-6, "flight time from config")
+		check(absf(float(throw[0]["t"]) - float(cfg["windup"]) - float(cfg["flight"])) < 1e-6, "wind-up + flight time from config")
 	var t0 := sim.time
 	var boom := _until_event(sim, "bomb")
 	check(not boom.is_empty(), "it explodes")
 	eq(int(boom.get("killed", -1)), 0, "nobody to kill")
-	check(absf(sim.time - t0 - float(cfg["flight"])) < 0.05, "lands after the flight time")
-	check(float(boom.get("z", 0.0)) < -float(cfg["reach"]) * 0.5, "lands far down the road (%.1f)" % float(boom.get("z", 0.0)))
+	check(absf(sim.time - t0 - float(cfg["windup"]) - float(cfg["flight"])) < 0.05, "lands after the wind-up and the flight")
+	check(absf(float(boom.get("z", 0.0)) + float(cfg["reach"])) < 0.5, "lands at max reach (%.1f)" % float(boom.get("z", 0.0)))
+
+
+func test_one_bomb_in_the_air_at_a_time() -> void:
+	var lvl := {"charges": {"bomb": 2}, "events": [{"at": 200, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	sim.step(1.0 / 30.0)
+	check(sim.use_power("bomb"), "first bomb")
+	check(not sim.use_power("bomb"), "a second tap while it flies is ignored")
+	eq(int(sim.charges["bomb"]), 1, "and spends nothing")
+	_until_event(sim, "bomb")
+	check(sim.use_power("bomb"), "after the blast the next one goes")
+
+
+func test_bomb_skips_an_obstacle_the_squad_reaches_first() -> void:
+	# A barricade 4 m ahead is crashed into before any bomb could land; the gang 25 m out
+	# in the lane is the target instead (the review's wasted-bomb case).
+	var lvl := {"charges": {"bomb": 1}, "events": [
+		{"at": 4, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 5000, "dmg": 5},
+		{"at": 25, "type": "wave", "groups": [{"enemy": "thug", "n": 40}]},
+		{"at": 300, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units, {"squad": 20})
+	sim.set_lane(1)
+	for k in sim.stats:
+		sim.stats[k]["dmg"] = 0   # only the bomb kills
+	sim.step(1.0 / 30.0)
+	sim.drain()
+	check(sim.use_power("bomb"), "thrown")
+	var throw := _events_of(sim.drain(), "bomb_throw")
+	eq(String(throw[0]["target"]) if throw.size() == 1 else "", "horde", "the gang, not the barricade it will crash into")
+	var boom := _until_event(sim, "bomb")
+	check(int(boom.get("killed", 0)) > 0, "the gang loses people (%d)" % int(boom.get("killed", 0)))
+
+
+func test_no_bomb_flies_into_the_stash() -> void:
+	var lvl := {"charges": {"bomb": 1}, "events": [{"at": 60, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	_step_until(sim, func(): return sim.traveled + sim.S_base * sim.bomb_time() >= sim.finish_at)
+	check(not sim.can_throw_bomb(), "no gang left and the stash is closer than a throw")
+	check(not sim.use_power("bomb"), "the press does nothing")
+	eq(int(sim.charges["bomb"]), 1, "and keeps the charge")
+	# Safety net: a bomb still in the air at the finish goes off before Bottle Shot.
+	var sim2 := LevelSim.new(lvl, units)
+	_step_until(sim2, func(): return sim2.traveled + sim2.S_base * sim2.bomb_time() >= sim2.finish_at - 3.0)
+	if sim2.can_throw_bomb():
+		check(sim2.use_power("bomb"), "a late throw")
+		var seen := _step_until(sim2, func(): return sim2.state != "run")
+		eq(_events_of(seen, "bomb").size(), 1, "it went off")
+	eq(sim2.bombs.size(), 0, "nothing in the air in the finale")
+
+
+func test_bomb_takes_a_share_of_a_late_boss() -> void:
+	var lvl := {"charges": {"bomb": 1}, "events": [
+		{"at": 60, "type": "wave", "groups": [{"enemy": "boss", "n": 1, "hp": 20000}]}, {"at": 200, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	_step_until(sim, func(): return not sim.hordes.is_empty() and LevelSim.front_z(sim.hordes[0]) > -40.0)
+	var hp := LevelSim.boss_hp(sim.hordes[0])
+	sim.stats["hero"]["dmg"] = 0
+	for k in sim.stats:
+		sim.stats[k]["dmg"] = 0
+	check(sim.use_power("bomb"), "bomb on the boss")
+	var boom := _until_event(sim, "bomb")
+	var want: int = 20000 * int(units["powers"]["bomb"]["big_pct"]) / 100
+	eq(int(boom.get("boss_dmg", 0)), want, "big_pct % of its full health")
+	eq(LevelSim.boss_hp(sim.hordes[0]), hp - want, "exactly that much")
+
+
+func test_a_lit_barrel_that_reaches_the_squad_goes_off_on_it() -> void:
+	var lvl := {"events": [
+		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 29}]},
+		{"at": 80, "type": "obstacle", "kind": "barrel", "lane": 1, "hp": 1, "dmg": 6, "radius": 8, "kill": 40},
+		{"at": 300, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	var seen := _step_until(sim, func(): return not _events_of(sim.out, "barrel_boom").is_empty() or sim.state != "run")
+	seen.append_array(sim.drain())
+	var booms := _events_of(seen, "barrel_boom")
+	eq(booms.size(), 1, "it blows up (never rolls by as rubber)")
+	eq(_events_of(seen, "obstacle_pass").size(), 0, "it does not pass")
+	if booms.size() == 1:
+		check(bool(booms[0].get("on_squad", false)), "on the squad")
+		eq(int(booms[0].get("lost", -1)), 6, "the troops on its footprint, up to its number")
+		eq(sim.squad.total(), 30 - 6, "exactly those")
+
+
+func test_enemy_hint_shows_when_its_gang_comes_in_range() -> void:
+	# The boss halts the street before its wave's `at`; its hint (at the wave's at - 8) used to
+	# show after it died. Now it shows when the boss is within fire_range + 10 m.
+	var lvl := {"events": [
+		{"at": 152, "type": "hint", "id": "boss", "icon": "boss", "enemy": "boss"},
+		{"at": 160, "type": "wave", "groups": [{"enemy": "boss", "n": 1}]},
+		{"at": 300, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	var ev := _until_event(sim, "hint")
+	check(not ev.is_empty(), "the hint came")
+	check(not sim.hordes.is_empty(), "while the boss is alive")
+	if not sim.hordes.is_empty():
+		var z := LevelSim.front_z(sim.hordes[0])
+		check(z >= -(sim.fire_range + 10.5) and z < -sim.boss_halt, "as it walks in (%.1f m)" % z)
+	var more := _step_until(sim, func(): return sim.state != "run")
+	eq(_events_of(more, "hint").size(), 0, "only once")
+
+
+func test_tapping_earns_a_coin_bonus() -> void:
+	var lvl := {"events": [{"at": 60, "type": "finish"}]}
+	var pct := int(units["hero"]["tap"]["coin_pct"])
+	var cold := LevelSim.new(lvl, units)
+	_step_until(cold, func(): return cold.state != "run")
+	eq(cold.tap_coin_bonus_pct(), 0, "no taps: no bonus")
+	var hot := LevelSim.new(lvl, units)
+	var n := 0
+	while hot.state == "run" and n < 3000:
+		if n % 8 == 0:
+			hot.tap()   # ~4 taps/s
+		hot.step(1.0 / 30.0)
+		n += 1
+	check(hot.tap_coin_bonus_pct() >= pct - 2 and hot.tap_coin_bonus_pct() <= pct, "tapping all level: about +%d%% (%d)" % [pct, hot.tap_coin_bonus_pct()])
 
 
 func _bomb_obstacle_sim(kind: String) -> LevelSim:

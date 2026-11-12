@@ -20,13 +20,14 @@
     "gang_figures": 180
   },
   "hero": {
-    "_note": "Tap-to-fire (spec v2 section 2): the hero's knife (and a held PISTOL/SMG) fires at lerp(auto_rate, 1, heat) of its rate. Each tap adds per_tap heat (max 1); heat holds for hold_s after a tap, then drains to 0 over decay_s. Followers always fire at full rate.",
-    "tap": { "auto_rate": 0.4, "per_tap": 0.3, "hold_s": 0.3, "decay_s": 1.0 }
+    "_note": "Tap-to-fire (spec v2 section 2): the hero's knife (and a held PISTOL/SMG) fires at lerp(auto_rate, 1, heat) of its rate. Each tap adds per_tap heat (max 1); heat holds for hold_s after a tap, then drains to 0 over decay_s. Followers always fire at full rate. Bottle Shot coins get coin_pct % x the level's mean heat on top (a player who tapped all level long: +coin_pct %).",
+    "tap": { "auto_rate": 0.4, "per_tap": 0.3, "hold_s": 0.3, "decay_s": 1.0, "coin_pct": 25 }
   },
   "input": {
-    "_note": "Tap vs swipe (src/core/touch_classifier.gd). A touch that stays within tap_max_px (times the screen scale) and lifts within tap_max_s is a tap: it powers the hero and never steers. Taps count only in the tap zone, from zone_top of the screen height down. Anything that moves further steers.",
+    "_note": "Tap vs swipe (src/core/touch_classifier.gd). A touch that stays within tap_max_px (times the screen scale) and lifts within tap_max_s is a tap: it powers the hero and never steers. Taps count only in the tap zone, from zone_top of the screen height down. Anything that moves further steers. A shield or bomb press within power_guard_s of a fire tap that landed next to that button is ignored (a thumb tapping fast that slid onto it); a press with the other thumb still works.",
     "tap_max_px": 15,
     "tap_max_s": 0.25,
+    "power_guard_s": 0.2,
     "zone_top": 0.5
   },
   "allies": {
@@ -60,16 +61,16 @@
     "range": 32.0
   },
   "obstacles": {
-    "_note": "Defaults; a level event may override any key. width = footprint across the road (m): an obstacle only hits the troops whose formation slots overlap it, up to its number (fall/dmg or the % forms), so steering half past it saves half the squad. pothole: unshootable, falling in costs `fall` troops (or `fall_pct` % of the squad); the hero always hops over, so it never ends the level. barricade: shoot its hp away or crash into it (dmg troops, or dmg_pct % of the squad) and lose the next gate in that lane. car: shoot it away or crash (dmg or dmg_pct). barrel: shoot it to arm it; it blows up when the next gang's front reaches it, killing up to `kill` gang members in total (nearest gang first).",
+    "_note": "Defaults; a level event may override any key. width = footprint across the road (m): an obstacle only hits the troops whose formation slots overlap it, up to its number (fall/dmg or the % forms), so steering half past it saves half the squad. pothole: unshootable, falling in costs `fall` troops (or `fall_pct` % of the squad); the hero always hops over, so it never ends the level. barricade: shoot its hp away or crash into it (dmg troops, or dmg_pct % of the squad) and lose the next gate in that lane. car: shoot it away or crash (dmg or dmg_pct). barrel: shoot it to arm it; it blows up when the next gang's front reaches it, killing up to `kill` gang members in total (nearest gang first). A lit barrel that reaches the squad first goes off on it: the troops on its footprint fall, up to armed_pct % of its dmg.",
     "pothole":   { "fall": 4, "width": 2.4 },
     "barricade": { "hp": 12, "dmg": 6, "block_reach": 45.0, "width": 2.6 },
     "car":       { "hp": 40, "dmg": 8, "width": 2.6 },
-    "barrel":    { "hp": 10, "dmg": 4, "radius": 8, "kill": 40, "width": 1.2 }
+    "barrel":    { "hp": 10, "dmg": 4, "radius": 8, "kill": 40, "width": 1.2, "armed_pct": 100 }
   },
   "powers": {
     "shield": { "duration": 4.0 },
-    "_note": "Spec v2 section 12.5: the bomb is thrown at any moment of a level. It flies `flight` s down the squad's lane and lands on the nearest thing in that lane within `reach` m (a gang's front, a barricade, car or barrel; never a pothole or a gate), else on the road at reach. On landing (the sim applies it then, exact): every gang whose front is within `radius` m loses kill_pct % (at least min_kill, never more than it has) and half its riot shields; a gang member with hp >= big_hp (the boss) takes big_dmg instead; barricades and cars within `radius` m are destroyed, barrels within it go off.",
-    "bomb":   { "kill_pct": 50, "min_kill": 10, "reach": 50.0, "big_hp": 50, "big_dmg": 120, "flight": 0.8, "radius": 4.0 }
+    "_note": "Spec v2 section 12.5: the bomb is thrown at any moment of a level. The hero winds up for `windup` s (the throw clip until the bomb leaves his hand), then it flies `flight` s down the squad's lane and lands on the nearest thing in that lane within `reach` m at landing (a gang's front, a barricade, car or barrel the squad will not reach first; never a pothole or a gate), else on the road at reach. One bomb in the air at a time, and none in the last metres before the stash when no gang is left. On landing (the sim applies it then, exact): every gang whose front is within `radius` m loses kill_pct % (at least min_kill, never more than it has) and half its riot shields; a gang member with hp >= big_hp takes big_dmg instead, and a boss loses big_pct % of its full health (at least big_dmg); barricades and cars within `radius` m are destroyed, barrels within it go off.",
+    "bomb":   { "kill_pct": 50, "min_kill": 10, "reach": 50.0, "big_hp": 50, "big_dmg": 120, "big_pct": 10, "windup": 0.4, "flight": 0.8, "radius": 4.0 }
   },
   "boosters": {
     "_note": "Pre-level tokens handed to LevelSim in the upgrades dict: headstart = constables per token; shield/bomb tokens add charges like the garage does.",

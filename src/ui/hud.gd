@@ -240,6 +240,12 @@ func set_tutorial(_active: bool) -> void:
 	pass
 
 
+## A power button's screen rect (LevelView.use_power's guard against stray fire taps).
+func power_rect(id: String) -> Rect2:
+	var b: Control = _power_buttons.get(id, null)
+	return b.get_global_rect() if b != null else Rect2()
+
+
 func enter_finale() -> void:
 	for id in _power_buttons:
 		(_power_buttons[id] as Control).visible = false

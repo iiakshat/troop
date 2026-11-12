@@ -29,6 +29,14 @@ var _labels: Array[Label3D] = []
 var _label_state: Array = []
 var scroll_speed := 0.0    # particles on the ground drift with the road
 var _trail := Color.TRANSPARENT
+## The street's clock for effects (LevelView sets it every frame): 0 while the game is paused
+## or a first-run lesson holds the street, so a bomb in the air waits with the sim.
+var time_scale := 1.0
+## The bomb in the hero's hand during his wind-up (LevelView sets it; held_bomb_on = false: none).
+var held_bomb := Vector3.ZERO
+var held_bomb_on := false
+const BOMB_HAND_SCALE := 0.8   # the bomb in his hand (r = 0.36 m mesh)
+const BOMB_FLY_SCALE := 1.7    # in the air, so it still reads as a bomb far down the street
 
 
 func _ready() -> void:
@@ -39,7 +47,10 @@ func _ready() -> void:
 	bm.albedo_color = Color(1, 1, 1, 0.6)
 	_bullet_mm = _mm(_bullet_mesh(), MAX_PROJ, false, bm)
 	_lob_mm = _mm(_bottle_mesh(), MAX_LOB, false, _lit_vertex_mat())
-	_bomb_mm = _mm(_bomb_mesh(), MAX_BOMBS, false, _lit_vertex_mat())
+	# The bomb is drawn flat and near-black like the HUD's bomb icon, with a pale rim.
+	var bomb_mat := _unshaded_vertex_mat() as StandardMaterial3D
+	bomb_mat.vertex_color_is_srgb = true
+	_bomb_mm = _mm(_bomb_mesh(), MAX_BOMBS, false, bomb_mat)
 	var cube := BoxMesh.new()
 	cube.size = Vector3.ONE
 	_part_mm = _mm(cube, MAX_PARTS, true, _unshaded_instance_mat())
@@ -58,6 +69,7 @@ func prewarm(at: Vector3) -> void:
 		shoot(k, at, at + Vector3(0, 0, -0.5), 1.0)
 	lob(at, at + Vector3(0, 0, -0.5), 0.3, 0.2)
 	bomb(at, at + Vector3(0, 0, -0.5), 0.3, 0.2)
+	blast(at, 1.0, 0.0)
 	burst(at, Color.WHITE, 2, 0.1, 0.2, 0.1, 0.0, 0.0)
 	for i in 12:
 		float_text("0", at, Color(1, 1, 1, 0), 1.0, 0.0, 0.05)
@@ -65,6 +77,8 @@ func prewarm(at: Vector3) -> void:
 
 func clear() -> void:
 	_proj.clear()
+	held_bomb_on = false
+	time_scale = 1.0
 	_parts.clear()
 	_fires.clear()
 	for i in _labels.size():
@@ -101,11 +115,43 @@ func lob(from: Vector3, to: Vector3, t: float, height := 5.0) -> void:
 
 ## Spec v2 §12.5: the hero's bomb, a round black bomb with a sparking fuse, arcing from his
 ## hand to `to` in `t` seconds. Like lob(), it vanishes on landing: the sim's "bomb" event
-## shows the blast.
-func bomb(from: Vector3, to: Vector3, t: float, height := 4.0) -> void:
+## shows the blast (and calls land_bomb(id) so the two always meet).
+func bomb(from: Vector3, to: Vector3, t: float, height := 4.0, id := 0) -> void:
 	lob(from, to, t, height)
 	if not _proj.is_empty() and _proj.back()["kind"] == "lob":
 		_proj.back()["kind"] = "bomb"
+		_proj.back()["id"] = id
+		_proj.back()["t0"] = maxf(t, 0.2)
+
+
+## The sim's blast went off: the bomb `id` (0: every bomb) leaves the air now.
+func land_bomb(id := 0) -> void:
+	var i := 0
+	while i < _proj.size():
+		if String(_proj[i]["kind"]) == "bomb" and (id == 0 or int(_proj[i].get("id", 0)) == id):
+			_proj.remove_at(i)
+		else:
+			i += 1
+
+
+## The bomb's blast: a fireball that fills `radius` metres (what it hits is what looks hit),
+## a shock ring at that radius, smoke and debris. `far` (0..1, by distance from the camera)
+## thickens the particles so a blast 50 m down the street still reads.
+func blast(at: Vector3, radius: float, far := 0.0) -> void:
+	var k := 1.0 + 1.6 * clampf(far, 0.0, 1.0)
+	var life := 0.6
+	# Particles slow by about half over their life (_tick_parts drag): speed ~ 2 x radius / life.
+	var v := 2.0 * radius / life
+	burst(at + Vector3(0, 0.4, 0), Color(1.0, 0.62, 0.05), 26, v, 0.45 * k, life, 5.0, 6.0)
+	burst(at + Vector3(0, 0.4, 0), Color(0.95, 0.22, 0.02), 22, v * 0.8, 0.6 * k, life * 1.1, 4.0, 5.0)
+	burst(at + Vector3(0, 0.6, 0), Color(0.12, 0.11, 0.11), 16, v * 0.45, 0.8 * k, 1.1, 6.0, 1.0)
+	burst(at + Vector3(0, 0.3, 0), Color(0.06, 0.06, 0.07), 10, v * 0.7, 0.18 * k, 0.8, 7.0, 16.0)
+	for i in 36:
+		if _parts.size() >= MAX_PARTS:
+			_parts.pop_front()
+		var a := TAU * i / 36
+		_parts.append({"pos": at + Vector3(0, 0.15, 0), "vel": Vector3(cos(a), 0.0, sin(a)) * (2.0 * radius / 0.45),
+			"t": 0.0, "life": 0.45, "col": Color("ffb347"), "size": 0.3 * k, "grav": 0.0})
 
 
 ## A gun's muzzle flash: a quick bright pop (enemy return fire).
@@ -198,6 +244,7 @@ func float_text(text: String, at: Vector3, color: Color, size := 1.0, rise := 2.
 # ---------------------------------------------------------------- tick
 
 func _process(delta: float) -> void:
+	delta *= maxf(time_scale, 0.0)
 	_tick_proj(delta)
 	_tick_fires(delta)
 	_tick_parts(delta)
@@ -233,15 +280,14 @@ func _tick_proj(delta: float) -> void:
 				_lob_mm.set_instance_transform(ln, Transform3D(Basis(Vector3.RIGHT, float(p["spin"])).scaled(Vector3.ONE * 1.8), p["pos"]))
 				ln += 1
 		elif kind == "bomb":
-			# A slow tumble; the fuse throws white-gold sparks and a thin smoke trail.
-			p["spin"] = float(p["spin"]) + delta * 6.0
+			# A slow tumble; it grows from hand size as it flies so it still reads far away.
+			p["spin"] = float(p["spin"]) + delta * 5.0
+			var u := 1.0 - clampf(float(p["t"]) / float(p.get("t0", 1.0)), 0.0, 1.0)
+			var sc := lerpf(BOMB_HAND_SCALE, BOMB_FLY_SCALE, minf(u * 2.5, 1.0))
 			var rot := Basis(Vector3.RIGHT, float(p["spin"]))
-			var fuse: Vector3 = (p["pos"] as Vector3) + rot * Vector3(0, 0.5, 0)
-			burst(fuse, Color(1.0, 0.9 + randf() * 0.1, 0.5 + randf() * 0.4), 2, 2.4, 0.09, 0.22, 1.0, 6.0)
-			if randf() < 0.5:
-				burst(fuse, Color(0.7, 0.7, 0.72), 1, 0.3, 0.2, 0.4, 0.5, -1.0)
+			_bomb_fuse(p["pos"], rot, sc, true)
 			if mn < MAX_BOMBS:
-				_bomb_mm.set_instance_transform(mn, Transform3D(rot, p["pos"]))
+				_bomb_mm.set_instance_transform(mn, Transform3D(rot.scaled(Vector3.ONE * sc), p["pos"]))
 				mn += 1
 		elif kind == "knife":
 			p["spin"] = float(p["spin"]) + delta * 28.0
@@ -258,10 +304,24 @@ func _tick_proj(delta: float) -> void:
 			_bullet_mm.set_instance_transform(bn, Transform3D(basis.scaled_local(sc), p["pos"]))
 			bn += 1
 		i += 1
+	if held_bomb_on and mn < MAX_BOMBS:
+		_bomb_fuse(held_bomb, Basis(), BOMB_HAND_SCALE, false)
+		_bomb_mm.set_instance_transform(mn, Transform3D(Basis().scaled(Vector3.ONE * BOMB_HAND_SCALE), held_bomb))
+		mn += 1
 	_knife_mm.visible_instance_count = kn
 	_bullet_mm.visible_instance_count = bn
 	_lob_mm.visible_instance_count = ln
 	_bomb_mm.visible_instance_count = mn
+
+
+## The lit fuse: orange-yellow sparks from its tip (and a thin smoke trail in flight).
+func _bomb_fuse(pos: Vector3, rot: Basis, sc: float, flying: bool) -> void:
+	var tip := pos + rot * Vector3(0, 0.6 * sc, 0)
+	burst(tip, Color(1.0, 0.3 + randf() * 0.35, 0.0), 2, 2.6, 0.12 * sc, 0.2, 1.0, 5.0)
+	if randf() < 0.6:
+		burst(tip, Color(1.0, 0.7, 0.15), 1, 0.4, 0.18 * sc, 0.08, 0.0, 0.0)
+	if flying and randf() < 0.45:
+		burst(pos, Color(0.3, 0.3, 0.32), 1, 0.2, 0.14 * sc, 0.45, 0.3, -0.5)
 
 
 func _tick_fires(delta: float) -> void:
@@ -374,29 +434,38 @@ func _bottle_mesh() -> Mesh:
 	return st.commit()
 
 
-## The hero's bomb: a round black body with a shine band, a steel cap and a short fuse
-## (sparks come from _tick_proj).
+## The hero's bomb, like the HUD's bomb icon: a round near-black body with a small shine, a
+## steel cap and a fuse, inside a pale inside-out shell that draws as a rim around it
+## (unshaded, so it reads as a black bomb on any street). Sparks come from _bomb_fuse.
 func _bomb_mesh() -> Mesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var r := 0.36
-	var rings := 7
-	var segs := 10
-	for j in rings:
-		var a0 := PI * j / rings
-		var a1 := PI * (j + 1) / rings
-		for k in segs:
-			var b0 := TAU * k / segs
-			var b1 := TAU * (k + 1) / segs
-			var col := Color(0.13, 0.13, 0.16) if j != 2 else Color(0.32, 0.33, 0.4)
-			var q := [_sph(r, a0, b0), _sph(r, a0, b1), _sph(r, a1, b1), _sph(r, a1, b0)]
-			for tri in [[0, 2, 1], [0, 3, 2]]:  # clockwise from outside, like _cube
-				for n in tri:
-					st.set_color(col)
-					st.add_vertex(q[n])
-	_cube(st, Vector3(0, r + 0.05, 0), Vector3(0.18, 0.12, 0.18), Color(0.55, 0.57, 0.62))
-	_cube(st, Vector3(0, r + 0.19, 0), Vector3(0.05, 0.2, 0.05), Color(0.62, 0.45, 0.25))
-	st.generate_normals()
+	var rings := 8
+	var segs := 12
+	for shell in 2:
+		var rr := r if shell == 0 else r * 1.14
+		for j in rings:
+			var a0 := PI * j / rings
+			var a1 := PI * (j + 1) / rings
+			for k in segs:
+				var b0 := TAU * k / segs
+				var b1 := TAU * (k + 1) / segs
+				var col := Color(0.05, 0.05, 0.07)
+				if shell == 1:
+					col = Color(0.95, 0.9, 0.8)
+				elif j == 2 and k == 8:
+					col = Color(0.36, 0.38, 0.45)   # a small shine
+				var q := [_sph(rr, a0, b0), _sph(rr, a0, b1), _sph(rr, a1, b1), _sph(rr, a1, b0)]
+				# Clockwise from outside (like _cube) for the body; the rim shell is wound the
+				# other way, so only its far side draws: a pale outline behind the bomb.
+				var tris := [[0, 2, 1], [0, 3, 2]] if shell == 0 else [[0, 1, 2], [0, 2, 3]]
+				for tri in tris:
+					for n in tri:
+						st.set_color(col)
+						st.add_vertex(q[n])
+	_cube(st, Vector3(0, r + 0.05, 0), Vector3(0.2, 0.14, 0.2), Color(0.3, 0.31, 0.35))
+	_cube(st, Vector3(0, r + 0.22, 0), Vector3(0.07, 0.24, 0.07), Color(0.5, 0.33, 0.15))
 	return st.commit()
 
 

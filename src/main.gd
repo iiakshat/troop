@@ -387,7 +387,7 @@ func _start_level(n: int, boosters: Dictionary = {}) -> void:
 	view.finished.connect(_on_finished)
 	if view.has_signal("rank_joined"):
 		view.connect("rank_joined", _on_rank_joined)
-	hud.power_pressed.connect(func(id): view.use_power(id))
+	hud.power_pressed.connect(func(id): view.use_power(id, hud.power_rect(id)))
 	hud.pause_pressed.connect(_toggle_pause)
 	_charges = view.sim.charges.duplicate()
 	hud.set_charges(view.sim.charges)

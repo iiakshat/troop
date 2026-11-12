@@ -58,13 +58,65 @@ func test_bomb_is_thrown_with_the_throw_clip_and_a_visible_arc() -> void:
 	var view: LevelView = parts[0]
 	var fx: Fx = parts[2]
 	_frames(view, 3)
+	fx._proj.clear()   # the level-load prewarm's bomb
 	check(view.use_power("bomb"), "the bomb button works with nothing in reach")
 	check(view._bomb_throw_t >= 0.0, "the hero starts his throw clip")
+	_frames(view, 2)
+	check(fx.held_bomb_on, "the bomb is in his hand during the wind-up")
+	check(not _proj_kinds(fx).has("bomb"), "not thrown yet")
+	var hand0 := fx.held_bomb
+	var windup := float(Game.units["powers"]["bomb"]["windup"])
+	_frames(view, int(windup * 60.0) - 6)
+	check(fx.held_bomb.y > hand0.y + 0.4, "cocked up behind his head (%.2f -> %.2f)" % [hand0.y, fx.held_bomb.y])
+	_frames(view, 8)
+	check(not fx.held_bomb_on, "let go at the release")
 	check(_proj_kinds(fx).has("bomb"), "a bomb flies (with its fuse)")
-	_frames(view, 70)
-	check(not _proj_kinds(fx).has("bomb"), "it landed")
+	# Pause: the bomb waits in the air with the sim.
+	view.paused = true
+	var at: Vector3 = fx._proj.filter(func(p): return p["kind"] == "bomb")[0]["pos"]
+	view._process(1.0 / 60.0)
+	fx._process(1.0 / 60.0)
+	eq(fx._proj.filter(func(p): return p["kind"] == "bomb")[0]["pos"], at, "frozen while paused")
+	check(not view.use_power("bomb"), "no power while paused")
+	view.paused = false
+	var landed := -1
+	for i in 120:
+		_frames(view, 1)
+		if not _proj_kinds(fx).has("bomb"):
+			landed = i
+			break
+	check(landed >= 0, "it landed")
+	check(view.sim.bombs.is_empty(), "together with the sim's blast")
+	_frames(view, 30)
 	check(view._bomb_throw_t < 0.0, "the throw clip ended")
 	eq(int(view.sim.charges["bomb"]), 0, "spent")
+	_drop(parts)
+
+
+func test_powers_wait_for_a_lesson_hold_and_steering_resets_after_a_revive() -> void:
+	var parts := _view({"id": 3, "district": 1, "charges": {"bomb": 1}, "events": [{"at": 300, "type": "finish"}]})
+	var view: LevelView = parts[0]
+	_frames(view, 3)
+	view.hold = true
+	_frames(view, 1)
+	check(not view.use_power("bomb"), "no bomb while a first-run lesson holds the street")
+	eq(int(view.sim.charges["bomb"]), 1, "nothing spent")
+	view.hold = false
+	_frames(view, 1)
+	view._steer_id = 0
+	view._touching = true
+	var up := InputEventScreenTouch.new()
+	up.index = 0
+	up.pressed = false
+	view._state = "done"
+	view.input_enabled = true
+	view._unhandled_input(up)
+	check(view._steer_id < 0 and not view._touching, "a finger lifted while the squad was down lets go")
+	view._steer_id = 0
+	view._touching = true
+	view._on_revive({})
+	check(view._steer_id < 0 and not view._touching, "a revive starts with no stale steering")
+	view.input_enabled = false
 	_drop(parts)
 
 

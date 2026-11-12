@@ -22,7 +22,7 @@
     {"at": 185, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "inspector", "n": 2}, {"lane": 2, "op": "weapon", "id": "pistol"}]},
     {"at": 185, "type": "obstacle", "kind": "car", "lane": 1, "hp": 150, "dmg_pct": 20},
     {"at": 211, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 14}, {"lane": 1, "op": "pct", "v": -50, "inc": 10, "step": 20.1, "max": 20}, {"lane": 2, "op": "recruit", "unit": "inspector", "n": 3}]},
-    {"at": 237, "type": "hint", "id": "molotov", "icon": "molotov"},
+    {"at": 237, "type": "hint", "id": "molotov", "icon": "molotov", "enemy": "molotov"},
     {"at": 245, "type": "wave", "groups": [{"enemy": "thug", "n": 24}, {"enemy": "molotov", "n": 38, "gap": 10}]},
     {"at": 270, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 105, "block_reach": 12, "dmg_pct": 15},
     {"at": 278, "type": "gates", "gates": [{"lane": 0, "op": "pct", "v": -40, "inc": 10, "step": 28.5, "max": 30}, {"lane": 1, "op": "recruit", "unit": "inspector", "n": 5}, {"lane": 2, "op": "mul", "k": 2}]},

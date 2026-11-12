@@ -94,6 +94,12 @@ var finale: BottleShot = null
 var item_card: NewItemCard = null   # v2 §11: the "this is new" card + gold outline (new_item_card())
 var _hero_throw_t := -1.0
 var _bomb_throw_t := -1.0          # seconds into the hero's bomb throw (-1: none; spec v2 §12.5)
+var _bomb_launch: Dictionary = {}  # the bomb in his hand until the release: {id, to, t, windup, arc}
+var _bomb_speed := 1.0             # the throw clip's speed for the bomb (bomb_clip_speed)
+var _bomb_mark: MeshInstance3D     # the ring on the road where the bomb will land (blast radius)
+var _bomb_mark_mat: StandardMaterial3D
+var _last_tap_s := -100.0          # when the last fire tap landed (the power buttons' guard)
+var _last_tap_pos := Vector2(-1e9, -1e9)   # and where (screen px; touch taps only)
 var _rf_sfx_t := 0.0               # return fire plays its shot sound at most this often
 var _hero_knife_t := 9.0         # seconds since the hero's last in-level knife throw
 var _spotlight := 0.0            # seconds of new-rank spotlight left (real time)
@@ -215,6 +221,10 @@ func _ready() -> void:
 # ---------------------------------------------------------------- input
 
 func _unhandled_input(event: InputEvent) -> void:
+	# The steering finger can lift while the game is paused or the squad is down: let go of it
+	# anyway, or a revive starts with the squad parked between lanes on a stale anchor.
+	if event is InputEventScreenTouch and (event as InputEventScreenTouch).index == _steer_id:
+		_reset_steer()
 	if demo or paused or _state != "play" or not input_enabled:
 		return
 	# Spec v2 §2: a short still touch in the lower half is a tap (powers the hero, never
@@ -231,6 +241,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		var r := _touch.release(t.index, t.position, now)
 		if r == "tap" and from != null and _touch.in_zone(from, get_viewport().get_visible_rect().size):
 			tap()
+			_last_tap_pos = from
 		if t.index == _steer_id:
 			_steer_id = -1
 			_touching = false
@@ -279,11 +290,18 @@ static func touch_density() -> float:
 	return maxf(DisplayServer.screen_get_scale(), DisplayServer.screen_get_dpi() / 160.0)
 
 
+func _reset_steer() -> void:
+	_steer_id = -1
+	_touching = false
+
+
 ## One tap: the hero's heat rises (LevelSim.tap, spec v2 §2) and his hand flicks.
 func tap() -> void:
 	if paused or _state != "play":
 		return
 	taps += 1
+	_last_tap_s = Time.get_ticks_msec() / 1000.0
+	_last_tap_pos = Vector2(-1e9, -1e9)
 	Analytics.note_tap(level_id, sim.time)  # spec v2 §2: taps per 10 s of each level (tap fatigue)
 	if sim.has_method("tap"):
 		sim.call("tap")
@@ -367,8 +385,15 @@ func revive(troops: int) -> bool:
 	return true
 
 
-func use_power(id: String) -> bool:
-	if paused or _state != "play":
+## A power button press. Ignored (nothing spent) while the street is frozen (pause, a first-run
+## lesson's hold), and when it comes within input.power_guard_s of a fire tap that landed right
+## next to `button` (screen rect): a thumb tapping fast that slid onto the button. A press with
+## the other thumb while tapping still works. The sim also takes one bomb at a time.
+func use_power(id: String, button := Rect2()) -> bool:
+	if paused or _state != "play" or hold or _time_scale <= 0.0:
+		return false
+	var guard := float(Game.units.get("input", {}).get("power_guard_s", 0.0))
+	if guard > 0.0 and button.has_area() and Time.get_ticks_msec() / 1000.0 - _last_tap_s < guard 			and button.grow(button.size.x * 0.5).has_point(_last_tap_pos):
 		return false
 	var ok := sim.use_power(id)
 	if ok:
@@ -377,9 +402,19 @@ func use_power(id: String) -> bool:
 	return ok
 
 
+## A first-run lesson's charge comes back (Tutorial): the lesson used it, so the player still
+## has the power for this level and no recharge starts for it.
+func refund_power(id: String) -> void:
+	sim.charges[id] = int(sim.charges.get(id, 0)) + 1
+	charges_changed.emit(sim.charges)
+
+
 # ---------------------------------------------------------------- frame
 
 func _process(delta: float) -> void:
+	if not demo:
+		# Effects run on the street's clock: a bomb in the air waits for a pause or a lesson.
+		fx.time_scale = 0.0 if paused else (_time_scale if _state == "play" else 1.0)
 	if paused:
 		return
 	if demo:
@@ -767,30 +802,103 @@ func _gun_tracers(horde_id: int, blocked: bool) -> void:
 		world.shake(0.5)
 
 
-## Spec v2 §12.5, the throw: the hero plays the overhand `throw` clip and a bomb with a
-## sparking fuse arcs from his hand down the lane to where its target will be at landing.
+## Spec v2 §12.5, the throw: the hero winds up with the bomb in his right hand (the overhand
+## `throw` clip, slowed so the hand comes forward at units powers.bomb.windup), lets go at the
+## clip's release and it arcs, fuse sparking, to where its target will be when the sim sets it
+## off (the bomb_throw event's z, `t` s after the tap). A ring on the road marks that spot.
 func _on_bomb_throw(e: Dictionary) -> void:
 	_bomb_throw_t = 0.0
-	var from := Vector3(_squad_x + 0.35, 1.7, -0.9)
-	if not _allies.is_empty() and _allies[0]["kind"] == "hero":
-		from = (_allies[0]["pos"] as Vector3) + Vector3(0.35, 1.7, -0.3)
-	var to := Vector3(float(e.get("x", _squad_x)), 0.35, float(e["z"]))
-	fx.bomb(from, to, float(e["t"]), clampf(-float(e["z"]) * 0.12, 1.5, 6.0))
+	var to := Vector3(float(e.get("x", _squad_x)), 0.4, float(e["z"]))
+	_bomb_launch = {"id": int(e.get("id", 0)), "to": to, "t": float(e["t"]),
+		"windup": float(e.get("windup", 0.0)), "arc": clampf(-float(e["z"]) * 0.18, 2.5, 9.0)}
+	_bomb_speed = bomb_clip_speed(float(e.get("windup", 0.0)), _throw_clip())
+	_show_bomb_mark(to, float(e.get("radius", 4.0)))
+	Sfx.play("swoosh", -6.0, 0.6)
+
+
+## The clip runs at release / windup speed so the hand comes forward exactly at the windup.
+static func bomb_clip_speed(windup: float, clip: String) -> float:
+	var release := float(Crowd.clips.get(clip, {}).get("release", 0.54 * Crowd.clip_length(clip)))
+	return release / windup if windup > 0.0 and release > 0.0 else 1.0
+
+
+## Where the hero's right hand is at `u` (0..1) of the throw clip, in his own frame (forward
+## = -z): a rough match of tools/bake_vat.gd THROW_KEYS (cocked behind the head, then over
+## the top to the release in front).
+const HAND_KEYS := [[0.0, Vector3(0.32, 0.95, 0.05)], [0.3, Vector3(0.34, 1.75, 0.35)],
+	[0.38, Vector3(0.34, 1.8, 0.4)], [0.46, Vector3(0.3, 1.98, -0.1)], [0.54, Vector3(0.25, 1.72, -0.55)],
+	[0.72, Vector3(-0.15, 1.2, -0.5)], [1.0, Vector3(0.32, 0.95, 0.05)]]
+
+
+static func hand_offset(u: float) -> Vector3:
+	for i in range(1, HAND_KEYS.size()):
+		var k1: Array = HAND_KEYS[i]
+		if u <= float(k1[0]):
+			var k0: Array = HAND_KEYS[i - 1]
+			var f := (u - float(k0[0])) / maxf(float(k1[0]) - float(k0[0]), 0.001)
+			return (k0[1] as Vector3).lerp(k1[1], clampf(f, 0.0, 1.0))
+	return HAND_KEYS[-1][1]
+
+
+## The release: the bomb leaves his hand and flies the rest of the sim's time.
+func _launch_bomb(hand: Vector3) -> void:
+	var b := _bomb_launch
+	_bomb_launch = {}
+	fx.held_bomb_on = false
+	fx.bomb(hand, b["to"], maxf(float(b["t"]) - float(b["windup"]), 0.2), float(b["arc"]), int(b["id"]))
 	Sfx.play("swoosh", -3.0, 0.8)
 
 
-## The landing: the blast where the sim set it off (a gang's front, a wreck, the road),
-## a shock ring and the exact number it killed.
+func _show_bomb_mark(at: Vector3, radius: float) -> void:
+	if _bomb_mark == null:
+		var ring := TorusMesh.new()
+		ring.inner_radius = 0.9
+		ring.outer_radius = 1.0
+		ring.rings = 32
+		ring.ring_segments = 6
+		_bomb_mark = MeshInstance3D.new()
+		_bomb_mark.mesh = ring
+		_bomb_mark_mat = StandardMaterial3D.new()
+		_bomb_mark_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_bomb_mark_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_bomb_mark_mat.albedo_color = Color(1.0, 0.3, 0.15, 0.0)
+		_bomb_mark.material_override = _bomb_mark_mat
+		_bomb_mark.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(_bomb_mark)
+	_bomb_mark.position = Vector3(at.x, 0.07, at.z)
+	_bomb_mark.scale = Vector3(radius, 0.1, radius)
+	_bomb_mark.set_meta("t", 0.0)
+	_bomb_mark.visible = true
+
+
+func _tick_bomb_mark(d: float) -> void:
+	if _bomb_mark == null or not _bomb_mark.visible:
+		return
+	var t := float(_bomb_mark.get_meta("t", 0.0)) + d
+	_bomb_mark.set_meta("t", t)
+	_bomb_mark_mat.albedo_color = Color(1.0, 0.3, 0.15, minf(t * 3.0, 1.0) * (0.55 + 0.35 * absf(sin(t * 12.0))))
+
+
+## The landing: the blast where the sim set it off (a gang's front, a wreck, the road), as big
+## as the blast radius really is, the exact number it killed and the boss's health it took.
 func _on_bomb(e: Dictionary) -> void:
+	if not _bomb_launch.is_empty() and int(_bomb_launch["id"]) == int(e.get("id", -1)):
+		_bomb_launch = {}   # set off before it left his hand (the stash's safety net)
+		fx.held_bomb_on = false
+	fx.land_bomb(int(e.get("id", 0)))
+	if _bomb_mark != null:
+		_bomb_mark.visible = false
 	var hv: Dictionary = _hordes.get(e.get("horde", -1), {})
 	var p := Vector3(float(e.get("x", _squad_x)), 0.5, float(e["z"]))
 	if not hv.is_empty() and String(e.get("target", "horde")) == "horde":
 		p.z = _horde_front(hv).z
-	fx.explosion(p, 1.8)
-	fx.ring(p + Vector3(0, 0.2, 0), Color("ffb347"), 40, 11.0, 0.28)
+	fx.blast(p, float(e.get("radius", 4.0)), clampf(-p.z / 50.0, 0.0, 1.0))
 	var killed := int(e.get("killed", 0))
 	if killed > 0:
 		fx.float_text("-" + NumFormat.fmt(killed), p + Vector3(0, 3.0, 0), Color("ffd23f"), 2.0, 3.0, 1.3)
+	var boss_dmg := int(e.get("boss_dmg", 0))
+	if boss_dmg > 0:
+		fx.float_text("-" + NumFormat.fmt(boss_dmg), p + Vector3(0, 6.0, 0), Color("ff5050"), 2.0, 2.5, 1.3)
 	world.shake(1.0)
 	Sfx.play("boom")
 	Game.vibrate(150)
@@ -1003,6 +1111,9 @@ func _throw_clip() -> String:
 
 func _on_revive(_e: Dictionary) -> void:
 	_state = "play"
+	_reset_steer()
+	if _touch != null:
+		_touch.clear()
 	_end_t = 0.0
 	_acc = 0.0
 	_charging.clear()
@@ -1419,8 +1530,13 @@ func _update_visuals(d: float) -> void:
 	_rf_sfx_t = maxf(_rf_sfx_t - d, 0.0)
 	if _bomb_throw_t >= 0.0:
 		_bomb_throw_t += d
-		if _bomb_throw_t > Crowd.clip_length(_throw_clip()) or _state != "play":
+		if _state != "play":
 			_bomb_throw_t = -1.0
+			_bomb_launch = {}
+			fx.held_bomb_on = false
+		elif _bomb_throw_t > Crowd.clip_length(_throw_clip()) / _bomb_speed and _bomb_launch.is_empty():
+			_bomb_throw_t = -1.0
+	_tick_bomb_mark(d)
 	var moving := demo or _state == "play" or _state == "done"
 
 	for k in _crowds:
@@ -1446,7 +1562,8 @@ func _update_visuals(d: float) -> void:
 		if not demo and _state == "play":
 			aim = 1.0
 			a["fire_t"] = float(a["fire_t"]) - d
-			if float(a["fire_t"]) <= 0.0:
+			# The hero's hands are busy with the bomb: no knife throws drawn until it is gone.
+			if float(a["fire_t"]) <= 0.0 and not (a["kind"] == "hero" and _bomb_throw_t >= 0.0):
 				var aim_at: Vector3 = target_pos if target_pos != null else Vector3(pos.x, 1.1, pos.z - sim.fire_range)
 				_fire(a, aim_at)
 		var basis := Basis()
@@ -1472,9 +1589,19 @@ func _update_visuals(d: float) -> void:
 			var clip := throw if _hero_throw_t >= 0.0 else "idle"
 			(_crowds["hero"] as Crowd).push(Transform3D(basis, pos), clip, maxf(_hero_throw_t, 0.0) if clip == throw else _anim_t)
 		elif a["kind"] == "hero" and _bomb_throw_t >= 0.0:
-			# Spec v2 §12.5: one full overhand throw for the bomb (any weapon he holds).
+			# Spec v2 §12.5: one slow, full overhand throw for the bomb (any weapon he holds),
+			# the bomb in his hand until the release.
 			var throw := _throw_clip()
-			(_crowds["hero"] as Crowd).push(Transform3D(basis, pos), throw, minf(_bomb_throw_t, Crowd.clip_length(throw)), float(a["flash"]))
+			var clen := Crowd.clip_length(throw)
+			var ct := minf(_bomb_throw_t * _bomb_speed, clen)
+			(_crowds["hero"] as Crowd).push(Transform3D(basis, pos), throw, ct, float(a["flash"]))
+			if not _bomb_launch.is_empty():
+				var hand := pos + basis * hand_offset(ct / clen)
+				if _bomb_throw_t < float(_bomb_launch["windup"]):
+					fx.held_bomb = hand
+					fx.held_bomb_on = true
+				else:
+					_launch_bomb(hand)
 		elif aim > 0.0 and a["kind"] == "hero" and sim.squad.hero_weapon == "":
 			# Knives: a real overhand throw per knife, the clip sped up to fit the throw rate.
 			var throw := _throw_clip()
@@ -2180,12 +2307,19 @@ func _begin_strike() -> void:
 	_state = "finale"
 	_time_scale = 1.0
 	fx.scroll_speed = 0.0
+	fx.land_bomb()          # spec v2 §12.5: no bomb ever flies over Bottle Shot
+	fx.held_bomb_on = false
+	_bomb_launch = {}
+	if _bomb_mark != null:
+		_bomb_mark.visible = false
 	strike_ready.emit()
 	var hero := _slot_pos(0, _allies.size())
 	_hq.visible = false   # the squad bursts in: the finale is played inside the stash
 	# Coins count the squad as district-1 troops (LevelSim.coin_troops), so a 100K squad in
 	# district 5 pays like a full squad in district 1 and the economy's curve holds.
-	finale = BottleShot.new().setup(world, fx, font, level_id, sim.coin_troops(), hero, Game.coin_bonus())
+	# Spec v2 §2: tapping adds finale coins (LevelSim.tap_coin_bonus_pct, the level's mean heat).
+	var bonus := Game.coin_bonus() + sim.tap_coin_bonus_pct() / 100.0
+	finale = BottleShot.new().setup(world, fx, font, level_id, sim.coin_troops(), hero, bonus)
 	finale.on_throw = func(): _hero_throw_t = 0.0
 	finale.done.connect(_on_finale_done)
 	add_child(finale)
@@ -2198,5 +2332,6 @@ func _on_finale_done(r: Dictionary) -> void:
 	_hq.visible = false
 	world.shake(1.0)
 	Sfx.play("boom")
-	r.merge({"won": true, "troops": sim.squad.total(), "kills": sim.kills, "level": level_id})
+	r.merge({"won": true, "troops": sim.squad.total(), "kills": sim.kills, "level": level_id,
+		"tap_pct": sim.tap_coin_bonus_pct()})
 	finished.emit(r)

@@ -418,7 +418,12 @@ func _run_step(delta: float) -> void:
 		"shield", "bomb":
 			if acting:
 				view.use_power(_power)
-			if int(sim.charges.get(_power, 0)) < _charges_at or _t > POWER_S:
+			if int(sim.charges.get(_power, 0)) < _charges_at:
+				# The lesson's charge comes back: no 5 h recharge starts on the first level, and
+				# the player can still throw the bomb (or raise the shield) any time after.
+				view.refund_power(_power)
+				_end()
+			elif _t > POWER_S:
 				_end()
 		_:
 			_run_bottle()

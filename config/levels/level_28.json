@@ -17,7 +17,7 @@
     {"at": 103, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 24}]},
     {"at": 103, "type": "obstacle", "kind": "car", "lane": 2, "hp": 135, "dmg": 4},
     {"at": 103, "type": "obstacle", "kind": "pothole", "lane": 0, "fall": 2},
-    {"at": 129, "type": "hint", "id": "grenadier", "icon": "grenadier"},
+    {"at": 129, "type": "hint", "id": "grenadier", "icon": "grenadier", "enemy": "grenadier"},
     {"at": 137, "type": "wave", "groups": [{"enemy": "thug", "n": 47}, {"enemy": "grenadier", "n": 31, "gap": 10}]},
     {"at": 157, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 105, "block_reach": 12, "dmg_pct": 10},
     {"at": 165, "type": "gates", "gates": [{"lane": 2, "op": "recruit", "unit": "sniper", "n": 4}]},

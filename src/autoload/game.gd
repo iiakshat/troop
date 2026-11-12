@@ -88,6 +88,7 @@ var date_override := ""               # tests: fixed date
 var _attempt := 0                     # level attempts this session
 var _booster_ads := {}                # booster id -> [attempt, count]
 var _powers_brought := {}             # shield / bomb charges the player took into this level
+var _powers_t := 0                    # the clock when they were taken (settle never uses an earlier one)
 var _tick := 0.0
 var _last_tick := 0
 
@@ -574,8 +575,9 @@ func level_upgrades(chosen: Dictionary = {}) -> Dictionary:
 	var up := upgrades()
 	var b: Dictionary = economy.get("boosters", {})
 	_powers_brought = {}
+	_powers_t = now()
 	for id in SaveData.POWERS:
-		_powers_brought[id] = power_available(id)
+		_powers_brought[id] = power_available(id, _powers_t)
 		up[id] = int(_powers_brought[id]) + int(chosen.get(id, 0)) * int(b.get(id, {}).get("charges", 1))
 	up["headstart"] = int(chosen.get("headstart", 0))
 	up["headstart_troops"] = int(up["headstart"]) * int(b.get("headstart", {}).get("troops", 5))
@@ -626,12 +628,15 @@ func refill_power(id: String, t := -1) -> bool:
 
 ## Level end: `remaining` = the sim's charges left. Spends the owned charges that were used
 ## (the level's own and power-gate charges count as used first). Returns {id: spent}.
+## The clock is never earlier than the level start: a charge that was ready when the level
+## began is always paid for, even if the device clock was moved back during the level.
 func settle_powers(remaining: Dictionary, t := -1) -> Dictionary:
 	var out := {}
+	var tt := maxi(_t(t), _powers_t)
 	for id in SaveData.POWERS:
 		if not _powers_brought.has(id):
 			continue
-		out[id] = PowersTimer.settle(save, id, int(_powers_brought[id]), int(remaining.get(id, 0)), _t(t), economy)
+		out[id] = PowersTimer.settle(save, id, int(_powers_brought[id]), int(remaining.get(id, 0)), tt, economy)
 	_powers_brought = {}
 	if not out.is_empty():
 		write_save()
