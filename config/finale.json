@@ -8,6 +8,15 @@
   "combo_max": 3.0,
   "district_weapon": { "1": "knife", "2": "pistol", "3": "bow", "4": "stars", "5": "sniper" },
   "district_stash": { "1": "bar", "2": "carnival", "3": "docks", "4": "factory", "5": "rooftop" },
+  "_level_weapon_note": "Spec v2.1 §4.3: guest weapons, given as a gift for that level. level_weapon maps a level to a later district's Bottle Shot weapon (never a district's first level or its boss); every other level uses its district's weapon. A guest is played in its own stash set (the stash of the district whose weapon it is: the sniper needs its rooftop, the pistol its shooting gallery) with the level's difficulty row, uses the player's Armory tier for it (base tier if none), and gets gift.spare extra shots. Its first use plays that weapon's ghost-hand lesson as usual.",
+  "level_weapon": { "4": "pistol", "7": "bow", "13": "bow", "16": "stars", "19": "sniper", "23": "stars", "26": "sniper", "29": "pistol", "33": "sniper", "36": "bow", "39": "pistol", "43": "stars", "46": "bow", "49": "pistol" },
+  "gift": {
+    "_note": "The gift reveal (src/finale/gift_reveal.gd) at the burst into the stash, before aiming, on every attempt; a tap skips it. Phases in real seconds: the box drops in (drop_s), wiggles (wiggle_s), bursts open in sparkles (open_s), the weapon spins up out of it (spin_s, `turns` full turns, slowing to face the player) and flies into the hand (fly_s). The sum is squeezed into max_s (at most 1.5). box / weapon = sizes as a share of the screen width; dim = backdrop darkness; sparks = burst particles. A locked Armory track shows a lock and its unlock level under the weapon.",
+    "max_s": 1.5,
+    "drop_s": 0.26, "wiggle_s": 0.3, "open_s": 0.1, "spin_s": 0.44, "fly_s": 0.3,
+    "turns": 1.5, "box": 0.36, "weapon": 0.58, "dim": 0.55, "sparks": 30,
+    "spare": 1
+  },
   "difficulty": {
     "_note": "One entry per level inside a district. count = normal bottles (one gold bottle is added), decoys = clay jugs that reset the combo, spare = shots beyond one per target, size = bottle and hit-zone scale, dist = x the weapon's distance, amp/speed = motion (metres, rad/s), wind = metres/s^2 of sideways push at most (bow only).",
     "count":  [3, 3, 4, 4, 5, 5, 6, 6, 7, 6],

@@ -93,7 +93,9 @@ var _aim_fov := AIM_FOV
 var _aim_focus := 6.0
 var _focus := 6.0
 var _blur := 0.1
-var _state := "intro"         # intro | aim | flying | impact | tally | finished
+var _state := "intro"         # intro | gift | aim | flying | impact | tally | finished
+var _gift: GiftReveal = null  # v2.1 §4.3: a guest weapon is handed over as a gift (state "gift")
+var _gift_cfg: Dictionary = {}
 var _wait := 0.0
 var _intro_t := 0.0
 var _intro_from := Transform3D()
@@ -124,7 +126,9 @@ func setup(w: World, f: Fx, fnt: Font, level_id: int, troop_count: int, hero: Ve
 	# v2 Armory: the Bottle Shot weapon's handling steps (magazine, kick, draw, sway...).
 	var cfg: Dictionary = Armory.apply_finale(Config.load_json("res://config/finale.json"), Game.save)
 	logic = BottleLogic.new(cfg, level_id)
-	theme = String((cfg.get("district_stash", {}) as Dictionary).get(str(logic.district), FinaleStash.theme_of(logic.district)))
+	# The district's stash, or a guest weapon's own set (v2.1 §4.3; BottleLogic.stash).
+	theme = logic.stash if logic.stash != "" else FinaleStash.theme_of(logic.district)
+	_gift_cfg = cfg.get("gift", {})
 	_floor_y = float(logic.wcfg.get("elevation", 0.0))
 	_bscale = BOTTLE_SCALE * logic.size
 	# Bottles stand on the plane z = hero - distance; the back wall is 0.25 m behind them.
@@ -142,6 +146,8 @@ func _ready() -> void:
 		if gun != null:
 			gun.position = Vector3(hero_pos.x, 1.5, _wall_z + 2.0)
 			add_child(gun)
+		if logic.guest:
+			GiftReveal.warm(logic.weapon, Game.save)   # the gift's pictures load now, not at the burst
 		return
 	var ks: Dictionary = Game.knife_skin()
 	_blade_color = Color(String(ks.get("blade", "e6eaf0")))
@@ -161,6 +167,15 @@ func _ready() -> void:
 	if _mode:
 		_mode.setup(self)
 		add_child(_mode)
+	if logic.guest and not _gift_cfg.is_empty():
+		# v2.1 §4.3: the guest weapon is a gift: it comes out of a box into the hand before aiming,
+		# at the player's Armory tier for it; the real weapon shows once it is in the hand.
+		var gi := GiftReveal.info(Game.save, logic.weapon)
+		_gift = GiftReveal.new().setup(_gift_cfg, logic.weapon, int(gi["tier"]), int(gi["lock"]))
+		_gift.handed.connect(_on_gift_handed)
+		add_child(_gift)
+		if _mode:
+			_mode.visible = false
 	_aim_lens()
 	# Burst in: the squad kicks the door; the camera rushes from the street into the stash.
 	_intro_from = world.camera.transform
@@ -309,11 +324,23 @@ func _process(delta: float) -> void:
 			_cam = _intro_from.interpolate_with(_rest_view(), k)
 			_fov = lerpf(_intro_fov, _rest_fov(), k)
 			if _intro_t >= INTRO:
-				_state = "aim"
-				_cam_mode = "aim"
-				_focus = _aim_focus
-				if _mode:
-					_mode.begin()
+				if _gift != null and not _gift.done:
+					_state = "gift"
+					_gift.hand = _hand_screen()
+					_gift.play()
+				else:
+					_begin_aim()
+		"gift":
+			# The camera rests where aiming starts while the gift is handed over; a tap skips it.
+			if _mode:
+				_mode.tick(delta, d)
+			else:
+				_cam = _rest_view()
+				_fov = _rest_fov()
+			_gift.hand = _hand_screen()
+			if _gift.done:
+				_on_gift_handed()
+				_begin_aim()
 		"aim", "flying", "impact":
 			if _mode:
 				_mode.tick(delta, d)
@@ -377,6 +404,36 @@ func shot_over() -> void:
 		_cam_mode = "aim"
 		_wait = 1.0
 		Sfx.play("win")
+
+
+func _begin_aim() -> void:
+	_state = "aim"
+	_cam_mode = "aim"
+	_focus = _aim_focus
+	if _mode:
+		_mode.begin()
+
+
+## The gift reached the hand: the real weapon shows (a tap that skipped the gift lands here too).
+func _on_gift_handed() -> void:
+	if _mode and not _mode.visible:
+		_mode.visible = true
+
+
+## Screen point of the weapon in the hero's hand (the gift flies into it): the view model of the
+## pistol, bow or rifle, else the hero's throwing hand.
+func _hand_screen() -> Vector2:
+	var cam := world.camera
+	var p := to_world(WeaponStars.HAND)
+	if _mode:
+		for key in ["_gun", "_bow", "_rifle"]:
+			var n: Variant = _mode.get(key)
+			if n is Node3D and is_instance_valid(n):
+				p = (n as Node3D).global_position
+				break
+	if cam == null or not cam.is_inside_tree() or cam.is_position_behind(p):
+		return Vector2(-1, -1)
+	return cam.unproject_position(p)
 
 
 ## Camera and lens the finale rests on between shots.

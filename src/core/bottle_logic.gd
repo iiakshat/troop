@@ -6,6 +6,8 @@ extends RefCounted
 ## a bottle's position is (x sideways, y height above the stand's floor).
 ## The district picks the weapon (knife, pistol, bow, stars, sniper); the level's place in its
 ## district picks the difficulty row (count, decoys, spare shots, size, distance, motion, wind).
+## A few levels get a later district's weapon as a guest (level_weapon, spec v2.1 §4.3): played
+## in that weapon's own stash set with this level's row, plus the gift's spare shots.
 ## Knives fly straight (`throw`); everything else is a ballistic shot (`fire`): constant speed
 ## along the range, gravity down, wind sideways, hitting what is under the crossing point when
 ## it arrives. A star that crosses a steel plate ricochets along its row and can break more.
@@ -16,6 +18,8 @@ var level := 1
 var district := 1
 var step := 0                  # 0..9: the level's place inside its district
 var weapon := "knife"
+var guest := false             # v2.1 §4.3: a later district's weapon, given as a gift for this level
+var stash := ""                # the stash set: the district's, or a guest's own ("" = by district)
 var wcfg: Dictionary           # this weapon's config
 var layout: Dictionary         # {motion, amp, speed, bottles: [{x, y, gold?, decoy?}], plates: [...]}
 var distance := 5.55           # metres from the hero to the bottle plane
@@ -40,9 +44,16 @@ func _init(finale_cfg: Dictionary, level_id: int) -> void:
 	level = maxi(level_id, 1)
 	district = clampi(int(ceil(level / 10.0)), 1, 5)
 	step = (level - 1) % 10
-	weapon = String((cfg.get("district_weapon", {}) as Dictionary).get(str(district), "knife"))
+	var own := String((cfg.get("district_weapon", {}) as Dictionary).get(str(district), "knife"))
 	var weapons: Dictionary = cfg.get("weapons", {})
+	weapon = own
+	# Spec v2.1 §4.3: a guest weapon for this level (level_weapon), given as a gift.
+	var gw := String((cfg.get("level_weapon", {}) as Dictionary).get(str(level), ""))
+	if gw != "" and gw != own and weapons.has(gw):
+		weapon = gw
+		guest = true
 	wcfg = weapons.get(weapon, weapons.get("knife", {}))
+	stash = home_stash(cfg, weapon) if guest else String((cfg.get("district_stash", {}) as Dictionary).get(str(district), ""))
 	var diff: Dictionary = cfg.get("difficulty", {})
 	size = _row(diff, "size", 1.0)
 	distance = float(wcfg.get("distance", 5.55)) * _row(diff, "dist", 1.0)
@@ -50,8 +61,19 @@ func _init(finale_cfg: Dictionary, level_id: int) -> void:
 	for b in layout["bottles"]:
 		broken.append(false)
 	shots_left = targets() + int(_row(diff, "spare", 0.0))
+	if guest:
+		shots_left += maxi(int((cfg.get("gift", {}) as Dictionary).get("spare", 0)), 0)
 	mag_size = int(wcfg.get("mag", 0))
 	mag_left = mini(mag_size, shots_left) if mag_size > 0 else 0
+
+
+## The stash set built for `w`: the one of the district whose own weapon it is ("" if none).
+static func home_stash(finale_cfg: Dictionary, w: String) -> String:
+	var dw: Dictionary = finale_cfg.get("district_weapon", {})
+	for d in dw:
+		if String(dw[d]) == w:
+			return String((finale_cfg.get("district_stash", {}) as Dictionary).get(String(d), ""))
+	return ""
 
 
 func _row(diff: Dictionary, key: String, fallback: Variant) -> Variant:

@@ -27,7 +27,7 @@ func test_weapon_per_district() -> void:
 
 func test_difficulty_grows_inside_a_district() -> void:
 	var first := BottleLogic.new(cfg, 11)
-	var late := BottleLogic.new(cfg, 19)
+	var late := BottleLogic.new(cfg, 18)   # L19 is a guest sniper (v2.1 §4.3)
 	check(late.count() > first.count(), "more bottles late in the district")
 	check(late.distance > first.distance, "farther away")
 	check(late.size < first.size, "smaller")
@@ -132,7 +132,7 @@ func test_wind_is_fixed_per_level() -> void:
 
 
 func test_pistol_magazine_and_reload() -> void:
-	var b := BottleLogic.new(cfg, 19)  # many bottles: more rounds than one magazine
+	var b := BottleLogic.new(cfg, 18)  # many bottles: more rounds than one magazine
 	var o := Vector3(0, 1.62, 0)
 	var size := b.mag_size
 	check(size > 0 and b.shots_left > size, "magazine smaller than the rounds")
@@ -279,8 +279,10 @@ func test_wind_zero_hides_indicator() -> void:
 ## every pistol and bow level, on a 9:16 and a 9:20 phone, aimed at the set and at each bottle.
 func test_finale_weapons_never_cover_bottles() -> void:
 	for vp in [Vector2(720, 1280), Vector2(720, 1600)]:
-		for lv in range(11, 31):
+		for lv in range(1, 51):
 			var b := BottleLogic.new(cfg, lv)
+			if b.weapon != "pistol" and b.weapon != "bow":
+				continue   # guests (v2.1 §4.3) count too: every pistol and bow level
 			var fov := float(b.wcfg.get("fov", 30.0))
 			var eye := FinaleWeapon.eye_point(b.wcfg)
 			var rest := FinaleWeapon.rest_aim(b)
@@ -325,8 +327,10 @@ func test_finale_weapons_never_cover_bottles() -> void:
 
 func test_bow_view_holds_still_with_bottles_in_frame() -> void:
 	for vp in [Vector2(720, 1280), Vector2(720, 1600)]:
-		for lv in range(21, 31):
+		for lv in range(1, 51):
 			var b := BottleLogic.new(cfg, lv)
+			if b.weapon != "bow":
+				continue   # every bow level, guests included
 			var rest := FinaleWeapon.rest_aim(b)
 			var a := WeaponBow.view_basis_for(rest, Vector2(rest.x + 0.1, rest.y - 0.05))
 			var c := WeaponBow.view_basis_for(rest, rest)
@@ -386,8 +390,10 @@ func test_every_weapon_shows_the_whole_set() -> void:
 ## The sniper's rifle (unscoped, at rest) never covers a bottle.
 func test_sniper_rifle_never_covers_the_set() -> void:
 	for vp in PHONES:
-		for lv in range(41, 51):
+		for lv in range(1, 51):
 			var b := BottleLogic.new(cfg, lv)
+			if b.weapon != "sniper":
+				continue   # every sniper level, guests included
 			var view: Array = BottleShot.aim_camera(b)
 			var rifle := WeaponModels.rifle()
 			var parts := WeaponModels.screen_rects(rifle, Transform3D(Basis(), WeaponSniper.RIFLE_AT), float(view[1]), vp)
@@ -450,3 +456,144 @@ func test_stash_never_hides_a_bottle() -> void:
 							bad = "level %d (%s) t=%.2f: a shelf box %s hides bottle %d at %s" % [lv, s.theme, t, m, i, q]
 		check(bad == "", bad if bad != "" else "ok")
 		s.free()
+
+
+# ---------------------------------------------------------------- spec v2.1 §4.3: guest weapons
+
+## The stash set of `weapon`: the one of the district whose own weapon it is.
+func _home_stash(weapon: String) -> String:
+	for d in cfg["district_weapon"]:
+		if String(cfg["district_weapon"][d]) == weapon:
+			return String(cfg["district_stash"][d])
+	return ""
+
+
+## finale.json level_weapon gives a level a guest weapon; every other level keeps its district's.
+## A guest brings its own stash set (the one built and checked for that weapon: the sniper needs
+## its rooftop, the pistol its shooting gallery), keeps its own handling, and gets the gift's
+## spare shot. Never on a district's first level (its own weapon's debut) or on its boss.
+func test_level_weapon_overrides_district() -> void:
+	var lw: Dictionary = cfg.get("level_weapon", {})
+	check(lw.size() >= 10, "finale.json level_weapon schedules the guests (%d)" % lw.size())
+	var spare := int((cfg.get("gift", {}) as Dictionary).get("spare", -1))
+	check(spare >= 0, "finale.json gift.spare is set")
+	var per_district := {}
+	for k in lw:
+		var lv := int(k)
+		var b := BottleLogic.new(cfg, lv)
+		eq(b.weapon, String(lw[k]), "level %d plays its guest weapon" % lv)
+		check(b.guest, "level %d: a guest weapon" % lv)
+		check(b.weapon != String(cfg["district_weapon"][str(b.district)]), "level %d: a guest is not the district's own weapon" % lv)
+		check(lv % 10 != 0 and lv % 10 != 1, "level %d: never a district's first level or its boss" % lv)
+		eq(b.stash, _home_stash(b.weapon), "level %d: the guest brings its own stash set" % lv)
+		eq(b.wcfg, cfg["weapons"][b.weapon], "level %d: the guest's own handling" % lv)
+		var row_spare := int(cfg["difficulty"]["spare"][b.step])
+		eq(b.shots_left, b.targets() + row_spare + spare, "level %d: the row's spare shots plus the gift's" % lv)
+		per_district[b.district] = int(per_district.get(b.district, 0)) + 1
+	for d in range(1, 6):
+		check(int(per_district.get(d, 0)) >= 2, "district %d has at least 2 guests" % d)
+	for lv in range(1, 51):
+		if lw.has(str(lv)):
+			continue
+		var b := BottleLogic.new(cfg, lv)
+		eq(b.weapon, String(cfg["district_weapon"][str(b.district)]), "level %d keeps the district weapon" % lv)
+		check(not b.guest, "level %d: no guest" % lv)
+		eq(b.stash, String(cfg["district_stash"][str(b.district)]), "level %d: the district's stash" % lv)
+	eq(BottleLogic.new(cfg, 4).weapon, "pistol", "L4: the first gift is the pistol")
+	eq(BottleLogic.new(cfg, 13).weapon, "bow", "L13: the bow")
+	eq(BottleLogic.new(cfg, 19).stash, "rooftop", "a guest sniper shoots from its roof")
+	check(BottleLogic.new(cfg, 19).wcfg.has("elevation"), "with the roof's height")
+	# No schedule: the district weapon everywhere. A schedule naming the district's own weapon or
+	# an unknown one changes nothing.
+	var plain: Dictionary = cfg.duplicate(true)
+	plain.erase("level_weapon")
+	eq(BottleLogic.new(plain, 4).weapon, "knife", "no schedule: knives on L4")
+	plain["level_weapon"] = {"4": "knife", "5": "laser"}
+	check(not BottleLogic.new(plain, 4).guest, "the district's own weapon is not a guest")
+	eq(BottleLogic.new(plain, 5).weapon, "knife", "an unknown weapon is ignored")
+	eq(BottleLogic.new(plain, 5).shots_left, BottleLogic.new(cfg, 5).shots_left, "and gets no gift shot")
+
+
+## Review focus 4: the guest uses the Armory tier the player owns for it (base tier if none), on
+## every attempt, so a purchase between a loss and a replay shows up; the save is never touched.
+func test_guest_weapon_uses_current_tier() -> void:
+	var tid := Armory.track_of("finale_pistol")
+	check(tid != "", "the pistol has an Armory track")
+	var save := {"unlocked": 4, "coins": 0, "armory": {}}
+	var before: Dictionary = save.duplicate(true)
+	var base := BottleLogic.new(Armory.apply_finale(cfg, save), 4)
+	eq(base.weapon, "pistol", "L4 is a guest pistol")
+	eq(int(base.wcfg["mag"]), int(cfg["weapons"]["pistol"]["mag"]), "nothing owned: the base tier's magazine")
+	var info := GiftReveal.info(save, "pistol")
+	eq(int(info["tier"]), 1, "nothing owned: tier 1")
+	eq(int(info["lock"]), Armory.unlock_level(tid), "a locked track teases its unlock level")
+	check(String(info["art"]).ends_with("finale_pistol_t1.png"), "tier 1 art (%s)" % info["art"])
+	check(ResourceLoader.exists(String(info["art"])), "the art exists")
+	eq(save, before, "the gift leaves the save alone")
+	# A replay after buying into tier 2 (L29 is a guest pistol too).
+	save["unlocked"] = 29
+	Armory.set_index(save, tid, Armory.steps_per_tier(tid) + 1)
+	eq(Armory.level(save, tid).x, 2, "bought into tier 2")
+	before = save.duplicate(true)
+	var owned := BottleLogic.new(Armory.apply_finale(cfg, save), 29)
+	eq(owned.weapon, "pistol", "L29 is a guest pistol")
+	check(int(owned.wcfg["mag"]) > int(cfg["weapons"]["pistol"]["mag"]), "the owned tier's bigger magazine")
+	check(float(owned.wcfg["kick_deg"]) < float(cfg["weapons"]["pistol"]["kick_deg"]), "and its softer kick")
+	eq(owned.wcfg, BottleLogic.new(Armory.apply_finale(cfg, save), 11).wcfg, "the same handling as the district's own pistol")
+	var info2 := GiftReveal.info(save, "pistol")
+	eq(int(info2["tier"]), 2, "the reveal shows tier 2")
+	eq(int(info2["lock"]), 0, "an open track shows no lock")
+	check(String(info2["art"]).ends_with("finale_pistol_t2.png"), "tier 2 art (%s)" % info2["art"])
+	eq(save, before, "still untouched")
+	for w in ["bow", "stars", "sniper"]:
+		var i := GiftReveal.info({"unlocked": 1}, w)
+		check(int(i["lock"]) > 1 and ResourceLoader.exists(String(i["art"])), "%s: art and a lock level" % w)
+
+
+## The reveal: at most 1.5 s (finale.json gift), the weapon reaches the hand before it ends, and
+## a tap ends it at once with the weapon in hand; that tap's release is swallowed (never a shot).
+func test_gift_reveal_skippable_and_short() -> void:
+	var gc: Dictionary = cfg.get("gift", {})
+	check(not gc.is_empty(), "finale.json has the gift block")
+	var total := GiftReveal.total(gc)
+	check(total >= 0.8 and total <= 1.5, "the reveal lasts %.2f s (0.8 to 1.5)" % total)
+	var g := GiftReveal.new().setup(gc, "pistol", 1, 11)
+	var seen: Array = []
+	g.handed.connect(func(): seen.append(["handed", g.t]))
+	g.finished.connect(func(): seen.append(["finished", g.t]))
+	check(not g.take_input(_tap(true)), "a tap before it plays is not taken")
+	g.play()
+	var steps := 0
+	while not g.done and steps < 600:
+		g.advance(1.0 / 60.0)
+		steps += 1
+	check(g.done, "it ends by itself")
+	check(steps / 60.0 <= 1.5 + 0.02, "within 1.5 s (%.2f)" % (steps / 60.0))
+	eq(seen.size(), 2, "handed once, finished once")
+	if seen.size() == 2:
+		eq(seen[0][0], "handed", "the weapon reaches the hand first")
+		check(float(seen[0][1]) > total * 0.5, "after the box has opened (%.2f)" % float(seen[0][1]))
+	g.free()
+	var s := GiftReveal.new().setup(gc, "sniper", 1, 41)
+	var got: Array = []
+	s.handed.connect(func(): got.append("handed"))
+	s.finished.connect(func(): got.append("finished"))
+	s.play()
+	s.advance(0.2)
+	check(s.take_input(_tap(true)), "a tap is taken by the reveal")
+	check(s.done, "a tap ends it at once")
+	eq(got, ["handed", "finished"], "the weapon is handed over, then the reveal is over")
+	check(s.take_input(_tap(false)), "the skipping tap's release is swallowed")
+	check(not s.take_input(_tap(true)), "after that it takes nothing")
+	s.free()
+	var long: Dictionary = gc.duplicate(true)
+	for k in ["drop_s", "wiggle_s", "open_s", "spin_s", "fly_s"]:
+		long[k] = 1.0
+	check(GiftReveal.total(long) <= 1.5 + 0.0001, "phases past the cap are squeezed into 1.5 s")
+
+
+func _tap(pressed: bool) -> InputEventScreenTouch:
+	var e := InputEventScreenTouch.new()
+	e.pressed = pressed
+	e.position = Vector2(270, 480)
+	return e
