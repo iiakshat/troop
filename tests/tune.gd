@@ -61,6 +61,7 @@ var use_powers := true   # powers=0: every run plays without shield/bomb
 var pace := {}           # profile=paced: level (String) -> upgrades (tests/econ_model.gd)
 var profile := ""
 var fixed_upgrades := {} # upgrades=k,s,q (legacy station rooms) when no pace is used
+var kf_max := KF_MAX       # kf_max=: the largest last-wave scale the v2.1 keep fit may use
 var dodge_share := GreedyPilot.DODGE_P  # profile=greedy|noisy: telegraphs dodged (dodge_p=)
 static var boss_hp_fixed := false  # units.json has the v2.1 boss rule: boss hp is not scaled
 
@@ -153,6 +154,8 @@ func _initialize() -> void:
 			full = true
 		elif a.begins_with("dodge_p="):
 			dodge_share = float(a.substr(8))
+		elif a.begins_with("kf_max="):
+			kf_max = float(a.substr(7))
 		elif a.begins_with("k="):
 			k_eval = float(a.substr(2))
 		elif a.begins_with("kf="):
@@ -920,7 +923,7 @@ func calibrate_harder(n: int, base: Dictionary) -> Dictionary:
 	for round_i in 2:
 		k = _fit_fail(n, base, k, kf, b["fail"])
 		kf = _fit_keep(n, base, k, kf, b["keep"])
-		if kf >= KF_MAX * 0.97:
+		if kf >= kf_max * 0.97:
 			# Even a huge last gang can't bring the greedy player down to the band: keep a
 			# modest climax and fit the rest to the fail rate.
 			kf = KF_FALLBACK
@@ -972,7 +975,7 @@ func _fit_fail(n: int, base: Dictionary, k0: float, kf: float, band_fail: Array)
 ## `band_keep`, the same way from the current kf0.
 func _fit_keep(n: int, base: Dictionary, k: float, kf0: float, band_keep: Array) -> float:
 	var lo := log(0.4)
-	var hi := log(KF_MAX)
+	var hi := log(kf_max)
 	var mid := clampf(log(kf0), lo, hi)
 	for i in 8:
 		var keep := _ratio(greedy_result(n, scaled_level(base, k, exp(mid))))
