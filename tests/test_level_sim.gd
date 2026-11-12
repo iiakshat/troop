@@ -1049,10 +1049,27 @@ func test_live_firepower_rises_with_troops_and_taps() -> void:
 
 
 func test_start_firepower_is_the_hud_unit_with_a_hot_hero() -> void:
-	eq(LevelSim.start_firepower(units), 3, "the hero alone at full tap rate: 1 x 3/s")
+	near(LevelSim.start_firepower(units), 3.0, "the hero alone at full tap rate: 1 x 3/s")
 	var up := {"squad": 4}
-	eq(LevelSim.start_firepower(units, up), int(round(3.0 + 4 * 1.6)), "+4 starting constables")
+	near(LevelSim.start_firepower(units, up), 3.0 + 4 * 1.6, "+4 starting constables")
 	check(LevelSim.start_firepower(units, {"headstart": 1}) > LevelSim.start_firepower(units), "a head start raises it")
+
+
+## Spec v2 §12.4 "same unit everywhere": the lobby's Squad Power (Economy.squad_power) is the
+## HUD's live number (LevelSim.live_power, Squad.firepower) of the squad a level starts with,
+## the hero hot, Armory steps included; one implementation, so the two can never drift.
+func test_squad_power_is_the_hud_number_at_level_start() -> void:
+	var fx := {"squad": 3, "capacity": 25, "coins": 0.2,
+		"weapons": {"hero": {"dmg_mult": 1.3, "rate_mult": 1.1}, "constable": {"dmg_mult": 1.25, "rate_mult": 1.05}}}
+	var sim := LevelSim.new({"events": []}, units, fx)
+	for i in 4:
+		sim.tap()
+	near(sim.live_power(), Economy.squad_power(fx, units), "HUD number at a hot start = lobby Squad Power")
+	near(LevelSim.start_firepower(units, fx), Economy.squad_power(fx, units), "start_firepower = Squad Power")
+	var ranks := {"hero": 1, "constable": 2, "commando": 2, "swat": 1}
+	var sq := Squad.new()
+	sq.counts = ranks.duplicate()
+	near(Economy.firepower(ranks, {}, units), sq.firepower(units["allies"], {}), "Economy.firepower is Squad.firepower")
 
 
 func test_coin_troops_are_district_one_equivalents() -> void:

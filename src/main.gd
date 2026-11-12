@@ -658,7 +658,7 @@ func _notification(what: int) -> void:
 func _process(_delta: float) -> void:
 	if is_instance_valid(hud) and is_instance_valid(view):
 		hud.set_progress(view.sim.progress())  # goal gradient: the bar fills towards the Gang HQ
-		hud.set_firepower(view.sim.firepower())  # spec v2 §12.4: live firepower next to the troops
+		hud.set_firepower(view.sim.live_power())  # spec v2 §12.4: live firepower next to the troops
 	if _pilot and view and view.sim.state == "run" and not view.hold:  # a tutorial step steers
 		_pilot.drive(view.sim)
 	if _args.has("strike") and view and view.finale and view.finale._state == "aim" and _frame % 40 == 0:

@@ -125,23 +125,20 @@ static func _units(units: Dictionary) -> Dictionary:
 	return _units_cache
 
 
-## Nominal firepower of a squad (spec v2 section 12.4): damage per second against an
-## unarmoured target, summed over `counts` = {owner: troops} ("hero" = 1 for the hero), each
-## troop dealing dmg x rate x rounds per shot (multi) x its Armory multipliers (`weapons` =
-## Armory.sim_upgrades()["weapons"]: {owner: {dmg_mult, rate_mult}}). The hero counts at full
-## tap rate (spec section 2: tapping lifts him to 1.0 x his base rate). Splash, pierce and armour
-## are left out: it is the nominal number the HUD shows. A local helper: COMBAT's
-## Squad.firepower() is the same formula in the level (the integrator unifies the two).
+## Nominal firepower of a squad (spec v2 section 12.4): damage per second against a plain
+## unarmoured crowd, summed over `counts` = {owner: troops} ("hero" = 1 for the hero), each owner
+## with its Armory multipliers (`weapons` = Armory.sim_upgrades()["weapons"]: {owner: {dmg_mult,
+## rate_mult}}). The hero counts at full tap rate (spec section 2). One implementation for every
+## lightning number: this is Squad.firepower(), the HUD's live number, on upgraded stats.
 static func firepower(counts: Dictionary, weapons: Dictionary = {}, units: Dictionary = {}) -> float:
-	var allies: Dictionary = _units(units)["allies"]
-	var v := 0.0
+	var stats := upgraded_allies(_units(units)["allies"], weapons)
+	var sq := Squad.new()
+	sq.counts = {}
 	for owner in counts:
-		if not allies.has(owner):
-			continue
-		var a: Dictionary = allies[owner]
-		var per := float(a["dmg"]) * float(a["rate"]) * float(a.get("multi", 1))
-		v += float(counts[owner]) * per * _dps_mult(weapons, String(owner))
-	return v
+		if stats.has(owner):
+			sq.counts[String(owner)] = int(counts[owner])
+	sq.hero_rate = 1.0
+	return sq.firepower(stats, {})
 
 
 ## Squad Power (lobby, level nodes, Armory and Station pills) = the firepower a level starts
@@ -191,13 +188,6 @@ static func upgraded_allies(allies: Dictionary, weapons: Dictionary) -> Dictiona
 			u["dmg"] = float(u["dmg"]) * float(weapons[owner].get("dmg_mult", 1.0))
 			u["rate"] = float(u["rate"]) * float(weapons[owner].get("rate_mult", 1.0))
 	return out
-
-
-static func _dps_mult(w: Dictionary, owner: String) -> float:
-	var m: Variant = w.get(owner)
-	if not (m is Dictionary):
-		return 1.0
-	return float(m.get("dmg_mult", 1.0)) * float(m.get("rate_mult", 1.0))
 
 
 ## Everything Squad Power counts for a save: the station's effects and the armory's weapons.

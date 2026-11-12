@@ -206,18 +206,23 @@ func tap() -> void:
 ## The squad's live firepower (Squad.firepower with the current upgrades and tap heat), as
 ## the whole number the HUD shows next to the troop count.
 func firepower() -> int:
-	return int(round(squad.firepower(stats, weapons)))
+	return int(round(live_power()))
+
+
+## The same number unrounded: the HUD shows it with Economy.fmt_power, the lobby's format.
+func live_power() -> float:
+	return squad.firepower(stats, weapons)
 
 
 ## Firepower at the start of a level with these upgrades and the hero at full tap rate: the
-## same unit as the HUD's lightning number, for the lobby's Squad Power and each level's
-## recommended power (spec v2 §12.4, "same unit everywhere").
-static func start_firepower(units_cfg: Dictionary, upgrades: Dictionary = {}, level: Dictionary = {}) -> int:
+## same unit as the HUD's lightning number and the lobby's Squad Power (Economy.squad_power,
+## the same Squad.firepower; spec v2 §12.4, "same unit everywhere").
+static func start_firepower(units_cfg: Dictionary, upgrades: Dictionary = {}, level: Dictionary = {}) -> float:
 	var lv := level.duplicate()
 	lv["events"] = []
 	var sim := LevelSim.new(lv, units_cfg, upgrades)
 	sim.squad.hero_rate = 1.0
-	return sim.firepower()
+	return sim.live_power()
 
 
 ## Share of the hero's base rate he fires at now: tap_auto when cold, 1.0 when hot.

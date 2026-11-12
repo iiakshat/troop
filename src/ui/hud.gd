@@ -11,7 +11,8 @@ var _progress: ProgressBar
 var _troops: HBoxContainer
 var _troops_pop := 0.0
 var _power: HBoxContainer
-var _power_shown := -1
+var _power_shown := -1.0
+var _power_text := ""
 var _power_pop := 0.0
 var _cap_bar: ProgressBar
 var _power_buttons: Dictionary = {}
@@ -166,15 +167,18 @@ func set_troops(n: int) -> void:
 	(_cap_bar.get_theme_stylebox("fill") as StyleBoxFlat).bg_color = UiKit.GOLD if n >= _cap_bar.max_value else Color("8fd0ff")
 
 
-## Live firepower (LevelSim.firepower), called every frame: the label only changes when the
-## number does, and a gain (troops joining, tapping) pops it.
-func set_firepower(n: int) -> void:
-	if n == _power_shown:
+## Live firepower (LevelSim.live_power), called every frame, in the lobby's Squad Power format
+## (Economy.fmt_power: one decimal below 100, then 12.3K / 1.25M): the label only changes when
+## the shown number does, and a gain (troops joining, tapping) pops it.
+func set_firepower(v: float) -> void:
+	var txt := Economy.fmt_power(v)
+	if txt == _power_text:
 		return
-	if n > _power_shown and _power_shown >= 0:
+	if v > _power_shown and _power_shown >= 0.0:
 		_power_pop = 1.0
-	_power_shown = n
-	UiKit.pill_set(_power, NumFormat.fmt(n))
+	_power_shown = v
+	_power_text = txt
+	UiKit.pill_set(_power, txt)
 
 
 func firepower_text() -> String:

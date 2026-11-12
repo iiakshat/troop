@@ -265,10 +265,6 @@ func _purchase(s: Dictionary, kind: String, id: String, units: Dictionary) -> Di
 	return {}
 
 
-func near(a: float, b: float, msg: String) -> void:
-	check(absf(a - b) < 0.001, "%s (%.3f vs %.3f)" % [msg, a, b])
-
-
 # ---------------------------------------------------------------- v2: the Armory in the economy
 
 func _armory_save(coins: int, unlocked: int) -> Dictionary:
