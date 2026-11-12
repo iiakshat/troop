@@ -34,6 +34,10 @@ const CLOSE_DIST := 1.3         # close-up distance from the bottle
 const CLOSE_DOLLY := 0.5       # extra pull-back while the glass flies
 const MISS_DIST := 0.75         # close-up distance from a knife stuck in the wood
 const BOTTLE_SCALE := 1.3
+## LevelView's level-load prewarm (spec v2 §3): built out of sight for a few frames so the
+## stash, bottles and weapon compile their GPU pipelines then, not on the burst into the stash.
+## Never plays: no camera, sound, input or HUD.
+var warm := false
 const STAGE_KNIFE_IN := 0.04    # metres a stuck knife's tip sinks into the planks
 const INTRO := 0.75             # real seconds of the burst-in camera move
 
@@ -130,6 +134,15 @@ func setup(w: World, f: Fx, fnt: Font, level_id: int, troop_count: int, hero: Ve
 
 
 func _ready() -> void:
+	if warm:
+		set_process(false)
+		set_process_unhandled_input(false)
+		_build_wall()
+		var gun := warm_weapon(logic.weapon)
+		if gun != null:
+			gun.position = Vector3(hero_pos.x, 1.5, _wall_z + 2.0)
+			add_child(gun)
+		return
 	var ks: Dictionary = Game.knife_skin()
 	_blade_color = Color(String(ks.get("blade", "e6eaf0")))
 	if String(ks.get("trail", "")) != "":
@@ -945,6 +958,23 @@ func _build_trail() -> void:
 	_trail_mat.vertex_color_use_as_albedo = true
 	_trail_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	add_child(_trail)
+
+
+## The weapon model a district's Bottle Shot uses (null for knives: those are Fx's), for the
+## prewarm.
+static func warm_weapon(weapon: String) -> Node3D:
+	match weapon:
+		"pistol":
+			return WeaponModels.pistol()
+		"bow":
+			var b := WeaponModels.bow()
+			b.add_child(WeaponModels.arrow())
+			return b
+		"stars":
+			return WeaponModels.star()
+		"sniper":
+			return WeaponModels.rifle()
+	return null
 
 
 ## Air streak behind the flying knife: the last few positions (in finale time).

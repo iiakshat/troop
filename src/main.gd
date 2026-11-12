@@ -55,6 +55,7 @@ var _perf_worst: Array = []  # [ms, frame, pipelines, marks]: slow or compiling 
 var _perf_pipes: Array = []   # pipeline compilations so far per kind (Performance monitors)
 var _perf_max := 0.0         # the slowest level frame after the first 2 s
 var _perf_done := false      # the level's PERF report is printed
+var _perf_finale_t := 0.0    # seconds into the finale (its first 2 s count in the report)
 
 
 func _ready() -> void:
@@ -366,6 +367,7 @@ func _start_level(n: int, boosters: Dictionary = {}) -> void:
 	view = LevelView.new().setup(level, Game.level_upgrades(boosters), world, fx, UiKit.FONT)
 	view.perf_on = _perf != null
 	_perf_level_t = 0.0
+	_perf_finale_t = 0.0
 	_perf_done = false
 	_perf_max = 0.0
 	_perf_worst.clear()
@@ -704,6 +706,10 @@ func _perf_frame() -> void:
 		_perf_level_t += 1.0 / 60.0  # by frames: the loading frame itself must not count as 2 s
 		st = "%s:%d" % [view._state, view.sim.squad.total()]
 		playing = view._state == "play"
+		# Spec v2 §3: the burst into the stash counts too (the finale's first 2 s).
+		if view._state == "finale":
+			_perf_finale_t += 1.0 / 60.0
+			playing = _perf_finale_t <= 2.0
 		marks = " ".join(view.perf_marks)
 		view.perf_marks.clear()
 	var proc := Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
@@ -734,7 +740,7 @@ func _perf_frame() -> void:
 
 func _perf_report() -> void:
 	_perf_worst.sort_custom(func(a, b): return a[0] > b[0])
-	print("PERF level max frame %.1f ms after 2 s; %d frames over 33 ms or compiling" % [_perf_max, _perf_worst.size()])
+	print("PERF level max frame %.1f ms after 2 s (and the finale's first 2 s); %d frames over 33 ms or compiling" % [_perf_max, _perf_worst.size()])
 	for w in _perf_worst.slice(0, 12):
 		print("PERF %.1f ms frame %d pipelines %d %s" % w)
 	_perf.store_line("# max %.1f worst: %s" % [_perf_max, str(_perf_worst.slice(0, 12))])

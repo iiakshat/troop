@@ -86,6 +86,7 @@ var _finish: Node3D
 var _finish_live := false      # the finish was spawned (it is built hidden at load to pre-warm)
 const WARM_FRAMES := 3         # spec v2 §3: every crowd, effect, obstacle, gate and the stash
 var _warm: Array[Node3D] = []  # draws out of sight for the first frames, so their shaders
+var _warm_stash_at := Vector3.ZERO   # where the warm Bottle Shot stash stands (prewarm)
 var _warm_left := 0            # compile during loading and not when a rank joins
 var _warm_at := Vector3(0, -8, -16)
 var _hq: Node3D
@@ -2234,6 +2235,25 @@ func _prewarm() -> void:
 			hint_ids.append(String(e.get("id", "")))
 	if not hint_ids.is_empty():
 		new_item_card().prewarm(hint_ids)
+	# The district's Bottle Shot stash, bottles and weapon (spec v2 §3): built out of sight now,
+	# their pipelines compiled while loading, not on the burst into the stash (a 173 ms frame
+	# with 38 pipeline compiles at L11's finish).
+	var bs := BottleShot.new().setup(world, fx, font, level_id, 0, Vector3.ZERO, 0.0)
+	bs.warm = true
+	var cam: Camera3D = world.camera if world else null
+	var deep := Vector3(0, -24, -40)
+	if cam != null and cam.is_inside_tree():
+		var vs := cam.get_viewport().get_visible_rect().size
+		var dir := cam.project_ray_normal(Vector2(vs.x * 0.5, vs.y * 0.75))
+		if dir.y < -0.2:
+			deep = cam.global_position + dir * ((cam.global_position.y + 22.0) / -dir.y)
+	# The bottle wall (about 1.5 m up, `distance` ahead of the hero) lands on that view ray,
+	# 22 m under the road.
+	bs.position = deep - Vector3(0, 1.5, -bs.logic.distance)
+	add_child(bs)
+	_warm.append(bs)
+	# The squad stands in the stash's lights there too: their lit and shadow variants compile now.
+	_warm_stash_at = bs.position + Vector3(0, 0, -bs.logic.distance * 0.5)
 	# Every icon this level shows (UiKit caches them), and every glyph at every label size and
 	# outline the street uses (the font is rasterised per size on first draw).
 	for e in _level.get("events", []):
@@ -2277,6 +2297,8 @@ func _warm_frame() -> void:
 	var i := 0
 	for k in _crowds:
 		(_crowds[k] as Crowd).push(Transform3D(Basis(), _warm_at + Vector3(-6.0 + 0.7 * i, -1.0, 0)), "run", 0.0, 0.5)
+		if _warm_stash_at != Vector3.ZERO:
+			(_crowds[k] as Crowd).push(Transform3D(Basis(), _warm_stash_at + Vector3(-3.0 + 0.5 * i, 0, 0)), "idle", 0.0, 0.0)
 		i += 1
 	if _warm_left > 0:
 		return
