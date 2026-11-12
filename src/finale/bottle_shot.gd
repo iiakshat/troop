@@ -107,7 +107,10 @@ var _aim_fov := AIM_FOV
 var _aim_focus := 6.0
 var _focus := 6.0
 var _blur := 0.1
-var _state := "intro"         # intro | aim | flying | impact | tally | finished
+var _state := "intro"         # intro | gift | aim | flying | impact | tally | finished
+var _gift: GiftReveal = null  # v2.1 §4.3: a guest weapon is handed over as a gift (state "gift")
+var _gift_cfg: Dictionary = {}
+var _fog_env: Environment = null  # the camera's thinned-fog environment while a far set is shot
 var _wait := 0.0
 var _intro_t := 0.0
 var _intro_from := Transform3D()
@@ -138,7 +141,9 @@ func setup(w: World, f: Fx, fnt: Font, level_id: int, troop_count: int, hero: Ve
 	# v2 Armory: the Bottle Shot weapon's handling steps (magazine, kick, draw, sway...).
 	var cfg: Dictionary = Armory.apply_finale(Config.load_json("res://config/finale.json"), Game.save)
 	logic = BottleLogic.new(cfg, level_id)
-	theme = String((cfg.get("district_stash", {}) as Dictionary).get(str(logic.district), FinaleStash.theme_of(logic.district)))
+	# The district's stash, or a guest weapon's own set (v2.1 §4.3; BottleLogic.stash).
+	theme = logic.stash if logic.stash != "" else FinaleStash.theme_of(logic.district)
+	_gift_cfg = cfg.get("gift", {})
 	_floor_y = float(logic.wcfg.get("elevation", 0.0))
 	_bscale = BOTTLE_SCALE * logic.size
 	# Bottles stand on the plane z = hero - distance; the back wall is 0.25 m behind them.
@@ -152,6 +157,8 @@ func _ready() -> void:
 	if dormant:
 		process_mode = Node.PROCESS_MODE_DISABLED   # no process, no input until `wake`
 		_warm_up()
+		if logic.guest:
+			GiftReveal.warm(logic.weapon, Game.save)   # the gift's pictures load now, not at the burst
 		return
 	_begin()
 
@@ -185,6 +192,16 @@ func _build() -> void:
 
 ## Burst in: the squad kicks the door; the camera rushes from the street into the stash.
 func _begin() -> void:
+	if logic.guest and not _gift_cfg.is_empty():
+		# v2.1 §4.3: the guest weapon is a gift: it comes out of a box into the hand before aiming,
+		# at the player's Armory tier for it; the real weapon shows once it is in the hand.
+		var gi := GiftReveal.info(Game.save, logic.weapon)
+		_gift = GiftReveal.new().setup(_gift_cfg, logic.weapon, int(gi["tier"]), int(gi["lock"]))
+		_gift.handed.connect(_on_gift_handed)
+		add_child(_gift)
+		if _mode:
+			_mode.visible = false
+	_thin_fog(true)
 	_aim_lens()
 	_intro_from = world.camera.transform
 	_cam = _intro_from
@@ -490,11 +507,23 @@ func _process(delta: float) -> void:
 			_cam = _intro_from.interpolate_with(_rest_view(), k)
 			_fov = lerpf(_intro_fov, _rest_fov(), k)
 			if _intro_t >= INTRO:
-				_state = "aim"
-				_cam_mode = "aim"
-				_focus = _aim_focus
-				if _mode:
-					_mode.begin()
+				if _gift != null and not _gift.done:
+					_state = "gift"
+					_gift.hand = _hand_screen()
+					_gift.play()
+				else:
+					_begin_aim()
+		"gift":
+			# The camera rests where aiming starts while the gift is handed over; a tap skips it.
+			if _mode:
+				_mode.tick(delta, d)
+			else:
+				_cam = _rest_view()
+				_fov = _rest_fov()
+			_gift.hand = _hand_screen()
+			if _gift.done:
+				_on_gift_handed()
+				_begin_aim()
 		"aim", "flying", "impact":
 			if _mode:
 				_mode.tick(delta, d)
@@ -514,6 +543,7 @@ func _process(delta: float) -> void:
 				_took_camera = false
 				world.set_camera_override(null)
 				world.set_lens(-1.0)
+				_thin_fog(false)
 				hud.queue_free()
 				if _mode:
 					_mode.finish()
@@ -559,6 +589,63 @@ func shot_over() -> void:
 		_cam_mode = "aim"
 		_wait = 1.0
 		Sfx.play("win")
+
+
+## The sniper's set stands on a roof 105-130 m away: in a daylight district the street's fog
+## washes it out (a guest sniper, v2.1 §4.3). While the finale runs, the camera sees the same
+## environment with its fog thinned by the weapon's fog_mult; the world's own is never touched.
+func _thin_fog(on: bool) -> void:
+	var cam := world.camera if world else null
+	if cam == null:
+		return
+	if not on:
+		if _fog_env != null and cam.environment == _fog_env:
+			cam.environment = null
+		_fog_env = null
+		return
+	var k := float(logic.wcfg.get("fog_mult", 1.0))
+	var base: Environment = cam.get_world_3d().environment if cam.get_world_3d() else null
+	if k >= 1.0 or base == null:
+		return
+	# Always from the world's own environment (an older finale's override may still be set).
+	_fog_env = base.duplicate() as Environment
+	_fog_env.fog_density = base.fog_density * maxf(k, 0.0)
+	cam.environment = _fog_env
+
+
+func _exit_tree() -> void:
+	if not dormant:
+		_thin_fog(false)
+
+
+func _begin_aim() -> void:
+	_state = "aim"
+	_cam_mode = "aim"
+	_focus = _aim_focus
+	if _mode:
+		_mode.begin()
+
+
+## The gift reached the hand: the real weapon shows (a tap that skipped the gift lands here too).
+func _on_gift_handed() -> void:
+	if _mode and not _mode.visible:
+		_mode.visible = true
+
+
+## Screen point of the weapon in the hero's hand (the gift flies into it): the view model of the
+## pistol, bow or rifle, else the hero's throwing hand.
+func _hand_screen() -> Vector2:
+	var cam := world.camera
+	var p := to_world(WeaponStars.HAND)
+	if _mode:
+		for key in ["_gun", "_bow", "_rifle"]:
+			var n: Variant = _mode.get(key)
+			if n is Node3D and is_instance_valid(n):
+				p = (n as Node3D).global_position
+				break
+	if cam == null or not cam.is_inside_tree() or cam.is_position_behind(p):
+		return Vector2(-1, -1)
+	return cam.unproject_position(p)
 
 
 ## Camera and lens the finale rests on between shots.
@@ -922,6 +1009,8 @@ func _build_stage() -> void:
 			top = maxf(top, float(h))
 		bar.position = Vector3(hero_pos.x, _floor_y + top + 1.45, _wall_z + 0.25)
 		add_child(bar)
+		if theme == "rooftop":
+			_backboard(extent * 2.0 + 1.4, top + 1.45 + 0.35, false)
 	else:
 		var width := extent * 2.0 + (1.0 if motion == "static" else 0.7) * _bscale
 		if theme == "factory" and motion != "static":
@@ -944,6 +1033,23 @@ func _build_stage() -> void:
 			var board := World._box(Vector3(width + 0.5, bh, 0.06), Color("1d1a2e"))
 			board.position = Vector3(0, _floor_y + low - 0.3 + bh * 0.5, _wall_z + 0.05)
 			_rack.add_child(board)
+		elif theme == "rooftop":
+			var top2 := 0.0
+			for h in heights:
+				top2 = maxf(top2, float(h))
+			_backboard(width + 0.5, top2 + 1.25 * _bscale / BOTTLE_SCALE + 0.3, true)
+
+
+## Rooftop (sniper): a dark board behind the set up to `top` (above the stand's floor), so a set
+## taller than the lounge wall never stands against a bright daylight sky (a guest sniper in
+## districts 2-4, v2.1 §4.3; at night it melts into the wall). On the rack when it slides along.
+func _backboard(width: float, top: float, on_rack: bool) -> void:
+	var board := World._box(Vector3(width, top, 0.06), Color("241c33"))
+	board.position = Vector3(0.0 if on_rack else hero_pos.x, _floor_y + top * 0.5, _wall_z + 0.05)
+	if on_rack:
+		_rack.add_child(board)
+	else:
+		add_child(board)
 
 
 ## No stash sign may stand between an eye (the weapon's and the aim camera's) and any bottle,
