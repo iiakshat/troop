@@ -110,6 +110,29 @@ func test_woken_set_matches_a_fresh_build() -> void:
 	_unboot()
 
 
+## The stash's spotlights aim in the finale's own frame: built out of sight under the road (the
+## warm instance), they must still light the bottle wall once the set moves to the hero.
+func test_set_lights_aim_at_the_wall_wherever_it_is_built() -> void:
+	_boot()
+	for lv in [5, 11, 21, 31, 41]:
+		var s := BottleShot.new().setup(null, null, UiKit.FONT, lv, 40, Vector3.ZERO, 0.0)
+		s.dormant = true
+		s.position = Vector3(0, -22.0, -30.0)   # where LevelView builds it while loading
+		_tree().root.add_child(s)
+		_ready_by_hand(s)
+		var n := 0
+		for l in s.find_children("*", "SpotLight3D", true, false):
+			var spot := l as SpotLight3D
+			var dir := -spot.transform.basis.z.normalized()
+			var hit := spot.position + dir * ((s._wall_z - spot.position.z) / minf(dir.z, -0.001))
+			check(absf(hit.x - s.hero_pos.x) < 1.0 and hit.y > s._floor_y and hit.y < s._floor_y + 3.0,
+				"level %d (%s): a spotlight at %s aims at %s, not the bottle wall" % [lv, s.theme, spot.position, hit])
+			n += 1
+		check(n >= 2, "level %d: the stash has its spotlights" % lv)
+		_drop_node(s)
+	_unboot()
+
+
 ## Resting until the stash: hidden, no process or input, its HUD and weapon overlays hidden,
 ## the warm-only extras gone or hidden, and the logic untouched.
 func test_resting_finale_is_hidden_and_still() -> void:

@@ -170,10 +170,12 @@ static func _spots(shot: BottleShot, c: Vector3, height: float, back: float, aim
 		spot.spot_range = back + 10.0
 		spot.spot_angle = 32.0
 		spot.shadow_enabled = true
-		spot.position = c + Vector3(side * 2.4, height, back)
-		shot.add_child(spot)
 		var target := c + Vector3(side * 0.4, aim_y, 0)
-		spot.look_at(target, Vector3.UP)
+		# Aimed in the shot's own frame (look_at would aim at a world point: wrong for the set
+		# LevelView builds out of sight at level load and then moves to the hero).
+		var at := c + Vector3(side * 2.4, height, back)
+		spot.transform = Transform3D(Basis.looking_at(target - at, Vector3.UP), at)
+		shot.add_child(spot)
 		spots.append({"pos": spot.position, "dir": (target - spot.position).normalized()})
 		if beams:
 			shot._add_beam(spot.position, target, 32.0)
