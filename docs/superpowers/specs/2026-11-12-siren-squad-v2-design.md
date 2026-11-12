@@ -311,3 +311,44 @@ The owner played v1.1 on a phone. Verdict: "okayish, promising, but it feels bui
 - the colour-grade values
 - how to profile and fix the join hitch
 - the work order and how to split it among builders
+
+## 12. Owner additions (2026-11-12, during the build)
+
+1. **Every bottle visible.** In every Bottle Shot weapon mode (knives, pistol, bow, stars, sniper), the whole bottle set is on screen at the start of aiming and while aiming, with no bottle cut off or hidden behind the weapon, stash or HUD.
+   - The sniper keeps its "tiny without the scope" rule, but every bottle must still be on screen at that size.
+   - Check this with a screenshot of every weapon at the hardest level of its district (L10, 20, 30, 40, 50).
+2. **Enemies fire back.**
+   - From district 2 (L11) on, gangs with guns keep firing at the squad while it is within their range, at low power. Each hit kills one follower, lowest rank first.
+   - The hero dies only when no followers are left, so a player who does nothing loses the squad one by one and then the hero.
+   - District 1 keeps today's rules, apart from gunmen, which use the same return fire.
+   - Rules:
+     - every number in `units.json` (per-enemy `return_fire` = shots/s per shooter and the share of a gang that carries guns)
+     - shield blocks it
+     - enemy muzzle flashes and tracers are visible, and hit followers fall
+     - no slow-down
+   - Re-calibrate with it on.
+3. **Every pointing hand explains itself.** The owner still saw a hand pointing right with no meaning. Audit every hand in the game: tutorial, map, station, result, lobby, building panel, HUD. Remove or convert each one per §11. No hand may point sideways at nothing, and no hand may appear without the item icon and number next to it, except gesture lessons.
+4. **Squad cap and live power.**
+   - **Cap grows by district**, all in config:
+     - start at 300 / 1,000 / 5,000 / 25,000 / 100,000
+     - barracks upgrades add a percentage of the district cap
+     - The arithmetic stays exact with 64-bit integers.
+     - Gates scale with it: larger "+N", "×k" up to ×5.
+     - Gangs scale through the generator and calibration so late levels deal in thousands to hundreds of thousands. The display may go to millions.
+   - **Visible figures stay capped** (`formation_figures`; enemy figures capped too). Only the number grows.
+   - **Number format:** in full up to 9,999, then 12.3K, 1.25M. The internal value is always exact.
+   - **Live power:**
+     - the HUD shows the squad's current **firepower** next to the troop count: a lightning icon plus a number, no text
+     - firepower = nominal damage per second against an unarmoured target, with current upgrades and the hero's current tap heat
+     - It rises when troops join and when the player taps, and drops on losses.
+   - **Same unit everywhere:** the lobby's Squad Power and each level's recommended power use the same lightning icon and the same unit (firepower at level start, with the hero at full tap rate). Refit the recommended curve. Never show two different numbers under one icon.
+5. **The bomb is thrown, anytime** (owner). Tapping the bomb button works at any moment of a level (never in Bottle Shot), not only when a gang is in reach.
+   - The hero plays the `throw` clip.
+   - A bomb with a sparking fuse flies in a visible arc down the squad's lane. It lands on the nearest target in that lane within reach (gang front, obstacle, barrel), otherwise on the road at max reach.
+   - It explodes on landing:
+     - gang kills as `powers.bomb` says, plus boss damage
+     - a barricade or car in the blast is destroyed
+     - a barrel is set off
+   - Flight time and blast radius go in config. The sim applies the effect at landing time, so the arithmetic stays exact.
+   - A bomb thrown at an empty road still spends the charge and still shows the explosion; it is the player's choice.
+   - No slow-down.
