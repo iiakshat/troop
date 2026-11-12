@@ -3,7 +3,7 @@ extends CanvasLayer
 ## Bottle Shot HUD, icons and numbers only:
 ##   top left   bottles still standing (bottle icon + number)
 ##   top        the reward multiplier (×N, jumps with a sunburst)
-##   right      the combo (flame + ×N), big while a streak runs, cracks and fades on a miss
+##   right      the combo (flame + hits in a row), big while a streak runs, cracks and fades on a miss
 ##   bottom     ammo: one icon per shot (knife, bullet, arrow, star) + the number left;
 ##              a pistol shows its magazine as rounds and the spare rounds as +N
 ##   top left (under the bottles)  wind (bow): an arrow showing its direction and strength + m/s
@@ -266,7 +266,7 @@ func _ready() -> void:
 	_flame.position = Vector2(0, 10)
 	_flame.size = Vector2(110, 110)
 	_combo_root.add_child(_flame)
-	_combo_label = UiKit.label("×2", 88, Color("ffb13a"), 18)
+	_combo_label = UiKit.label("2", 88, Color("ffb13a"), 18)
 	# Anchored to the right edge and growing leftwards: a wide "×2.5" never runs off screen.
 	_combo_label.anchor_left = 1.0
 	_combo_label.anchor_right = 1.0
@@ -425,10 +425,12 @@ func set_multiplier(m: float, gold: bool) -> void:
 	_mult_label.modulate.a = 1.0
 
 
-## Shows the combo for a streak of `n` hits in a row (from 2 up); 0 breaks it.
+## Shows the combo for a streak of `n` hits in a row (from 2 up); 0 breaks it. Spec v2.1 §3.1:
+## the streak no longer multiplies coins (the coin × does, Economy.level_coins), so the flame
+## shows the streak's length, never a "×" that would promise a payout (`factor` is unused).
 func set_combo(n: int, factor: float) -> void:
 	if n >= 2:
-		_combo_label.text = "×%s" % fmt(factor)
+		_combo_label.text = str(n)
 		# The flame sits just left of the number, whatever its width.
 		_flame.position.x = maxf(_combo_root.size.x - _combo_label.get_minimum_size().x - 104.0, 0.0)
 		_combo_punch = 1.0

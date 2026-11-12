@@ -313,12 +313,15 @@ func test_enemy_hint_shows_when_its_gang_comes_in_range() -> void:
 	eq(_events_of(more, "hint").size(), 0, "only once")
 
 
+## Spec v2.1 §3.1: tapping's coins are the payout's tap term, Economy.heat_pct of the level's
+## mean heat (economy.json payout.heat: up to +10 %); v2's +25 % is gone.
 func test_tapping_earns_a_coin_bonus() -> void:
 	var lvl := {"events": [{"at": 60, "type": "finish"}]}
-	var pct := int(units["hero"]["tap"]["coin_pct"])
+	var pct := int(round(100.0 * float(Config.economy()["payout"]["heat"])))
+	check(pct > 0 and pct <= 10, "the tap term is at most +10 %% (%d)" % pct)
 	var cold := LevelSim.new(lvl, units)
 	_step_until(cold, func(): return cold.state != "run")
-	eq(cold.tap_coin_bonus_pct(), 0, "no taps: no bonus")
+	eq(Economy.heat_pct(cold.mean_heat()), 0, "no taps: no bonus")
 	var hot := LevelSim.new(lvl, units)
 	var n := 0
 	while hot.state == "run" and n < 3000:
@@ -326,7 +329,8 @@ func test_tapping_earns_a_coin_bonus() -> void:
 			hot.tap()   # ~4 taps/s
 		hot.step(1.0 / 30.0)
 		n += 1
-	check(hot.tap_coin_bonus_pct() >= pct - 2 and hot.tap_coin_bonus_pct() <= pct, "tapping all level: about +%d%% (%d)" % [pct, hot.tap_coin_bonus_pct()])
+	var got := Economy.heat_pct(hot.mean_heat())
+	check(got >= pct - 1 and got <= pct, "tapping all level: about +%d%% (%d)" % [pct, got])
 
 
 func _bomb_obstacle_sim(kind: String) -> LevelSim:

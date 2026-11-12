@@ -20,8 +20,8 @@
     "gang_figures": 180
   },
   "hero": {
-    "_note": "Tap-to-fire (spec v2 section 2): the hero's knife (and a held PISTOL/SMG) fires at lerp(auto_rate, 1, heat) of its rate. Each tap adds per_tap heat (max 1); heat holds for hold_s after a tap, then drains to 0 over decay_s. Followers always fire at full rate. Bottle Shot coins get coin_pct % x the level's mean heat on top (a player who tapped all level long: +coin_pct %).",
-    "tap": { "auto_rate": 0.4, "per_tap": 0.3, "hold_s": 0.3, "decay_s": 1.0, "coin_pct": 25 }
+    "_note": "Tap-to-fire (spec v2 section 2): the hero's knife (and a held PISTOL/SMG) fires at lerp(auto_rate, 1, heat) of its rate. Each tap adds per_tap heat (max 1); heat holds for hold_s after a tap, then drains to 0 over decay_s. Followers always fire at full rate. The level's mean heat is the payout's tap term (economy.json payout.heat: up to +10 %, spec v2.1 section 3.1).",
+    "tap": { "auto_rate": 0.4, "per_tap": 0.3, "hold_s": 0.3, "decay_s": 1.0 }
   },
   "input": {
     "_note": "Tap vs swipe (src/core/touch_classifier.gd). A touch that stays within tap_max_px (times the screen scale) and lifts within tap_max_s is a tap: it powers the hero and never steers. Taps count only in the tap zone, from zone_top of the screen height down. Anything that moves further steers. A shield or bomb press within power_guard_s of a fire tap that landed next to that button is ignored (a thumb tapping fast that slid onto it); a press with the other thumb still works.",

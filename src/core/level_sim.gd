@@ -74,7 +74,6 @@ var tap_per := 1.0
 var tap_hold_s := 0.0
 var tap_decay_s := 1.0
 var _tap_hold := 0.0       # seconds left before the heat starts to drain
-var tap_coin_pct := 0.0    # hero.tap.coin_pct: Bottle Shot coins + this % x the level's mean heat
 var heat_sum := 0.0        # tap heat integrated over the run (heat x seconds)
 var heat_t := 0.0          # seconds of run the mean heat is taken over
 
@@ -160,7 +159,6 @@ func _init(level: Dictionary = {}, units_cfg: Dictionary = {}, upgrades: Diction
 	tap_per = float(tap.get("per_tap", tap_per))
 	tap_hold_s = float(tap.get("hold_s", tap_hold_s))
 	tap_decay_s = maxf(float(tap.get("decay_s", tap_decay_s)), 0.001)
-	tap_coin_pct = maxf(float(tap.get("coin_pct", 0.0)), 0.0)
 	stats = units_cfg["allies"].duplicate(true)
 	weapons = units_cfg["hero_weapons"]
 	enemy_defs = units_cfg["enemies"]
@@ -265,12 +263,6 @@ func hero_rate_mult() -> float:
 ## The level's mean tap heat (0..1) so far: how hard the player tapped, start to finish.
 func mean_heat() -> float:
 	return clampf(heat_sum / heat_t, 0.0, 1.0) if heat_t > 0.0 else 0.0
-
-
-## Spec v2 §2, "tapping adds finale coins": the whole-percent coin bonus this run earned
-## (hero.tap.coin_pct x the mean heat). Bottle Shot adds it to the station's coin bonus.
-func tap_coin_bonus_pct() -> int:
-	return int(round(tap_coin_pct * mean_heat()))
 
 
 func _cool(dt: float) -> void:
@@ -1622,7 +1614,7 @@ func clone() -> LevelSim:
 			"boss_halt", "finish_hold", "boss_hit_every", "weapons", "enemy_defs", "obstacle_defs",
 			"powers", "rf_cfg", "boss_cfg", "lt_cfg", "revive_cfg", "star_cfg", "lane", "squad_x", "_x_driven", "lane_w", "form_half",
 			"fig_cap", "fig_r", "gate_clear_s", "gang_priority", "gang_figs", "district", "caps",
-			"coin_ref", "tap_heat", "tap_auto", "tap_per", "tap_coin_pct", "heat_sum", "heat_t",
+			"coin_ref", "tap_heat", "tap_auto", "tap_per", "heat_sum", "heat_t",
 			"tap_hold_s", "tap_decay_s", "_tap_hold", "traveled", "time", "state", "lose_cause",
 			"finish_at", "halted", "peak_squad", "revived", "shield_t", "kills", "rows_passed",
 			"_spawns", "_next_spawn", "_pending_hordes", "_wave_ats", "_next_id", "_armour_note_t"]:
