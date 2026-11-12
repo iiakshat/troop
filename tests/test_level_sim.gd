@@ -165,10 +165,13 @@ func test_foe_halving_and_bomb() -> void:
 			eq(int(e["horde"]["count"]), 50, "spawned already halved")
 	var h: Dictionary = sim.hordes[0]
 	_step_until(sim, func(): return LevelSim.front_z(h) > -40.0)
-	var before: int = h["count"]
+	sim.stats["hero"]["dmg"] = 0  # only the bomb kills here
 	check(sim.use_power("bomb"), "bomb used")
-	eq(int(h["count"]), before - maxi(int(before * 0.5), 10), "bomb wipes half")
 	check(not sim.use_power("bomb"), "no charges left")
+	var before: int = h["count"]
+	var boom := _until_event(sim, "bomb")
+	eq(int(boom.get("killed", -1)), maxi(before / 2, 10), "bomb wipes half")
+	eq(int(h["count"]), before - maxi(before / 2, 10), "gang halved")
 
 
 func test_bomb_on_the_boss_is_flat_damage() -> void:
@@ -176,8 +179,106 @@ func test_bomb_on_the_boss_is_flat_damage() -> void:
 		{"at": 60, "type": "wave", "groups": [{"enemy": "boss", "n": 1}]}, {"at": 200, "type": "finish"}]}
 	var sim := LevelSim.new(lvl, units)
 	_step_until(sim, func(): return not sim.hordes.is_empty() and LevelSim.front_z(sim.hordes[0]) > -40.0)
+	var hp := LevelSim.boss_hp(sim.hordes[0])
+	sim.stats["hero"]["dmg"] = 0
 	check(sim.use_power("bomb"), "bomb used on boss")
+	var seen := _step_until(sim, func(): return sim.bombs.is_empty())
 	eq(int(sim.hordes[0]["count"]), 1, "boss survives a single bomb")
+	eq(LevelSim.boss_hp(sim.hordes[0]), hp - int(units["powers"]["bomb"]["big_dmg"]), "flat damage")
+	check(not _events_of(seen, "boss_hit").is_empty(), "the boss bar updates")
+
+
+# ---------------------------------------------------------------- v2 §12.5: the bomb is thrown
+
+func test_bomb_with_no_gang_still_spends_and_explodes() -> void:
+	var lvl := {"charges": {"bomb": 1}, "events": [{"at": 200, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(2)
+	sim.step(1.0 / 30.0)
+	sim.drain()
+	check(sim.use_power("bomb"), "a bomb can be thrown at an empty road")
+	eq(int(sim.charges["bomb"]), 0, "the charge is spent")
+	var throw := _events_of(sim.drain(), "bomb_throw")
+	eq(throw.size(), 1, "the throw is reported at once")
+	var cfg: Dictionary = units["powers"]["bomb"]
+	if throw.size() == 1:
+		eq(int(throw[0]["lane"]), 2, "down the squad's lane")
+		eq(String(throw[0]["target"]), "road", "nothing in reach: the road")
+		check(absf(float(throw[0]["t"]) - float(cfg["flight"])) < 1e-6, "flight time from config")
+	var t0 := sim.time
+	var boom := _until_event(sim, "bomb")
+	check(not boom.is_empty(), "it explodes")
+	eq(int(boom.get("killed", -1)), 0, "nobody to kill")
+	check(absf(sim.time - t0 - float(cfg["flight"])) < 0.05, "lands after the flight time")
+	check(float(boom.get("z", 0.0)) < -float(cfg["reach"]) * 0.5, "lands far down the road (%.1f)" % float(boom.get("z", 0.0)))
+
+
+func _bomb_obstacle_sim(kind: String) -> LevelSim:
+	var lvl := {"charges": {"bomb": 1}, "events": [
+		{"at": 90, "type": "obstacle", "kind": kind, "lane": 1, "hp": 5000},
+		{"at": 200, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	sim.stats["hero"]["dmg"] = 0
+	_step_until(sim, func(): return not sim.obstacles.is_empty() and float(sim.obstacles[0]["z"]) > -30.0)
+	sim.drain()
+	return sim
+
+
+func test_bomb_lands_on_a_barricade_and_destroys_it() -> void:
+	for kind in ["barricade", "car"]:
+		var sim := _bomb_obstacle_sim(kind)
+		var ob: Dictionary = sim.obstacles[0]
+		check(sim.use_power("bomb"), "bomb thrown")
+		var throw := _events_of(sim.drain(), "bomb_throw")
+		eq(String(throw[0]["target"]) if throw.size() == 1 else "", "obstacle", "%s is the nearest thing in the lane" % kind)
+		eq(sim.obstacles.size(), 1, "%s still stands while the bomb flies" % kind)
+		var seen := _step_until(sim, func(): return not _events_of(sim.out, "bomb").is_empty() or sim.bombs.is_empty())
+		seen.append_array(sim.drain())
+		check(not _events_of(seen, "bomb").is_empty(), "the bomb went off")
+		var broken := _events_of(seen, "obstacle_broken")
+		eq(broken.size(), 1, "%s destroyed" % kind)
+		check(not sim.obstacles.has(ob), "%s gone from the road" % kind)
+		var before := sim.squad.total()
+		_step_until(sim, func(): return sim.state != "run")
+		eq(sim.squad.total(), before, "nothing left to crash into")
+
+
+func test_bomb_sets_off_a_barrel() -> void:
+	var lvl := {"charges": {"bomb": 1}, "events": [
+		{"at": 90, "type": "obstacle", "kind": "barrel", "lane": 1, "hp": 5000, "kill": 8, "radius": 8},
+		{"at": 92, "type": "wave", "groups": [{"enemy": "thug", "n": 20, "hp": 100000}]},
+		{"at": 200, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	sim.stats["hero"]["dmg"] = 0
+	_step_until(sim, func(): return not sim.obstacles.is_empty() and float(sim.obstacles[0]["z"]) > -30.0)
+	check(sim.use_power("bomb"), "bomb thrown at the barrel")
+	var seen := _step_until(sim, func(): return sim.bombs.is_empty())
+	eq(_events_of(seen, "barrel_boom").size(), 1, "the barrel goes off")
+
+
+func test_bomb_kills_apply_at_landing_not_at_the_tap() -> void:
+	var lvl := {"charges": {"bomb": 1}, "events": [
+		{"at": 80, "type": "wave", "groups": [{"enemy": "thug", "n": 60}]},
+		{"at": 200, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	sim.stats["hero"]["dmg"] = 0  # only the bomb kills
+	_step_until(sim, func(): return not sim.hordes.is_empty() and LevelSim.front_z(sim.hordes[0]) > -35.0)
+	var h: Dictionary = sim.hordes[0]
+	check(sim.use_power("bomb"), "thrown")
+	var throw := _events_of(sim.drain(), "bomb_throw")
+	eq(String(throw[0]["target"]) if throw.size() == 1 else "", "horde", "the gang's front is the target")
+	eq(int(h["count"]), 60, "nobody dies at the tap")
+	sim.step(float(units["powers"]["bomb"]["flight"]) * 0.5)
+	eq(int(h["count"]), 60, "nobody dies mid-flight")
+	var boom := _until_event(sim, "bomb")
+	eq(int(boom.get("killed", -1)), 30, "half the gang at landing")
+	eq(int(h["count"]), 30, "exactly half left")
+	eq(int(boom.get("horde", -1)), int(h["id"]), "the event names the gang")
+	var c := sim.clone()
+	eq(c.bombs.size(), sim.bombs.size(), "clone copies bombs in the air")
 
 
 func test_levels_are_winnable_and_reward_planning() -> void:

@@ -43,7 +43,7 @@ func drive(sim: LevelSim) -> void:
 				and LevelSim.shooters(h) * float(h.get("rf_rate", 0.0)) >= 2.0:
 			danger = true
 		var big: bool = int(h["count"]) >= 40 or float(h["shield"]) > 40.0 or float(h["hp"]) >= 50.0
-		if big and LevelSim.front_z(h) > -sim.fire_range * 0.6 and int(sim.charges.get("bomb", 0)) > 0:
+		if big and LevelSim.front_z(h) > -sim.fire_range * 0.6 and int(sim.charges.get("bomb", 0)) > 0 and sim.bombs.is_empty():
 			sim.use_power("bomb")
 	if danger and int(sim.charges.get("shield", 0)) > 0 and sim.shield_t <= 0.0:
 		sim.use_power("shield")

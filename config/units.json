@@ -68,7 +68,8 @@
   },
   "powers": {
     "shield": { "duration": 4.0 },
-    "bomb":   { "kill_pct": 50, "min_kill": 10, "reach": 50.0, "big_hp": 50, "big_dmg": 120 }
+    "_note": "Spec v2 section 12.5: the bomb is thrown at any moment of a level. It flies `flight` s down the squad's lane and lands on the nearest thing in that lane within `reach` m (a gang's front, a barricade, car or barrel; never a pothole or a gate), else on the road at reach. On landing (the sim applies it then, exact): every gang whose front is within `radius` m loses kill_pct % (at least min_kill, never more than it has) and half its riot shields; a gang member with hp >= big_hp (the boss) takes big_dmg instead; barricades and cars within `radius` m are destroyed, barrels within it go off.",
+    "bomb":   { "kill_pct": 50, "min_kill": 10, "reach": 50.0, "big_hp": 50, "big_dmg": 120, "flight": 0.8, "radius": 4.0 }
   },
   "boosters": {
     "_note": "Pre-level tokens handed to LevelSim in the upgrades dict: headstart = constables per token; shield/bomb tokens add charges like the garage does.",

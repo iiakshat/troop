@@ -87,6 +87,7 @@ var rows: Array = []        # gate rows on screen
 var obstacles: Array = []
 var hordes: Array = []
 var firebombs: Array = []   # in the air: {horde, lane, land, burn}
+var bombs: Array = []       # the squad's bombs in the air: {id, lane, x, land, target, ref, z}
 var charges: Dictionary = {"shield": 0, "bomb": 0}
 var shield_t := 0.0
 var kills := 0
@@ -292,28 +293,110 @@ func use_power(id: String) -> bool:
 			shield_t = float(powers["shield"]["duration"])
 			out.append({"type": "shield_on", "dur": shield_t})
 		"bomb":
-			var h = _front_horde(float(powers["bomb"]["reach"]))
-			if h == null:
-				return false
-			var cfg: Dictionary = powers["bomb"]
-			var n: int = h["count"]
-			var k := 0
-			if float(h["hp"]) >= float(cfg.get("big_hp", 50)):
-				# Big single targets (the boss) take flat damage instead of dying outright.
-				h["acc"] = float(h["acc"]) + float(cfg.get("big_dmg", 120))
-				k = mini(int(floor(float(h["acc"]) / float(h["hp"]))), n)
-				h["acc"] = float(h["acc"]) - k * float(h["hp"])
-			else:
-				k = mini(n, maxi(int(floor(n * float(cfg["kill_pct"]) / 100.0)), int(cfg["min_kill"])))
-			h["shield"] = float(h["shield"]) * 0.5
-			out.append({"type": "bomb", "horde": h["id"], "z": front_z(h), "killed": k})
-			_kill(h, k)
-			if h["boss"] and int(h["count"]) > 0:
-				_boss_hit(h, true)
+			_throw_bomb()
 		_:
 			return false
 	charges[id] = int(charges[id]) - 1
 	return true
+
+
+## Spec v2 §12.5: the hero throws a bomb down the squad's lane. It aims at the nearest thing
+## in that lane within reach (a gang's front, or a barricade, car or barrel), else the road at
+## max reach, and lands `flight` s later (_land_bombs applies the blast then).
+func _throw_bomb() -> void:
+	var cfg: Dictionary = powers["bomb"]
+	var reach := float(cfg.get("reach", 50.0))
+	var flight := float(cfg.get("flight", 0.8))
+	var kind := "road"
+	var ref := 0
+	var z := -reach
+	var land_z := -reach + S * flight   # where that point of the road will be at landing
+	var h = _front_horde(reach)
+	if h != null and front_z(h) < 0.0:
+		kind = "horde"
+		ref = h["id"]
+		z = front_z(h)
+		land_z = z if (h["stopped"] or h["melee"]) else z + float(h["vrel"]) * flight
+	for ob in obstacles:
+		var oz := float(ob["z"])
+		if int(ob["lane"]) != lane or oz >= 0.0 or oz < -reach or oz <= z or not _bombable(ob):
+			continue
+		kind = "obstacle"
+		ref = ob["id"]
+		z = oz
+		land_z = oz + S * flight
+	var b := {"id": _new_id(), "lane": lane, "x": lane_x(lane), "land": time + flight,
+		"target": kind, "ref": ref, "z": z}
+	bombs.append(b)
+	out.append({"type": "bomb_throw", "id": b["id"], "lane": lane, "x": b["x"], "t": flight,
+		"target": kind, "ref": ref, "z": minf(land_z, contact_z)})
+
+
+## A bomb can hit barricades, cars and barrels (a pothole is a hole, not a target).
+static func _bombable(ob: Dictionary) -> bool:
+	var kind := String(ob.get("kind", ""))
+	return kind != "pothole" and (float(ob["hp"]) > 0.0 or ob.get("armed", false))
+
+
+## Bombs whose flight is over explode where their target is now (the road point when the
+## target is gone): gangs within the radius lose kill_pct % (the boss takes flat damage),
+## barricades and cars in it are destroyed, barrels in it go off.
+func _land_bombs(dt: float) -> void:
+	for b in bombs:
+		b["z"] = float(b["z"]) + S * dt   # the road point rides towards the squad
+	for b in bombs.duplicate():
+		if time < float(b["land"]):
+			continue
+		bombs.erase(b)
+		var bz := float(b["z"])
+		var target = null
+		match String(b["target"]):
+			"horde":
+				for h in hordes:
+					if int(h["id"]) == int(b["ref"]):
+						target = h
+						bz = front_z(h)
+			"obstacle":
+				for ob in obstacles:
+					if int(ob["id"]) == int(b["ref"]):
+						bz = float(ob["z"])
+		_blast(b, bz, target)
+
+
+func _blast(b: Dictionary, bz: float, target) -> void:
+	var cfg: Dictionary = powers["bomb"]
+	var radius := float(cfg.get("radius", 4.0))
+	var killed := 0
+	var hit_ids: Array = []
+	for h in hordes.duplicate():
+		if int(h["count"]) <= 0 or (not is_same(h, target) and absf(front_z(h) - bz) > radius):
+			continue
+		hit_ids.append(h["id"])
+		var n: int = h["count"]
+		var k := 0
+		if float(h["hp"]) >= float(cfg.get("big_hp", 50)):
+			# Big single targets (the boss) take flat damage instead of dying outright.
+			h["acc"] = float(h["acc"]) + float(cfg.get("big_dmg", 120))
+			k = mini(int(floor(float(h["acc"]) / float(h["hp"]))), n)
+			h["acc"] = float(h["acc"]) - k * float(h["hp"])
+		else:
+			k = mini(n, maxi(n * int(cfg["kill_pct"]) / 100, int(cfg["min_kill"])))
+		h["shield"] = float(h["shield"]) * 0.5
+		killed += k
+		_kill(h, k)
+		if h["boss"] and int(h["count"]) > 0:
+			_boss_hit(h, true)
+	out.append({"type": "bomb", "id": b["id"], "lane": b["lane"], "x": b["x"], "z": bz, "killed": killed,
+		"horde": hit_ids[0] if not hit_ids.is_empty() else -1, "target": b["target"]})
+	for ob in obstacles.duplicate():
+		if not _bombable(ob) or Vector2(lane_x(int(ob["lane"])) - float(b["x"]), float(ob["z"]) - bz).length() > radius:
+			continue
+		obstacles.erase(ob)
+		if String(ob.get("kind", "")) == "barrel":
+			_explode(ob)
+		else:
+			ob["hp"] = 0.0
+			out.append({"type": "obstacle_broken", "ob": ob, "by": "bomb"})
 
 
 ## Brings the squad back after a loss (once per level): `troops` people (the hero plus
@@ -374,6 +457,7 @@ func step(dt: float) -> void:
 	_armour_note_t = maxf(_armour_note_t - dt, 0.0)
 	_spawn_due()
 	_move(dt)
+	_land_bombs(dt)
 	_check_barrels()
 	_shoot(dt)
 	_gunfire(dt)
@@ -1138,6 +1222,7 @@ func clone() -> LevelSim:
 	c.obstacles = obstacles.duplicate(true)
 	c.hordes = hordes.duplicate(true)
 	c.firebombs = firebombs.duplicate(true)
+	c.bombs = bombs.duplicate(true)
 	c.charges = charges.duplicate()
 	c._wave_mods = _wave_mods.duplicate(true)
 	c._joined = _joined.duplicate()
