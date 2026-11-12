@@ -7,6 +7,8 @@ assets/armory/<track>_t<n>.png (the "out" key).
 
 icons_a/icons_b (4x4) are cut on exact cell lines. icons_c (5x5) was not painted on an exact
 grid, so each cell keeps the whole connected shapes whose centre lies in it ("loose" mode).
+icons_e (v2 shield, six designs on one sheet) has thin white lines between its cells: "inset"
+cuts that many pixels off every cell edge first.
 """
 import sys
 from pathlib import Path
@@ -21,7 +23,7 @@ SIZE = 320
 
 SHEETS = {
     "icons_a.png": {"grid": [["coin", "gem", "trophy", "star_icon"],
-                             ["shield", "bomb", "knife", "pistol"],
+                             ["_shield_orb", "bomb", "knife", "pistol"],  # shield: icons_e
                              ["smg", "badge", "inspector", "swat"],
                              ["station", "money", "armour_break", "gang_split"]]},
     "icons_b.png": {"grid": [["thug", "brute", "riot", "boss"],
@@ -42,6 +44,12 @@ SHEETS = {
                              ["rank_commando", "music", "music_off", "_"],
                              ["sound", "_", "_", "_"],
                              ["_", "sound_off", "_", "_"]]},
+    # v2 polish: the shield power as a glossy police shield (was a glowing orb that did not
+    # read as a shield next to the bomb). Six designs were painted; design 6 (silver rim, cyan
+    # inner edge like the in-level bubble, gold star) is the one cut.
+    "icons_e.png": {"inset": 30,
+                    "grid": [["_", "_", "_"],
+                             ["_", "_", "shield"]]},
     # v2 Armory: tier art per weapon track (config/armory.json "art": "armory/<id>_t<n>").
     "armory_a.png": {"loose": True, "out": "armory", "size": 256,
                      "grid": [[f"{w}_t{t}" for t in range(1, 5)] for w in
@@ -155,7 +163,8 @@ def cut(sheet, spec):
                 c, alpha = key_alpha(a[wy0:wy1, wx0:wx1].copy())
                 alpha = keep_centred(alpha, (y0 - wy0, y1 - wy0, x0 - wx0, x1 - wx0))
             else:
-                c, alpha = key_alpha(a[y0:y1, x0:x1].copy())
+                k = spec.get("inset", 0)
+                c, alpha = key_alpha(a[y0 + k:y1 - k, x0 + k:x1 - k].copy())
             alpha = remove_specks(drop_frames(alpha))
             if name in spec.get("outline_only", ()):
                 alpha = outline_only(c, alpha)

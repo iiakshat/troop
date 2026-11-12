@@ -176,7 +176,7 @@ static func threats(u: Dictionary) -> Array:
 	if int(u.get("armour", 0)) > 0:
 		out.append("armour")
 	if int(u.get("shield", 0)) > 0:
-		out.append("shield")
+		out.append("riot")  # the gang's riot shield, never the squad's shield power icon
 	return out
 
 

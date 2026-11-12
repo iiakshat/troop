@@ -22,6 +22,7 @@ extends Node
 ##   perf=1 (frame-time log: _local/perf.log, one line per frame: frame, ms, pipelines
 ##   compiled, events; the worst level frames are printed when the level ends; perf=path)
 ##   boot=1 (play the brand boot screens even with debug args; boot=0 skips them)
+##   shield_at=N (press the shield at frame N, with a charge if the squad has none: screenshots)
 ##   panel=station|armory|style|settings|daily|missions|spin|codex|booster|chest|welcome|revive|
 ##         liberation|map   (open that screen over the map; map = the map alone)
 ## Autoplay skips boosters, the revive offer, the ad popups and the tutorials.
@@ -665,6 +666,7 @@ func _process(_delta: float) -> void:
 	if is_instance_valid(hud) and is_instance_valid(view):
 		hud.set_progress(view.sim.progress())  # goal gradient: the bar fills towards the Gang HQ
 		hud.set_firepower(view.sim.live_power())  # spec v2 §12.4: live firepower next to the troops
+		hud.set_shield(view.sim.shield_t if view.sim.state == "run" else 0.0)  # drains round the button
 	if _pilot and view and view.sim.state == "run" and not view.hold:  # a tutorial step steers
 		_pilot.drive(view.sim)
 	if _args.has("strike") and view and view.finale and view.finale._state == "aim" and _frame % 40 == 0:
@@ -682,6 +684,9 @@ func _on_frame() -> void:
 	_frame += 1
 	if _perf:
 		_perf_frame()
+	if _args.has("shield_at") and _frame == int(_args["shield_at"]) and is_instance_valid(view):
+		view.sim.charges["shield"] = maxi(int(view.sim.charges.get("shield", 0)), 1)
+		view.use_power("shield")
 	if _args.has("shots") and String(_args["shots"]).split(",").has(str(_frame)):
 		get_viewport().get_texture().get_image().save_png("%s_%d.png" % [_args.get("out", "shot"), _frame])
 	if _args.has("frames") and _frame == int(_args["frames"]):
