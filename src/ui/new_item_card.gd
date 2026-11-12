@@ -106,6 +106,8 @@ func show_item(ev: Dictionary, target: Control = null, by_tutor := false) -> boo
 	_fill(effects(id, _obj, view.sim.stats if view != null and view.sim != null else {}))
 	_card.visible = true
 	Sfx.play("banner", -6.0, 1.3)
+	if OS.get_cmdline_user_args().has("tutor=auto"):
+		print("CARD %d %s" % [Engine.get_process_frames(), id])  # screenshot timing, like Tutorial's TUT
 	return true
 
 

@@ -220,7 +220,8 @@ func show_loss(level: int, cause: String, progress := -1.0, peak := 0) -> void:
 	_station = station
 	UiKit.set_alert(station, _station_alert())
 	if tip_card != null and bool(tip.get("affordable", false)):
-		_hand_on(tip_card, Vector2(0.9, 0.6))  # on the price, beside icon and before ▸ after
+		# On the price, beside the room's icon and its number before ▸ after (spec v2 §11).
+		PointerHand.on(tip_card, Vector2(0.9, 0.6), 96.0).follow(tip_card.get_meta("price", tip_card), Vector2(0.5, 0.55))
 	var retry := UiKit.icon_button("retry", "green", 140)
 	retry.custom_minimum_size.x = 220
 	retry.pressed.connect(func(): retry_pressed.emit())
@@ -259,13 +260,8 @@ func _upgrade_tip(tip: Dictionary) -> Control:
 	price.add_child(UiKit.label(UiKit.fmt_coins(int(tip["cost"])), 36, Color.WHITE, 8))
 	price.modulate.a = 1.0 if bool(tip.get("affordable", false)) else 0.55
 	h.add_child(price)
+	card.set_meta("price", price)   # the menu hand taps here
 	return card
-
-
-## The pointing hand tapping on a control (spec v2 §11), freed with it. `at` = where the
-## fingertip sits, as a fraction of the control's size (default: a button's upper middle).
-func _hand_on(b: Control, at := Vector2.ZERO) -> void:
-	PointerHand.on(b, at if at != Vector2.ZERO else Vector2(0.55, 0.35), 96.0)
 
 
 ## Road bar: how far the squad got, flag at the finish, percent above the marker.

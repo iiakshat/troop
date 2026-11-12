@@ -356,7 +356,7 @@ func _point_station() -> void:
 	# A holder at the fingertip spot carries the tag (above the button's left edge) and the
 	# tapping hand, so the tag never scales with the hand's press.
 	var sz := _station.size if _station.size.x > 1.0 else _station.get_combined_minimum_size()
-	var tip := sz * Vector2(0.62, 0.38)
+	var tip := sz * Vector2(0.55, 0.25)  # the whole hand stays above the screen edge
 	_hand = Control.new()
 	_hand.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hand.z_index = 5

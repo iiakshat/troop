@@ -214,3 +214,37 @@ func test_buy_tag_shows_icon_then_before_and_after() -> void:
 	eq(icons, 2, "the item's icon and the ▸ between the numbers")
 	eq(tag.mouse_filter, Control.MOUSE_FILTER_IGNORE, "the tag never blocks a tap on the map")
 	tag.free()
+
+
+func test_pointer_hand_on_a_container_card_keeps_its_spot() -> void:
+	# The loss tip is a PanelContainer: a container lays out its children, so the hand must
+	# ride a pin layer it stretches, not be placed (and squashed) by the container itself.
+	var card := PanelContainer.new()
+	card.size = Vector2(400, 100)
+	var h := PointerHand.on(card, Vector2(0.9, 0.6), 96.0)
+	check(not (h.get_parent() is Container), "the hand's parent is not a container")
+	var pin := h.get_parent() as Control
+	eq(pin.get_parent(), card, "the pin sits in the card")
+	pin.size = Vector2(380, 80)   # what the container's layout does to the pin ...
+	h.place()                     # ... and its resized signal (only fires in a tree)
+	var tip := h.position + h.tip_offset()
+	check(tip.distance_to(Vector2(342, 48)) < 1.0, "fingertip follows to 90%% across (got %s)" % tip)
+	card.free()
+
+
+func test_pointer_hand_follows_the_price_inside_a_card() -> void:
+	# Loss tip: the hand rides the card's pin but its fingertip sits on the price (a child of
+	# a centred row, wherever the row's layout puts it).
+	var card := PanelContainer.new()
+	card.size = Vector2(400, 100)
+	var row := Control.new()
+	card.add_child(row)
+	var price := Control.new()
+	price.position = Vector2(220, 20)
+	price.size = Vector2(100, 40)
+	row.add_child(price)
+	var h := PointerHand.on(card, Vector2(0.9, 0.6), 96.0).follow(price, Vector2(0.5, 0.5))
+	var pin := h.get_parent() as Control
+	var tip := pin.position + h.position + h.tip_offset()
+	check(tip.distance_to(Vector2(270, 40)) < 1.0, "fingertip on the price's middle (got %s)" % tip)
+	card.free()

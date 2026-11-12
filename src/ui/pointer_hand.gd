@@ -18,6 +18,8 @@ var pressed := false: set = _set_pressed
 var _art: TextureRect
 var _anchor: Control = null   # menu use: the control the hand taps on
 var _at := Vector2(0.5, 0.5)  # ... and where on it (share of its size)
+var _target: Control = null   # follow(): the spot's own control, anywhere on the same canvas
+var _target_at := Vector2(0.5, 0.5)
 var _tw: Tween = null
 
 
@@ -68,22 +70,44 @@ func _set_pressed(v: bool) -> void:
 
 
 ## Menu pointer: a hand tapping on `b` at `at` (share of its size), freed with it and
-## following its real layout. A tap ripple marks the press.
+## following its real layout. A tap ripple marks the press. On a container (a card), the hand
+## rides a pin layer the container stretches over its content, so the container never lays
+## the hand out itself.
 static func on(b: Control, at := Vector2(0.5, 0.5), size_px := 100.0) -> PointerHand:
 	var h := make(size_px)
 	h.z_index = 5
-	h._anchor = b
 	h._at = at
-	b.add_child(h)
-	b.resized.connect(h.place)
+	var host := b
+	if b is Container:
+		host = Control.new()
+		host.name = "HandPin"
+		host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(host)
+	h._anchor = host
+	host.add_child(h)
+	host.resized.connect(h.place)
 	h.place()
 	h.tap_loop()
 	return h
 
 
 func place() -> void:
-	if _anchor != null and is_instance_valid(_anchor):
+	if _target != null and is_instance_valid(_target) and get_parent() is Control:
+		# Both transforms carry any ancestor's scale or slide, so the spot stays exact.
+		var g := _target.get_global_transform() * (_target.size * _target_at)
+		set_tip((get_parent() as Control).get_global_transform().affine_inverse() * g)
+	elif _anchor != null and is_instance_valid(_anchor):
 		set_tip(_anchor.size * _at)
+
+
+## Keeps the fingertip on `target` (at `at` of its size) while the hand stays where on() put
+## it: for a spot inside a box row (a card's price) that would lay the hand out itself.
+func follow(target: Control, at := Vector2(0.5, 0.5)) -> PointerHand:
+	_target = target
+	_target_at = at
+	target.item_rect_changed.connect(place)
+	place()
+	return self
 
 
 ## Taps forever: the hand comes down onto the spot, presses (ripple), lifts off.
