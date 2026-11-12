@@ -176,3 +176,34 @@ func test_huge_gang_figures_are_capped_and_rows_match_the_sim() -> void:
 		view._process(1.0 / 60.0)
 		eq((hv["label"] as Label3D).text, NumFormat.fmt(int(hv["h"]["count"])), "its count label is short (18K)")
 	_drop(parts)
+
+
+## Review: late gate rows ("+512", "+2,800", "945") ran into one unreadable number. Every
+## sign and troop tag of every gate row in L1-50 (and each red gate at its max) fits its lane.
+func test_gate_numbers_fit_their_lanes_in_every_level() -> void:
+	var worst := 0.0
+	var where := ""
+	for n in range(1, Config.LEVEL_COUNT + 1):
+		for e in Config.level(n)["events"]:
+			if String(e["type"]) != "gates":
+				continue
+			for at_max in [false, true]:
+				var gates: Array = (e["gates"] as Array).duplicate(true)
+				for g in gates:
+					if at_max and g.has("max"):
+						g["v"] = int(g["max"])
+				var v := GateRowView.new().setup({"gates": gates, "z": 0.0}, UiKit.FONT, LevelView.LANE_X)
+				for lane in v._panels:
+					var p: Dictionary = v._panels[lane]
+					var tag: Label3D = p["tag"]
+					var label: Label3D = p["label"]
+					var w := 0.0
+					if tag.visible:
+						w = GateRowView.text_w(tag, tag.text)
+					elif label.text != "":
+						w = GateRowView.text_w(label, label.text) + (GateRowView.ICON_W + 0.1 if (p["icon"] as Sprite3D).visible else 0.0)
+					if w > worst:
+						worst = w
+						where = "L%d at %s lane %d '%s'" % [n, str(e["at"]), lane, tag.text if tag.visible else label.text]
+				v.free()
+	check(worst <= GateRowView.FIT_W + 0.001, "widest gate number %.2f m <= %.2f m (%s)" % [worst, GateRowView.FIT_W, where])

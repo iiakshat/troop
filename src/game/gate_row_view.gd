@@ -24,6 +24,10 @@ var _plank_mat: StandardMaterial3D
 var row: Dictionary
 var _panels: Dictionary = {}   # lane -> {gate, root, sign, mat, label, tag, pad_mat, flash, pop}
 var _fade := -1.0
+## The widest a lane's sign or tag may draw (m): the lane (2.8 m) less a gap, over the 1.2x a
+## far sign is drawn at (_process), so neighbours never run into one number.
+const FIT_W := (2.8 - 0.35) / 1.2
+const ICON_W := 1.05   # the sign's icon beside a number (m)
 
 
 func setup(r: Dictionary, font: Font, lane_x: Array) -> GateRowView:
@@ -120,7 +124,11 @@ func refresh(gate: Dictionary, ticked := false) -> void:
 	tag_icon.visible = troops and not blocked and gate["op"] == "recruit"
 	if tag_icon.visible:
 		tag_icon.texture = UiKit.icon_texture(String(gate["unit"]))
-	(p["tag"] as Label3D).position.x = 0.38 if tag_icon.visible else 0.0
+	# Recruits: the rank's icon sits above the number, so the number has the lane's width.
+	var tag: Label3D = p["tag"]
+	tag.position.x = 0.0
+	set_size(tag, fit_size(tag, tag.text, FIT_W, 120))
+	tag_icon.position = Vector3(0, 2.9 + 0.5 * glyph_h(tag) + 0.5, 0)
 	if blocked:
 		_board_up(p)
 	var label: Label3D = p["label"]
@@ -138,9 +146,10 @@ func refresh(gate: Dictionary, ticked := false) -> void:
 		icon.position.x = 0.0 if solo else -0.6
 		icon.pixel_size = (1.35 if solo else 1.05) / 320.0
 		label.position.x = 0.0 if solo else 0.55
-		label.font_size = 130 if chars <= 2 else 100
+		set_size(label, fit_size(label, label.text, FIT_W - ICON_W - 0.1, 130 if chars <= 2 else 100))
 	else:
 		label.position.x = 0.0
+		set_size(label, fit_size(label, label.text, FIT_W, label.font_size))
 	var c: Color = GREY if blocked else info["color"]
 	(p["mat"] as StandardMaterial3D).albedo_color = Color(c, 0.85)
 	(p["pad_mat"] as StandardMaterial3D).albedo_color = Color(c, 0.35)
@@ -306,6 +315,30 @@ static func _drum_part(r: float, h: float, y: float, mat: Material) -> MeshInsta
 	mi.material_override = mat
 	mi.position.y = y
 	return mi
+
+
+## The largest font size from `size` down at which `text` (with its outline) is at most `max_w`
+## metres wide on label `l`.
+static func fit_size(l: Label3D, text: String, max_w: float, size: int, min_size := 36) -> int:
+	while size > min_size and text_w(l, text, size) > max_w:
+		size -= 4
+	return size
+
+
+static func text_w(l: Label3D, text: String, size := -1) -> float:
+	var f: Font = l.font if l.font != null else ThemeDB.fallback_font
+	var s := l.font_size if size < 0 else size
+	return (f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, s).x + 2.0 * int(s * 0.24)) * l.pixel_size
+
+
+## A font size with its outline in proportion (as _label made it).
+static func set_size(l: Label3D, size: int) -> void:
+	l.font_size = size
+	l.outline_size = int(size * 0.24)
+
+
+static func glyph_h(l: Label3D) -> float:
+	return l.font_size * l.pixel_size
 
 
 static func _label(font: Font, size: int, px: float) -> Label3D:
