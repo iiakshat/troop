@@ -38,12 +38,12 @@
   },
 
   "power": {
-    "_note": "Squad Power (lobby top bar, level nodes) = dps x (hero knife dmg x throws/s + starting constables x constable dmg x rate) + cap x squad cap + charge x (shields + bombs) + coin_pct x evidence coin bonus in percent; all from the station's real effects (units.json base numbers). recommended = [[level, power], ...], linear between anchors, fitted with tests/econ_sim.gd to what a player who spends their coins has at that level. More than 15% below it, the current or next node shows a warning tint (never under the first-build pointer); every level is still winnable without upgrades.",
+    "_note": "Squad Power (lobby top bar, level nodes) = dps x (hero knife dmg x throws/s + starting constables x constable dmg x rate + weapon dps) + cap x squad cap + coin_pct x evidence coin bonus in percent. Weapon dps (Armory, config/armory.json) = sum over owners of ref_troops[owner] x the unit's dmg x rate x (dmg_mult x rate_mult - 1), plus the starting constables' pistol gain: the dps a step adds to a typical squad (the hero's ref weighs his tapping). recommended = [[level, power], ...], linear between anchors, fitted with tests/econ_sim.gd to what a player who spends their coins has at that level. More than 15% below it, the current or next node shows a warning tint (never under the first-build pointer).",
     "dps": 10.0,
     "cap": 0.2,
-    "charge": 15.0,
     "coin_pct": 1.0,
-    "recommended": [[1, 60], [3, 60], [5, 90], [10, 155], [20, 300], [30, 485], [40, 670], [50, 815]]
+    "ref_troops": { "hero": 6, "constable": 20, "sergeant": 4, "inspector": 3, "swat": 3, "sniper": 2, "commando": 2 },
+    "recommended": [[1, 60], [3, 60], [5, 100], [7, 150], [10, 380], [15, 780], [20, 1050], [25, 1500], [30, 1900], [40, 2450], [50, 3000]]
   },
 
   "city": {

@@ -202,3 +202,67 @@ func test_squad_power_and_pointers() -> void:
 	check(not best.is_empty() and best["kind"] != "cosmetic", "points at progress, never a cosmetic")
 	var loss := Economy.best_upgrade_after_loss(save, eco, units)
 	check(not loss.is_empty() and bool(loss["affordable"]) and int(loss["gain"]) > 0, "a loss points at an affordable room that adds power")
+
+
+# ---------------------------------------------------------------- v2: the Armory in the economy
+
+func _armory_save(coins: int, unlocked: int) -> Dictionary:
+	var s := SaveData.migrate({}, eco)
+	s["coins"] = coins
+	s["unlocked"] = unlocked
+	return s
+
+
+func test_squad_power_counts_weapons() -> void:
+	var units := Config.units()
+	var s := _armory_save(100000, 10)
+	var p0 := Economy.save_power(s, units, eco)
+	eq(p0, Economy.station_power({}, units, eco), "no weapon steps: the station's power")
+	for id in ["knives", "service_pistol", "shotgun", "revolver"]:
+		var g := Economy.weapon_power_gain(s, id, units, eco)
+		check(g > 0, id + " step adds power (%d)" % g)
+		Armory.buy(s, id)
+		eq(Economy.save_power(s, units, eco), p0 + g, id + ": the gain shown is the gain got")
+		p0 = Economy.save_power(s, units, eco)
+	eq(Economy.weapon_power_gain(s, "finale_pistol", units, eco), 0, "Bottle Shot handling is not squad power")
+	var fx := SaveData.effects(eco, s["station"])
+	fx["weapons"] = Armory.sim_upgrades(s)["weapons"]
+	eq(Economy.squad_power(fx, units, eco), Economy.save_power(s, units, eco), "squad_power(fx with weapons) = save_power")
+
+
+func test_best_purchase_can_be_a_weapon_step() -> void:
+	var units := Config.units()
+	var s := _armory_save(60, 2)
+	var kinds := {}
+	for p in Economy.purchases(s, 1_800_000_000, eco, units):
+		kinds[String(p["kind"]) + ":" + String(p["id"])] = int(p["cost"])
+	check(kinds.has("weapon:knives") and kinds.has("weapon:service_pistol"), "open weapon steps are for sale")
+	check(not kinds.has("weapon:shotgun"), "a locked weapon is not for sale")
+	eq(int(kinds.get("weapon:knives", -1)), Armory.next_cost(s, "knives"), "price = the track's next step")
+	s["unlocked"] = 8   # under the recommended power at L8: progress first
+	var best := Economy.best_purchase(s, 1_800_000_000, eco, units)
+	eq(String(best.get("kind", "")), "weapon", "the best buy is a weapon step")
+	check(int(best["gain"]) > 0 and int(best["cost"]) <= 60, "it adds power and is affordable")
+	# The pointer prefers the most power per coin across rooms and weapons.
+	s["coins"] = 5000
+	best = Economy.best_purchase(s, 1_800_000_000, eco, units)
+	var ratio := float(best["gain"]) / float(best["cost"])
+	for p in Economy.affordable(s, 1_800_000_000, eco, units):
+		if p["kind"] == "room" or p["kind"] == "weapon":
+			check(float(p["gain"]) / float(p["cost"]) <= ratio + 0.0001, "%s:%s is not a better deal" % [p["kind"], p["id"]])
+
+
+func test_loss_tip_points_at_weapon_when_it_helps_most() -> void:
+	var units := Config.units()
+	var s := _armory_save(400, 6)
+	var tip := Economy.best_upgrade_after_loss(s, eco, units)
+	eq(String(tip.get("kind", "")), "weapon", "a weapon step helps most early on")
+	eq(int(tip["gain"]), Economy.weapon_power_gain(s, String(tip["id"]), units, eco), "gain is that step's power")
+	eq(String(tip["room"]), String(tip["id"]), "room key kept for the result screen")
+	check(bool(tip["affordable"]), "affordable with 400 coins")
+	# Every squad weapon maxed: the tip falls back to a station room.
+	for id in Armory.ids():
+		if not Armory.is_finale(String(id)):
+			Armory.set_index(s, String(id), Armory.total_buys(String(id)))
+	tip = Economy.best_upgrade_after_loss(s, eco, units)
+	eq(String(tip.get("kind", "")), "room", "a room when no weapon step is left")
