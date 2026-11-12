@@ -1,8 +1,10 @@
 class_name StationPanel
 extends Control
 ## Police station upgrades. One row per room: its glossy icon, what you have now ▸ what the
-## next level gives (real numbers from the game: knife damage, throws per second, starting
-## squad, squad cap, coin bonus, powers at the start), level pips (up to 10), and a coin price.
+## next level gives (real numbers from the game: starting squad, squad cap, coin bonus), level
+## pips (up to 10), and a coin price. v2: the knife and speed rooms moved to the Armory (a
+## weapon card at the bottom opens it) and the garage's charges became the shield / bomb
+## powers (5 h recharge).
 ## A level that needs a district liberated first shows district_lock + that district's number
 ## on the button instead of the price. Frees itself on close and emits `closed`.
 ## v1.1 (why upgrade): a Squad Power pill next to the coins, the in-game thing each room
@@ -53,12 +55,13 @@ func _ready() -> void:
 	pills.alignment = BoxContainer.ALIGNMENT_CENTER
 	pills.add_theme_constant_override("separation", 18)
 	col.add_child(pills)
-	_power = UiKit.pill("power", str(Game.squad_power()), Color.WHITE)
+	_power = UiKit.pill("power", Economy.fmt_power(Game.squad_power()), Color.WHITE)
 	pills.add_child(_power)
 	_coins = UiKit.pill("coin", str(int(Game.save["coins"])))
 	pills.add_child(_coins)
 	for room in Game.economy["station_order"]:
 		col.add_child(_row(String(room)))
+	col.add_child(_armory_link())
 	refresh()
 	UiKit.pop(p, 0.7)
 	if _rows.has(focus_room):
@@ -143,8 +146,40 @@ func _close() -> void:
 	queue_free()
 
 
+## v2: weapons are upgraded in the Armory; this card (weapon art + arrow) opens it in place.
+func _armory_link() -> Control:
+	var b := UiKit.button("", "yellow", 10, Vector2(0, 120))
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 14)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	UiKit.full_rect(row)
+	row.offset_bottom = -8
+	b.add_child(row)
+	for id in ["knives", "service_pistol", "shotgun"]:
+		row.add_child(ArmoryPanel.art_icon(id, 92))
+	row.add_child(RetentionPanel.icon_safe("play", 48, Color.WHITE))
+	if ArmoryPanel.anything_affordable():
+		UiKit.set_alert(b, true)
+	b.pressed.connect(_open_armory)
+	return b
+
+
+func _open_armory() -> void:
+	var parent := get_parent()
+	if parent == null:
+		return
+	if parent.has_method("open_panel"):
+		parent.call("open_panel", ArmoryPanel.new())   # the lobby swaps its overlay
+	else:
+		parent.add_child(ArmoryPanel.new())
+		_close()
+
+
 ## The number a room shows at a given level, using the game's real base stats.
 static func value_text(room: String, lv: int) -> String:
+	if not Game.economy["station"].has(room):
+		return ArmoryPanel.index_text(room, lv)   # a weapon track (improvement toasts)
 	var r: Dictionary = Game.economy["station"][room]
 	var units: Dictionary = Config.units()
 	var per := float(r["per"])
@@ -224,13 +259,13 @@ func _buy(room: String) -> void:
 
 ## Purchase celebration: the card flashes and pops, sparks burst from the button, the power
 ## pill counts up and a "+N" with the power emblem floats up from the card.
-func _celebrate(room: String, from: int, to: int) -> void:
+func _celebrate(room: String, from: float, to: float) -> void:
 	var c: Dictionary = _rows[room]
 	var card: Control = c["card"]
 	UiKit.pop(card, 0.85)
 	card.modulate = Color(1.8, 1.8, 1.4)
 	card.create_tween().tween_property(card, "modulate", Color.WHITE, 0.4)
-	UiKit.pill_count(_power, from, to, 0.6)
+	UiKit.pill_count(_power, from, to, 0.6, Economy.fmt_power)
 	UiKit.bump(_power, 1.3)
 	var btn: Control = c["buy"]
 	var centre := btn.get_global_rect().get_center()
@@ -246,12 +281,12 @@ func _celebrate(room: String, from: int, to: int) -> void:
 		tw.tween_property(sp, "global_position", sp.global_position + dir * randf_range(90.0, 150.0), 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		tw.tween_property(sp, "modulate:a", 0.0, 0.35).set_delay(0.15)
 		tw.chain().tween_callback(sp.queue_free)
-	if to > from:
+	if to >= from + 0.05:
 		var float_row := HBoxContainer.new()
 		float_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		float_row.z_index = 31
 		float_row.add_child(RetentionPanel.icon_safe("power", 56))
-		float_row.add_child(UiKit.label("+%d" % (to - from), 54, UiKit.YELLOW, 12))
+		float_row.add_child(UiKit.label("+" + Economy.fmt_power(to - from), 54, UiKit.YELLOW, 12))
 		add_child(float_row)
 		var r := card.get_global_rect()
 		float_row.global_position = r.position + Vector2(r.size.x * 0.4, 0)
@@ -273,9 +308,10 @@ func refresh() -> void:
 		(c["now"] as Label).text = value_text(room, lv)
 		(c["next"] as Label).text = "" if maxed else value_text(room, lv + 1)
 		(c["arrow"] as Control).visible = not maxed
-		var g := 0 if maxed else Game.room_power_gain(room)
-		(c["gain"] as Label).text = "+%d" % g
-		(c["gain_row"] as Control).modulate.a = 1.0 if g > 0 else 0.0
+		# Lightning gain = level-start firepower (spec v2 section 12.4): only training adds it.
+		var g: float = 0.0 if maxed else Game.room_power_gain(room)
+		(c["gain"] as Label).text = "+" + Economy.fmt_power(g)
+		(c["gain_row"] as Control).modulate.a = 1.0 if g >= 0.05 else 0.0
 		var pips: HBoxContainer = c["pips"]
 		for i in pips.get_child_count():
 			var sb := StyleBoxFlat.new()

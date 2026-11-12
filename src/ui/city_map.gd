@@ -572,7 +572,7 @@ func refresh_levels() -> void:
 		pw.visible = bool(info["show"])
 		b.modulate = WARN_TINT if bool(info["warn"]) else Color.WHITE
 		if pw.visible:
-			(pw.get_meta("label") as Label).text = str(rec)
+			(pw.get_meta("label") as Label).text = Economy.fmt_power(rec)
 			var psb: StyleBoxFlat = pw.get_theme_stylebox("panel")
 			psb.bg_color = Color(0.85, 0.2, 0.15, 0.92) if bool(info["warn"]) else Color(0.05, 0.1, 0.25, 0.8)
 	_set_current(cur)
@@ -618,7 +618,7 @@ const WARN_AHEAD := 1              ## only the current node and this many after 
 ## is winnable without upgrades, so it warns only on the current or next node, only when the
 ## recommendation is more than WARN_GAP above the player's Squad Power, and never while the
 ## first-build pointer is up (`quiet`), so the map never says "too weak" and "build this" at once.
-static func power_hint(state: String, n: int, current: int, rec: int, power: int, quiet := false) -> Dictionary:
+static func power_hint(state: String, n: int, current: int, rec: float, power: float, quiet := false) -> Dictionary:
 	var show := state != "beaten" and rec > 0 and n >= current and n <= current + POWER_AHEAD
 	var warn := show and not quiet and n <= current + WARN_AHEAD and float(rec) > float(power) * WARN_GAP
 	return {"show": show, "warn": warn}

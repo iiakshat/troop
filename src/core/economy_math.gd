@@ -114,9 +114,6 @@ static func stars_needed_for_chest(opened: int, economy: Dictionary = {}) -> int
 
 # ---------------------------------------------------------------- squad power (v1.1 5a)
 
-## Throws per second one Range level adds to the hero (LevelSim: rate + 0.5 x speed).
-const SPEED_STEP := 0.5
-
 static var _units_cache: Dictionary = {}
 
 
@@ -128,61 +125,201 @@ static func _units(units: Dictionary) -> Dictionary:
 	return _units_cache
 
 
-## Squad Power: one number from the station's real effects (SaveData.effects): the hero's knife
-## damage x throw rate, the starting constables' damage x rate, the squad cap, the power charges
-## and the coin bonus, weighted by economy.json "power". The lobby shows it and level nodes
-## compare against it.
-static func squad_power(fx: Dictionary, units: Dictionary = {}, economy: Dictionary = {}) -> int:
+## Nominal firepower of a squad (spec v2 section 12.4): damage per second against an
+## unarmoured target, summed over `counts` = {owner: troops} ("hero" = 1 for the hero), each
+## troop dealing dmg x rate x rounds per shot (multi) x its Armory multipliers (`weapons` =
+## Armory.sim_upgrades()["weapons"]: {owner: {dmg_mult, rate_mult}}). The hero counts at full
+## tap rate (spec section 2: tapping lifts him to 1.0 x his base rate). Splash, pierce and armour
+## are left out: it is the nominal number the HUD shows. A local helper: COMBAT's
+## Squad.firepower() is the same formula in the level (the integrator unifies the two).
+static func firepower(counts: Dictionary, weapons: Dictionary = {}, units: Dictionary = {}) -> float:
+	var allies: Dictionary = _units(units)["allies"]
+	var v := 0.0
+	for owner in counts:
+		if not allies.has(owner):
+			continue
+		var a: Dictionary = allies[owner]
+		var per := float(a["dmg"]) * float(a["rate"]) * float(a.get("multi", 1))
+		v += float(counts[owner]) * per * _dps_mult(weapons, String(owner))
+	return v
+
+
+## Squad Power (lobby, level nodes, Armory and Station pills) = the firepower a level starts
+## with: the hero at full tap rate plus the starting constables (station training), with the
+## Armory's multipliers (fx.weapons). Same unit and icon as the HUD's live firepower (spec v2
+## section 12.4). The squad cap and the coin bonus are not firepower, so they add nothing here.
+static func squad_power(fx: Dictionary, units: Dictionary = {}, _economy: Dictionary = {}) -> float:
+	var w: Dictionary = fx.get("weapons", {}) if fx.get("weapons") is Dictionary else {}
+	return firepower({"hero": 1, "constable": int(fx.get("squad", 0))}, w, units)
+
+
+## The squad a level builds, for weighing purchases (economy.json power.ref_troops: troops of
+## each rank on top of the starting squad; a rank counts once it has unlocked).
+static func ref_squad(fx: Dictionary, unlocked: int, units: Dictionary = {}, economy: Dictionary = {}) -> Dictionary:
+	var allies: Dictionary = _units(units)["allies"]
+	var refs: Dictionary = cfg(economy).get("power", {}).get("ref_troops", {})
+	var out := {"hero": 1, "constable": int(fx.get("squad", 0))}
+	for owner in refs:
+		if owner == "hero" or not allies.has(owner):
+			continue
+		if int(allies[owner].get("unlock", 1)) <= maxi(unlocked, 1):
+			out[owner] = int(out.get(owner, 0)) + int(refs[owner])
+	return out
+
+
+## What a purchase is worth to the pointer and the loss tip: the firepower it adds to the squad
+## a level builds (ref_squad), so a step for a rank that joins mid-level counts too. The squad cap
+## and the coin bonus are weighed with economy.json power.cap_value (firepower per troop of
+## extra cap) and power.coin_value (per percent of coin bonus); they are never shown as power.
+static func _value(fx: Dictionary, unlocked: int, units: Dictionary, economy: Dictionary) -> float:
 	var p: Dictionary = cfg(economy).get("power", {})
-	var u := _units(units)
-	var hero: Dictionary = u["allies"]["hero"]
-	var con: Dictionary = u["allies"]["constable"]
-	var hero_dps := (float(hero["dmg"]) + float(fx.get("knife", 0))) * (float(hero["rate"]) + SPEED_STEP * float(fx.get("speed", 0)))
-	var squad_dps := float(fx.get("squad", 0)) * float(con["dmg"]) * float(con["rate"])
-	var cap := float(LevelSim.squad_cap_for(u, 1, int(fx.get("capacity", 0))))  # district 1 cap + barracks %
-	var charges := float(fx.get("shield", 0)) + float(fx.get("bomb", 0))
-	var v := float(p.get("dps", 10.0)) * (hero_dps + squad_dps) + float(p.get("cap", 0.2)) * cap
-	v += float(p.get("charge", 15.0)) * charges + float(p.get("coin_pct", 1.0)) * float(fx.get("coins", 0.0)) * 100.0
-	return int(round(v))
+	var w: Dictionary = fx.get("weapons", {}) if fx.get("weapons") is Dictionary else {}
+	var v := firepower(ref_squad(fx, unlocked, units, economy), w, units)
+	v += float(p.get("cap_value", 0.0)) * float(fx.get("capacity", 0))
+	v += float(p.get("coin_value", 0.0)) * float(fx.get("coins", 0.0)) * 100.0
+	return v
 
 
-## Squad Power of a station (room -> level dict).
-static func station_power(station: Dictionary, units: Dictionary = {}, economy: Dictionary = {}) -> int:
+## A copy of units.json "allies" with each owner's dmg and rate times its Armory multipliers
+## (`weapons` = Armory.sim_upgrades()["weapons"]), the way LevelSim._init applies them. The
+## Codex compares ranks on it (spec v2 rule 6: the player's current upgraded stats).
+static func upgraded_allies(allies: Dictionary, weapons: Dictionary) -> Dictionary:
+	var out := allies.duplicate(true)
+	for owner in weapons:
+		if out.has(owner) and weapons[owner] is Dictionary:
+			var u: Dictionary = out[owner]
+			u["dmg"] = float(u["dmg"]) * float(weapons[owner].get("dmg_mult", 1.0))
+			u["rate"] = float(u["rate"]) * float(weapons[owner].get("rate_mult", 1.0))
+	return out
+
+
+static func _dps_mult(w: Dictionary, owner: String) -> float:
+	var m: Variant = w.get(owner)
+	if not (m is Dictionary):
+		return 1.0
+	return float(m.get("dmg_mult", 1.0)) * float(m.get("rate_mult", 1.0))
+
+
+## Everything Squad Power counts for a save: the station's effects and the armory's weapons.
+static func save_fx(save: Dictionary, economy: Dictionary = {}) -> Dictionary:
+	var fx := SaveData.effects(cfg(economy), save.get("station", {}))
+	fx["weapons"] = Armory.sim_upgrades(save)["weapons"]
+	return fx
+
+
+## Squad Power of a save (station + armory).
+static func save_power(save: Dictionary, units: Dictionary = {}, economy: Dictionary = {}) -> float:
+	return squad_power(save_fx(save, economy), units, economy)
+
+
+## Squad Power of a station (room -> level dict) with no weapon steps.
+static func station_power(station: Dictionary, units: Dictionary = {}, economy: Dictionary = {}) -> float:
 	return squad_power(SaveData.effects(cfg(economy), station), units, economy)
 
 
-## Power the station would have with one more level of `room`, minus what it has now.
-static func room_power_gain(station: Dictionary, room: String, units: Dictionary = {}, economy: Dictionary = {}) -> int:
+## Power the station would have with one more level of `room`, minus what it has now (only
+## training adds firepower at level start).
+static func room_power_gain(station: Dictionary, room: String, units: Dictionary = {}, economy: Dictionary = {}) -> float:
 	var next := station.duplicate()
 	next[room] = int(station.get(room, 0)) + 1
 	return station_power(next, units, economy) - station_power(station, units, economy)
 
 
+## Squad Power the save would gain from the next step of weapon track `id`: the hero's knives
+## and the constables' pistol (with starting constables) show at level start; other ranks join
+## during the level, so their steps add 0 here (their worth is weapon_value). 0 when maxed or
+## for a Bottle Shot track (those change handling, not the squad).
+static func weapon_power_gain(save: Dictionary, id: String, units: Dictionary = {}, economy: Dictionary = {}) -> float:
+	var fx := _next_weapon_fx(save, id, economy)
+	if fx.is_empty():
+		return 0.0
+	return squad_power(fx, units, economy) - save_power(save, units, economy)
+
+
+## The pointer's value of the next step of weapon track `id` (see _value), 0 when maxed or for a
+## Bottle Shot track.
+static func weapon_value(save: Dictionary, id: String, units: Dictionary = {}, economy: Dictionary = {}) -> float:
+	var fx := _next_weapon_fx(save, id, economy)
+	if fx.is_empty():
+		return 0.0
+	var unlocked := int(save.get("unlocked", 1))
+	return _value(fx, unlocked, units, economy) - _value(save_fx(save, economy), unlocked, units, economy)
+
+
+## The pointer's value of one more level of station room `room`.
+static func room_value(save: Dictionary, room: String, units: Dictionary = {}, economy: Dictionary = {}) -> float:
+	var station: Dictionary = save.get("station", {})
+	var next := station.duplicate()
+	next[room] = int(station.get(room, 0)) + 1
+	var fx := save_fx(save, economy)
+	var fx2 := SaveData.effects(cfg(economy), next)
+	fx2["weapons"] = fx["weapons"]
+	var unlocked := int(save.get("unlocked", 1))
+	return _value(fx2, unlocked, units, economy) - _value(fx, unlocked, units, economy)
+
+
+## save_fx with track `id` one step further ({} when maxed or a Bottle Shot track).
+static func _next_weapon_fx(save: Dictionary, id: String, economy: Dictionary) -> Dictionary:
+	if Armory.is_finale(id) or Armory.is_maxed(save, id):
+		return {}
+	var fx := save_fx(save, economy)
+	var nx := Armory.next_stats(save, id)
+	var owner := String(Armory.track(id)["owner"])
+	(fx["weapons"] as Dictionary)[owner] = {"dmg_mult": nx["dmg_mult"], "rate_mult": nx["rate_mult"]}
+	return fx
+
+
+## Squad Power / firepower as text (spec v2 section 12.4): one decimal below 100 (so a single
+## step shows), whole numbers from 100, in full up to 9,999, then 12.3K and 1.25M.
+static func fmt_power(v: float) -> String:
+	if v < 100.0:
+		return String.num(roundf(v * 10.0) / 10.0, 1).trim_suffix(".0")
+	var n := int(round(v))
+	if n < 10000:
+		return str(n)
+	if n < 1000000:
+		return "%sK" % _trim3(n / 1000.0)
+	return "%sM" % _trim3(n / 1000000.0)
+
+
+## 12.3 / 1.25 / 123: three significant digits, rounded down (never shows more than there is).
+static func _trim3(v: float) -> String:
+	if v >= 100.0:
+		return str(int(v))
+	if v >= 10.0:
+		return String.num(floorf(v * 10.0) / 10.0, 1).trim_suffix(".0")
+	return String.num(floorf(v * 100.0) / 100.0, 2).trim_suffix("0").trim_suffix(".0")
+
+
 ## Recommended Squad Power for a level: linear between the "power.recommended" anchors
 ## [[level, power], ...], fitted by tests/econ_sim.gd to what a player who spends their coins
 ## has at that level. Every level is still winnable below it; under it the map node warns.
-static func recommended_power(level: int, economy: Dictionary = {}) -> int:
+static func recommended_power(level: int, economy: Dictionary = {}) -> float:
 	var pts: Array = cfg(economy).get("power", {}).get("recommended", [])
 	if pts.is_empty():
-		return 0
+		return 0.0
 	if level <= int(pts[0][0]):
-		return int(pts[0][1])
+		return float(pts[0][1])
 	for i in range(1, pts.size()):
 		var a: Array = pts[i - 1]
 		var b: Array = pts[i]
 		if level <= int(b[0]):
 			var f := float(level - int(a[0])) / maxf(float(int(b[0]) - int(a[0])), 1.0)
-			return int(round(lerpf(float(a[1]), float(b[1]), f)))
-	return int(pts[pts.size() - 1][1])
+			return lerpf(float(a[1]), float(b[1]), f)
+	return float(pts[pts.size() - 1][1])
 
 
 # ---------------------------------------------------------------- what to buy (v1.1 item 5)
 
 ## Everything the player could spend coins on right now (coins aside): the next level of each
-## station room that is not locked or maxed, the next build of each building that can start
-## (district reached, a builder free), and each cosmetic not owned yet. Each entry:
-## {kind: room|building|cosmetic, id, cost, gain}; gain = Squad Power added (room), coins per
-## hour added (building) or 0 (cosmetic). Sorted cheapest first.
+## station room that is not locked or maxed, the next step of each Armory track that is open
+## and not maxed, the next build of each building that can start (district reached, a builder
+## free), and each cosmetic not owned yet. Each entry: {kind: room|weapon|building|cosmetic, id,
+## cost, gain, value}; gain = Squad Power added (room, weapon: level-start firepower, so 0 for a
+## rank that joins mid-level, the cap, the coin bonus and a Bottle Shot track), coins per hour
+## added (building) or 0 (cosmetic); value = what the pointer weighs a room or weapon step by
+## (room_value / weapon_value: firepower in the squad a level builds), 0 otherwise. Sorted
+## cheapest first.
 static func purchases(save: Dictionary, now: int, economy: Dictionary = {}, units: Dictionary = {}) -> Array:
 	var eco := cfg(economy)
 	var out := []
@@ -191,18 +328,25 @@ static func purchases(save: Dictionary, now: int, economy: Dictionary = {}, unit
 	for room in eco.get("station_order", []):
 		var c := SaveData.room_cost(eco, station, String(room), liberated)
 		if c >= 0:
-			out.append({"kind": "room", "id": String(room), "cost": c, "gain": room_power_gain(station, String(room), units, eco)})
+			out.append({"kind": "room", "id": String(room), "cost": c, "gain": room_power_gain(station, String(room), units, eco),
+				"value": room_value(save, String(room), units, eco)})
+	var unlocked := int(save.get("unlocked", 1))
+	for id in Armory.ids():
+		var c := Armory.next_cost(save, String(id))
+		if c >= 0 and not Armory.is_locked(String(id), unlocked):
+			out.append({"kind": "weapon", "id": String(id), "cost": c, "gain": weapon_power_gain(save, String(id), units, eco),
+				"value": weapon_value(save, String(id), units, eco)})
 	for id in City.ids(eco):
 		var c := City.next_cost(save, id, eco)
 		if c >= 0 and City.can_start(save, id, now, eco) == "":
 			var lv := City.target_level(save, id)
 			var gain := City.income_at(id, lv + 1, eco) - City.income_at(id, lv, eco)
-			out.append({"kind": "building", "id": id, "cost": c, "gain": gain})
+			out.append({"kind": "building", "id": id, "cost": c, "gain": gain, "value": 0.0})
 	var owned: Array = save.get("owned", [])
 	for kind in ["outfits", "knives"]:
 		for cos in eco.get("cosmetics", {}).get(kind, []):
 			if not owned.has(String(cos["id"])) and int(cos["price"]) > 0:
-				out.append({"kind": "cosmetic", "id": String(cos["id"]), "cost": int(cos["price"]), "gain": 0, "set": kind})
+				out.append({"kind": "cosmetic", "id": String(cos["id"]), "cost": int(cos["price"]), "gain": 0, "value": 0.0, "set": kind})
 	out.sort_custom(func(a, b): return int(a["cost"]) < int(b["cost"]))
 	return out
 
@@ -213,51 +357,57 @@ static func affordable(save: Dictionary, now: int, economy: Dictionary = {}, uni
 	return purchases(save, now, economy, units).filter(func(p): return int(p["cost"]) <= coins)
 
 
+## Squad progress (a station room or a weapon step) that adds firepower in a level.
+static func is_power_buy(p: Dictionary) -> bool:
+	return (p["kind"] == "room" or p["kind"] == "weapon") and float(p.get("value", 0.0)) > 0.0
+
+
 ## The single best thing to buy now ({} when nothing useful is affordable). Below the
-## recommended power for the current level: the room with the most power per coin. Otherwise
-## the building with the most income per coin (it pays for later buys), else the best room.
-## Cosmetics are never pointed at (they are a choice, not progress).
+## recommended power for the current level: the room or weapon step with the most value per
+## coin (firepower in the squad a level builds). Otherwise the building with the most income per coin (it pays for later buys), else
+## the best room or weapon step. Cosmetics and Bottle Shot handling are never pointed at
+## (they are a choice, not progress).
 static func best_purchase(save: Dictionary, now: int, economy: Dictionary = {}, units: Dictionary = {}) -> Dictionary:
 	var eco := cfg(economy)
-	var best_room := {}
+	var best_power := {}
 	var best_bld := {}
 	for p in affordable(save, now, eco, units):
-		var ratio := float(p["gain"]) / maxf(float(p["cost"]), 1.0)
-		if p["kind"] == "room" and (best_room.is_empty() or ratio > float(best_room["ratio"])):
-			best_room = p.duplicate()
-			best_room["ratio"] = ratio
+		var ratio := float(p["value"] if is_power_buy(p) else p["gain"]) / maxf(float(p["cost"]), 1.0)
+		if is_power_buy(p) and (best_power.is_empty() or ratio > float(best_power["ratio"])):
+			best_power = p.duplicate()
+			best_power["ratio"] = ratio
 		elif p["kind"] == "building" and (best_bld.is_empty() or ratio > float(best_bld["ratio"])):
 			best_bld = p.duplicate()
 			best_bld["ratio"] = ratio
 	var level := maxi(int(save.get("unlocked", 1)), 1)
-	var under := station_power(save.get("station", {}), units, eco) < recommended_power(level, eco)
-	if under and not best_room.is_empty():
-		return best_room
+	var under := save_power(save, units, eco) < recommended_power(level, eco)
+	if under and not best_power.is_empty():
+		return best_power
 	if not best_bld.is_empty():
 		return best_bld
-	return best_room
+	return best_power
 
 
-## The upgrade that would have helped a lost level most: the room (not locked, not maxed) whose
-## next level adds the most Squad Power, preferring ones the player can afford now.
-## {room, cost, gain, affordable}, or {} when every room is locked or maxed.
+## The upgrade that would have helped a lost level most: the station room (not the coin bonus) or
+## weapon step (open, not maxed) that adds the most firepower in a level (value), preferring ones the player can
+## afford now. {kind: room|weapon, id, room (= id, for the result screen), cost, gain (Squad
+## Power added), value, affordable}, or {} when everything is locked or maxed.
 static func best_upgrade_after_loss(save: Dictionary, economy: Dictionary = {}, units: Dictionary = {}) -> Dictionary:
 	var eco := cfg(economy)
 	var coins := int(save.get("coins", 0))
-	var station: Dictionary = save.get("station", {})
-	var liberated := City.districts_liberated(save, eco)
 	var best := {}
-	for room in eco.get("station_order", []):
-		var c := SaveData.room_cost(eco, station, String(room), liberated)
-		if c < 0:
+	for p in purchases(save, 0, eco, units):
+		# A coin bonus never wins a fight: the loss tip is about the squad.
+		if not is_power_buy(p) or (p["kind"] == "room" and String(room(String(p["id"]), eco).get("effect", "")) == "coins"):
 			continue
-		var gain := room_power_gain(station, String(room), units, eco)
-		var e := {"room": String(room), "cost": c, "gain": gain, "affordable": c <= coins}
+		var c := int(p["cost"])
+		var v := float(p["value"])
+		var e := {"kind": p["kind"], "id": p["id"], "room": p["id"], "cost": c, "gain": float(p["gain"]), "value": v, "affordable": c <= coins}
 		if best.is_empty():
 			best = e
 		elif bool(e["affordable"]) != bool(best["affordable"]):
 			if bool(e["affordable"]):
 				best = e
-		elif gain > int(best["gain"]) or (gain == int(best["gain"]) and c < int(best["cost"])):
+		elif v > float(best["value"]) + 0.0001 or (absf(v - float(best["value"])) <= 0.0001 and c < int(best["cost"])):
 			best = e
 	return best

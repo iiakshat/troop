@@ -1,12 +1,15 @@
 class_name BoosterPanel
 extends RetentionPanel
-## Before a level: the level number (crown on boss levels), the 3 boosters (head start, extra
-## shield, extra bomb) as cards with the tokens you own; tap a card to take one into the level
-## (tick + glow), or watch one rewarded ad per booster per level for a free token (it gets
-## picked at once). The big Play button spends the picked tokens (Game.use_boosters) and emits
-## start(used) with what was really spent, e.g. {"headstart": 1, "bomb": 1}; the caller passes
-## it to Game.level_upgrades(used) / Game.level_started(level, used). The X just closes (no
-## start). Nothing is preselected and nothing is spent until Play.
+## Before a level: the level number (crown on boss levels) and three cards.
+## Head start: the tokens you own; tap to take one into the level (tick + glow), or watch one
+## rewarded ad per level for a free token (picked at once). The big Play button spends the
+## picked tokens (Game.use_boosters) and emits start(used) with what was really spent, e.g.
+## {"headstart": 1}; the caller passes it to Game.level_upgrades(used) /
+## Game.level_started(level, used). The X just closes (no start).
+## Shield and bomb (v2 powers, spec section 7): not picked; every charge you have (free +
+## stored) comes along by itself (tick when there is one) and only the ones used are spent.
+## While the free charge recharges the card shows a clock and the time left (h:mm), and the
+## ad button under it refills the free charge now (rewarded ad).
 
 signal start(boosters: Dictionary)
 
@@ -76,14 +79,49 @@ func _booster_card(id: String) -> VBoxContainer:
 	var mark := check_mark(64)
 	mark.position = Vector2(134, -14)
 	tile.add_child(mark)
-	var ad := ad_button("booster_" + id, "+1", Vector2(188, 96))
-	ad.pressed.connect(_on_ad.bind(id))
+	# Powers: the recharge clock and time left, over the effect number while recharging.
+	var timer := HBoxContainer.new()
+	timer.alignment = BoxContainer.ALIGNMENT_CENTER
+	timer.add_theme_constant_override("separation", 4)
+	timer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	timer.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	timer.offset_left = -90
+	timer.offset_right = 90
+	timer.offset_top = 136
+	timer.offset_bottom = 184
+	timer.add_child(icon_safe("clock", 40))
+	var tl := UiKit.label("", 36, Color.WHITE, 9)
+	timer.add_child(tl)
+	timer.visible = false
+	tile.add_child(timer)
+	var ad: Button
+	if is_power(id):
+		ad = ad_button("booster_" + id, "", Vector2(188, 96), "clock")
+		ad.pressed.connect(_on_refill.bind(id))
+	else:
+		ad = ad_button("booster_" + id, "+1", Vector2(188, 96))
+		ad.pressed.connect(_on_ad.bind(id))
 	v.add_child(ad)
 	v.set_meta("tile", tile)
+	v.set_meta("what", what)
 	v.set_meta("count", count)
 	v.set_meta("mark", mark)
 	v.set_meta("ad", ad)
+	v.set_meta("timer", timer)
+	v.set_meta("timer_label", tl)
 	return v
+
+
+static func is_power(id: String) -> bool:
+	return SaveData.POWERS.has(id)
+
+
+## A recharge countdown as h:mm (minutes rounded up), next to the clock icon.
+static func time_text(seconds: int) -> String:
+	if seconds <= 0:
+		return ""
+	var m := ceili(seconds / 60.0)
+	return "%d:%02d" % [m / 60, m % 60]
 
 
 static func _effect_text(id: String, cfg: Dictionary) -> String:
@@ -97,6 +135,9 @@ func _refresh() -> void:
 	for id in _cards:
 		var v: VBoxContainer = _cards[id]
 		var have := int(owned.get(id, 0))
+		if is_power(id):
+			_refresh_power(id, v, have)
+			continue
 		var picked := bool(_picked.get(id, false))
 		var tile: Button = v.get_meta("tile")
 		(v.get_meta("count") as Label).text = "×%d" % have
@@ -110,7 +151,41 @@ func _refresh() -> void:
 		ad.visible = Game.booster_ad_available(id)
 
 
+func _refresh_power(id: String, v: VBoxContainer, have: int) -> void:
+	var st: Dictionary = Game.power_state(id)
+	var secs := int(st["seconds_left"])
+	var tile: Button = v.get_meta("tile")
+	(v.get_meta("count") as Label).text = "×%d" % have
+	(v.get_meta("mark") as Control).visible = have > 0
+	(v.get_meta("timer") as Control).visible = secs > 0
+	(v.get_meta("what") as Control).visible = secs <= 0
+	(v.get_meta("timer_label") as Label).text = time_text(secs)
+	var colr := "green" if have > 0 else "grey"
+	for sname in ["normal", "hover"]:
+		tile.add_theme_stylebox_override(sname, UiKit._tex_box(colr, "rectangle"))
+	tile.add_theme_stylebox_override("pressed", UiKit._tex_box(colr, "rectangle", true))
+	tile.modulate.a = 1.0 if have > 0 else 0.7
+	(v.get_meta("ad") as Button).visible = Game.can_refill_power(id)
+
+
+var _tick := 0.0
+
+
+func _process(delta: float) -> void:
+	_tick += delta
+	if _tick >= 1.0:
+		_tick = 0.0
+		for id in _cards:
+			if is_power(id):
+				_refresh_power(id, _cards[id], Game.power_available(id))
+
+
 func _toggle(id: String) -> void:
+	if is_power(id):
+		# Powers come along by themselves: a tap just shows what is there.
+		UiKit.pop((_cards[id] as Control).get_meta("tile"), 0.92)
+		sfx(["tap"], -6.0)
+		return
 	if bool(_picked.get(id, false)):
 		_picked.erase(id)
 	elif int(Game.boosters().get(id, 0)) > 0:
@@ -131,6 +206,32 @@ func _on_ad(id: String) -> void:
 			burst(centre(tile), 10)
 			UiKit.pop(tile, 0.8)
 		_refresh())
+
+
+## Rewarded "refill now" for a recharging shield or bomb.
+func _on_refill(id: String) -> void:
+	watch_ad("booster_" + id, func(ok: bool):
+		if ok and Game.refill_power(id):
+			var tile: Control = (_cards[id] as Control).get_meta("tile")
+			sfx(["upgrade", "recruit"])
+			burst(centre(tile), 10)
+			UiKit.pop(tile, 0.8)
+		_refresh())
+
+
+# ---------------------------------------------------------------- for tests
+
+func power_count(id: String) -> int:
+	return int(Game.boosters().get(id, 0))
+
+
+func power_timer_text(id: String) -> String:
+	var v: Control = _cards[id]
+	return (v.get_meta("timer_label") as Label).text if (v.get_meta("timer") as Control).visible else ""
+
+
+func power_refill_visible(id: String) -> bool:
+	return ((_cards[id] as Control).get_meta("ad") as Control).visible
 
 
 ## What the Play button sends: one of each picked booster the player really has.

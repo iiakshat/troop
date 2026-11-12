@@ -21,7 +21,7 @@ extends Node
 ##   after 1.6 s, for screenshots)
 ##   perf=1 (frame-time log: _local/perf.log, one line per frame: frame, ms, pipelines
 ##   compiled, events; the worst level frames are printed when the level ends; perf=path)
-##   panel=station|style|settings|daily|missions|spin|codex|booster|chest|welcome|revive|
+##   panel=station|armory|style|settings|daily|missions|spin|codex|booster|chest|welcome|revive|
 ##         liberation|map   (open that screen over the map; map = the map alone)
 ## Autoplay skips boosters, the revive offer, the ad popups and the tutorials.
 
@@ -101,6 +101,8 @@ func _ready() -> void:
 	result.lobby_pressed.connect(func(): _leave_result(false))
 	result.retry_pressed.connect(func(): _open_boosters(current_level, true))
 	result.station_pressed.connect(_open_station_from_result)
+	if result.has_signal("tip_pressed"):
+		result.tip_pressed.connect(_open_tip_from_result)
 	ui.add_child(result)
 	result.visible = false
 	if _args.has("level"):
@@ -238,6 +240,8 @@ func _debug_panel(name: String) -> void:
 	match name:
 		"station":
 			lobby.open_panel(StationPanel.new())
+		"armory":
+			lobby.open_panel(ArmoryPanel.new())
 		"style":
 			lobby.open_panel(StylePanel.new())
 		"settings":
@@ -294,10 +298,23 @@ func _open_boosters(n: int, over_result := false) -> void:
 		ui.add_child(p)
 
 
+## The loss tip's item over the result screen (v2): the Armory on a weapon, else the Station.
+func _open_tip_from_result() -> void:
+	if result.visible and not Armory.track(result.tip_room).is_empty():
+		var a := ArmoryPanel.new()
+		a.focus_id = result.tip_room
+		ui.add_child(a)
+		a.tree_exited.connect(func():
+			if is_instance_valid(result):
+				result.refresh_alerts())
+		return
+	_open_station_from_result()
+
+
 ## Station over the result screen; closing it returns to the result (badges refresh).
 func _open_station_from_result() -> void:
 	var p := StationPanel.new()
-	p.focus_room = result.tip_room if result.visible else ""
+	p.focus_room = result.tip_room if result.visible and Game.economy["station"].has(result.tip_room) else ""
 	ui.add_child(p)
 	p.tree_exited.connect(func():
 		if is_instance_valid(result):
@@ -387,6 +404,9 @@ func _on_rank_joined(unit: String, _first_time: Variant = true) -> void:
 
 
 func _clear_level() -> void:
+	# v2 powers: a level left before its end (restart, home) still spends the charges it used.
+	if is_instance_valid(view) and view.sim != null:
+		Game.settle_powers(view.sim.charges)
 	for n in [view, hud, lobby, pause_panel]:
 		if is_instance_valid(n):
 			n.queue_free()
@@ -416,7 +436,7 @@ func _run_stats(r: Dictionary) -> Dictionary:
 func _run_info(r: Dictionary) -> Dictionary:
 	return {"troops": view.sim.squad.total(), "peak": view.sim.peak_squad,
 		"time": snappedf(view.sim.time, 0.1), "boosters": _boosters, "revived": view.sim.revived,
-		"cause": String(r.get("cause", ""))}
+		"cause": String(r.get("cause", "")), "charges": view.sim.charges.duplicate()}
 
 
 func _on_finished(r: Dictionary) -> void:

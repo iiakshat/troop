@@ -15,24 +15,34 @@
     "replay_mult": 0.5
   },
 
-  "_station_note": "Cost of level k = base x growth^(k-1), rounded (price_round). req[k-1] = district that must be liberated before level k can be bought (0 = open from the start). Effects: knife +per damage, speed +per (sim: +0.5 throws/s each), squad +per starting constables, capacity +per percent of the district's squad cap (units.json world.squad_cap), coins +per finale coin bonus, charges: shield ceil(lv/2), bomb floor(lv/2).",
+  "_station_note": "Cost of level k = base x growth^(k-1), rounded (price_round). req[k-1] = district that must be liberated before level k can be bought (0 = open from the start). Effects: squad +per starting constables, capacity +per percent of the district's squad cap (units.json world.squad_cap), coins +per finale coin bonus. v2: the knife and speed rooms moved to the Armory (config/armory.json) and the garage's charges to `powers`.",
   "station": {
-    "armory":   { "icon": "knife",      "max": 10, "base": 80,  "growth": 1.45, "req": [0, 0, 0, 1, 1, 2, 2, 3, 4, 4], "effect": "knife",    "per": 1 },
-    "range":    { "icon": "speed",      "max": 10, "base": 80,  "growth": 1.45, "req": [0, 0, 0, 1, 1, 2, 2, 3, 4, 4], "effect": "speed",    "per": 1 },
     "training": { "icon": "badge",      "max": 10, "base": 110, "growth": 1.45, "req": [0, 0, 0, 1, 1, 2, 2, 3, 4, 4], "effect": "squad",    "per": 1 },
     "barracks": { "icon": "station",    "max": 6,  "base": 150, "growth": 1.6,  "req": [0, 1, 2, 3, 4, 4],             "effect": "capacity", "per": 25 },
-    "evidence": { "icon": "money",      "max": 6,  "base": 200, "growth": 1.6,  "req": [0, 1, 2, 3, 4, 4],             "effect": "coins",    "per": 0.1 },
-    "garage":   { "icon": "police_car", "max": 4,  "base": 300, "growth": 2.2,  "req": [0, 1, 2, 4],                   "effect": "charges",  "per": 1 }
+    "evidence": { "icon": "money",      "max": 6,  "base": 200, "growth": 1.6,  "req": [0, 1, 2, 3, 4, 4],             "effect": "coins",    "per": 0.1 }
   },
-  "station_order": ["armory", "range", "training", "barracks", "evidence", "garage"],
+  "station_order": ["training", "barracks", "evidence"],
+
+  "legacy_station_v3": {
+    "_note": "Save migration v3 -> v4 only: the prices of the removed rooms. The coins a player spent on armory (knife) and range (speed) levels become hero-knife track steps worth at least as much (rounded up; anything past a maxed track comes back as coins). Garage level g becomes ceil(g/2) stored shields and floor(g/2) stored bombs.",
+    "armory": { "max": 10, "base": 80,  "growth": 1.45 },
+    "range":  { "max": 10, "base": 80,  "growth": 1.45 },
+    "garage": { "max": 4,  "base": 300, "growth": 2.2 },
+    "knife_track": "knives"
+  },
+
+  "powers": {
+    "_note": "Shield and bomb (src/core/powers_timer.gd): `free` charges of each recharge recharge_s seconds after the first is used (real clock, guarded against moving it back); a rewarded ad refills them at once. Stored charges from daily rewards, spin, chests and missions come on top. Every charge the player has is available in each level; only the ones used are spent.",
+    "free": { "shield": 1, "bomb": 1 },
+    "recharge_s": 18000
+  },
 
   "power": {
-    "_note": "Squad Power (lobby top bar, level nodes) = dps x (hero knife dmg x throws/s + starting constables x constable dmg x rate) + cap x squad cap + charge x (shields + bombs) + coin_pct x evidence coin bonus in percent; all from the station's real effects (units.json base numbers). recommended = [[level, power], ...], linear between anchors, fitted with tests/econ_sim.gd to what a player who spends their coins has at that level. More than 15% below it, the current or next node shows a warning tint (never under the first-build pointer); every level is still winnable without upgrades.",
-    "dps": 10.0,
-    "cap": 0.1,
-    "charge": 15.0,
-    "coin_pct": 1.0,
-    "recommended": [[1, 60], [3, 60], [5, 90], [10, 155], [20, 300], [30, 485], [40, 670], [50, 815]]
+    "_note": "Squad Power (spec v2 section 12.4; lobby top bar, level nodes, Armory and Station pills, lightning icon) = the HUD's firepower unit: nominal damage per second against an unarmoured target of the squad a level starts with = the hero at full tap rate (dmg x rate) + the starting constables (station training) x constable dmg x rate, each times its Armory dmg_mult x rate_mult (config/armory.json). The squad cap and the coin bonus are not firepower and add nothing. The pointer (best purchase, loss tip) weighs a room or weapon step by the firepower it adds to the squad a level builds: the starting squad plus ref_troops of each unlocked rank, plus cap_value per troop of extra squad cap and coin_value per percent of coin bonus (never shown). recommended = [[level, power], ...], linear between anchors, fitted with tests/econ_sim.gd to what a player who spends their coins has at that level. More than 15% below it, the current or next node shows a warning tint (never under the first-build pointer).",
+    "ref_troops": { "constable": 20, "sergeant": 4, "inspector": 3, "swat": 3, "sniper": 2, "commando": 2 },
+    "cap_value": 0.05,
+    "coin_value": 0.3,
+    "recommended": [[1, 3], [3, 3.1], [5, 3.1], [7, 3.1], [9, 9.1], [11, 9.3], [13, 12.4], [15, 15.1], [17, 21.2], [20, 25.3], [22, 28.6], [25, 28.6], [28, 29.6], [30, 34.5], [33, 45.5], [35, 52.7], [38, 52.7], [40, 52.7], [43, 63.2], [45, 63.2], [48, 64], [50, 64.8]]
   },
 
   "city": {
@@ -162,7 +172,8 @@
     "shield":    { "icon": "shield",    "charges": 1 },
     "bomb":      { "icon": "bomb",      "charges": 1 },
     "ad_per_level": 1,
-    "start": { "headstart": 1, "shield": 1, "bomb": 1 }
+    "_start": "v2: shield and bomb are no longer picked here; they come from `powers` (free + stored). start = head-start tokens a new save begins with.",
+    "start": { "headstart": 1 }
   },
 
   "ads": {
@@ -182,12 +193,13 @@
   },
 
   "cosmetics": {
+    "_note": "Looks only, never power. Outfits recolour the hero's shirt and pants and add one accessory on his head (src/game/hero_accessory.gd: cap, hood, shades, crown) in accessory_color. Knives recolour the blade and trail.",
     "outfits": [
-      { "id": "street",    "price": 0,   "shirt": "21c7b5", "pants": "3d5f9e" },
-      { "id": "tracksuit", "price": 250, "shirt": "d33b3b", "pants": "1e1e1e" },
-      { "id": "biker",     "price": 400, "shirt": "2a2a2a", "pants": "4a3524" },
-      { "id": "suit",      "price": 600, "shirt": "f2f2f2", "pants": "1b1b1b" },
-      { "id": "gold",      "price": 1200, "shirt": "f2c14e", "pants": "8a6a1f" }
+      { "id": "street",    "price": 0,    "shirt": "21c7b5", "pants": "3d5f9e", "accessory": "" },
+      { "id": "tracksuit", "price": 250,  "shirt": "d33b3b", "pants": "1e1e1e", "accessory": "cap",    "accessory_color": "f2f2f2" },
+      { "id": "biker",     "price": 400,  "shirt": "2a2a2a", "pants": "4a3524", "accessory": "hood",   "accessory_color": "2a2a2a" },
+      { "id": "suit",      "price": 600,  "shirt": "f2f2f2", "pants": "1b1b1b", "accessory": "shades", "accessory_color": "15171c" },
+      { "id": "gold",      "price": 1200, "shirt": "f2c14e", "pants": "8a6a1f", "accessory": "crown",  "accessory_color": "ffc93c" }
     ],
     "knives": [
       { "id": "steel", "price": 0,    "blade": "e6eaf0", "trail": "" },

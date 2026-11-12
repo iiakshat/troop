@@ -200,6 +200,8 @@ func _ready() -> void:
 	var hc: Dictionary = Game.economy["hero_colors"]
 	(_crowds["hero"] as Crowd).recolor({Color(String(hc["shirt"])): Color(String(outfit["shirt"])),
 		Color(String(hc["pants"])): Color(String(outfit["pants"]))})
+	HeroAccessory.attach(_crowds["hero"] as Crowd, outfit)   # v2: the outfit's head accessory
+	WeaponLook.apply_to_crowds(_crowds, Game.save)           # v2: Armory tier colours
 	var ks := Game.knife_skin()
 	fx.set_knife_skin(Color(String(ks["blade"])), String(ks["trail"]))
 	_sync_allies(Vector3(0, 0, 2))

@@ -83,7 +83,7 @@ static func show_upgrades(parent: Node, list: Array) -> PanelContainer:
 	head.add_theme_constant_override("separation", 8)
 	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	head.add_child(RetentionPanel.icon_safe("power", 56))
-	head.add_child(UiKit.label(str(Game.squad_power()), 44, UiKit.YELLOW, 9))
+	head.add_child(UiKit.label(Economy.fmt_power(Game.squad_power()), 44, UiKit.YELLOW, 9))
 	col.add_child(head)
 	for e in list.slice(0, 3):
 		var room := String(e["room"])
@@ -91,7 +91,10 @@ static func show_upgrades(parent: Node, list: Array) -> PanelContainer:
 		var line := HBoxContainer.new()
 		line.add_theme_constant_override("separation", 8)
 		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		line.add_child(RetentionPanel.icon_safe(StationPanel.effect_icon(String(r.get("effect", ""))), 46))
+		if r.is_empty() and not Armory.track(room).is_empty():
+			line.add_child(ArmoryPanel.art_icon(room, 46))   # v2: a weapon step bought
+		else:
+			line.add_child(RetentionPanel.icon_safe(StationPanel.effect_icon(String(r.get("effect", ""))), 46))
 		line.add_child(UiKit.label(StationPanel.value_text(room, int(e["before"])), 38, Color.WHITE, 8))
 		line.add_child(RetentionPanel.icon_safe("play", 28, UiKit.YELLOW))
 		line.add_child(UiKit.label(StationPanel.value_text(room, int(e["after"])), 38, UiKit.YELLOW, 8))

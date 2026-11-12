@@ -1,0 +1,620 @@
+{
+ "_note": "Armory (spec v2 section 6): one weapon track per weapon. A track has tiers (4) of steps_per_tier purchases each; tier 1 step 0 is what everyone starts with. Each buy adds `step` to the tier's numbers; the steps_per_tier-th buy of a tier evolves the weapon to the next tier (new name, calibre, art and a stat jump); the last tier fills its bar and is then maxed. Purchase n (0-based over the whole track) costs cost.base x cost.growth^n, rounded like every price (economy.json price_round). Squad tracks multiply their owner's dmg and rate in LevelSim (upgrades.weapons), never troop counts. Bottle Shot tracks (owner finale_<weapon>) only change handling through `extra`: key <finale.json weapon key>_add adds, _mult multiplies (magazine, kick, draw, sway, steadiness); no aim assist. unlock_level = the level where the rank or the district's finale weapon first appears; before it the card is locked. Names are our own (no real brand or model; web-checked 2026-11-12); calibres are real. Prices are tuned by tests/econ_sim.gd.",
+ "order": [
+  "knives",
+  "service_pistol",
+  "shotgun",
+  "revolver",
+  "rifle",
+  "sniper_rifle",
+  "launcher",
+  "finale_pistol",
+  "finale_bow",
+  "finale_stars",
+  "finale_sniper"
+ ],
+ "tracks": {
+  "knives": {
+   "owner": "hero",
+   "unlock_level": 1,
+   "steps_per_tier": 5,
+   "cost": {
+    "base": 45,
+    "growth": 1.21
+   },
+   "step": {
+    "dmg_mult": 0.05,
+    "rate_mult": 0.01,
+    "extra": {}
+   },
+   "tiers": [
+    {
+     "name": "Alley Dart",
+     "calibre": "110 mm",
+     "art": "armory/knives_t1",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {}
+    },
+    {
+     "name": "Quillback",
+     "calibre": "125 mm",
+     "art": "armory/knives_t2",
+     "dmg_mult": 1.5,
+     "rate_mult": 1.12,
+     "extra": {}
+    },
+    {
+     "name": "Ravenspike",
+     "calibre": "140 mm",
+     "art": "armory/knives_t3",
+     "dmg_mult": 2.2,
+     "rate_mult": 1.25,
+     "extra": {}
+    },
+    {
+     "name": "Stormquill",
+     "calibre": "160 mm",
+     "art": "armory/knives_t4",
+     "dmg_mult": 3.0,
+     "rate_mult": 1.4,
+     "extra": {}
+    }
+   ]
+  },
+  "service_pistol": {
+   "owner": "constable",
+   "unlock_level": 1,
+   "steps_per_tier": 5,
+   "cost": {
+    "base": 60,
+    "growth": 1.21
+   },
+   "step": {
+    "dmg_mult": 0.05,
+    "rate_mult": 0.01,
+    "extra": {}
+   },
+   "tiers": [
+    {
+     "name": "Patrol 9",
+     "calibre": "9mm",
+     "art": "armory/service_pistol_t1",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {}
+    },
+    {
+     "name": "Beatline 10",
+     "calibre": "10mm",
+     "art": "armory/service_pistol_t2",
+     "dmg_mult": 1.5,
+     "rate_mult": 1.12,
+     "extra": {}
+    },
+    {
+     "name": "Warden 45",
+     "calibre": ".45 ACP",
+     "art": "armory/service_pistol_t3",
+     "dmg_mult": 2.2,
+     "rate_mult": 1.25,
+     "extra": {}
+    },
+    {
+     "name": "Precinct 50",
+     "calibre": ".50 AE",
+     "art": "armory/service_pistol_t4",
+     "dmg_mult": 3.0,
+     "rate_mult": 1.4,
+     "extra": {}
+    }
+   ]
+  },
+  "shotgun": {
+   "owner": "sergeant",
+   "unlock_level": 4,
+   "steps_per_tier": 5,
+   "cost": {
+    "base": 100,
+    "growth": 1.21
+   },
+   "step": {
+    "dmg_mult": 0.05,
+    "rate_mult": 0.01,
+    "extra": {}
+   },
+   "tiers": [
+    {
+     "name": "Brickyard 20",
+     "calibre": "20-gauge",
+     "art": "armory/shotgun_t1",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {}
+    },
+    {
+     "name": "Riotline 12",
+     "calibre": "12-gauge",
+     "art": "armory/shotgun_t2",
+     "dmg_mult": 1.5,
+     "rate_mult": 1.12,
+     "extra": {}
+    },
+    {
+     "name": "Breachline 12",
+     "calibre": "12-gauge 3 in",
+     "art": "armory/shotgun_t3",
+     "dmg_mult": 2.2,
+     "rate_mult": 1.25,
+     "extra": {}
+    },
+    {
+     "name": "Thunderbox 10",
+     "calibre": "10-gauge",
+     "art": "armory/shotgun_t4",
+     "dmg_mult": 3.0,
+     "rate_mult": 1.4,
+     "extra": {}
+    }
+   ]
+  },
+  "revolver": {
+   "owner": "inspector",
+   "unlock_level": 7,
+   "steps_per_tier": 5,
+   "cost": {
+    "base": 125,
+    "growth": 1.21
+   },
+   "step": {
+    "dmg_mult": 0.05,
+    "rate_mult": 0.01,
+    "extra": {}
+   },
+   "tiers": [
+    {
+     "name": "Gumshoe 38",
+     "calibre": ".38 Special",
+     "art": "armory/revolver_t1",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {}
+    },
+    {
+     "name": "Ledger 357",
+     "calibre": ".357 Magnum",
+     "art": "armory/revolver_t2",
+     "dmg_mult": 1.5,
+     "rate_mult": 1.12,
+     "extra": {}
+    },
+    {
+     "name": "Verdict 44",
+     "calibre": ".44 Magnum",
+     "art": "armory/revolver_t3",
+     "dmg_mult": 2.2,
+     "rate_mult": 1.25,
+     "extra": {}
+    },
+    {
+     "name": "Last Word 454",
+     "calibre": ".454 Casull",
+     "art": "armory/revolver_t4",
+     "dmg_mult": 3.0,
+     "rate_mult": 1.4,
+     "extra": {}
+    }
+   ]
+  },
+  "rifle": {
+   "owner": "swat",
+   "unlock_level": 13,
+   "steps_per_tier": 5,
+   "cost": {
+    "base": 260,
+    "growth": 1.21
+   },
+   "step": {
+    "dmg_mult": 0.05,
+    "rate_mult": 0.01,
+    "extra": {}
+   },
+   "tiers": [
+    {
+     "name": "Stackline 545",
+     "calibre": "5.45mm",
+     "art": "armory/rifle_t1",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {}
+    },
+    {
+     "name": "Raidwire 556",
+     "calibre": "5.56mm",
+     "art": "armory/rifle_t2",
+     "dmg_mult": 1.5,
+     "rate_mult": 1.12,
+     "extra": {}
+    },
+    {
+     "name": "Gridlock 68",
+     "calibre": "6.8mm",
+     "art": "armory/rifle_t3",
+     "dmg_mult": 2.2,
+     "rate_mult": 1.25,
+     "extra": {}
+    },
+    {
+     "name": "Ironpoint 762",
+     "calibre": "7.62mm",
+     "art": "armory/rifle_t4",
+     "dmg_mult": 3.0,
+     "rate_mult": 1.4,
+     "extra": {}
+    }
+   ]
+  },
+  "sniper_rifle": {
+   "owner": "sniper",
+   "unlock_level": 21,
+   "steps_per_tier": 5,
+   "cost": {
+    "base": 380,
+    "growth": 1.21
+   },
+   "step": {
+    "dmg_mult": 0.05,
+    "rate_mult": 0.01,
+    "extra": {}
+   },
+   "tiers": [
+    {
+     "name": "Rooftop 308",
+     "calibre": ".308",
+     "art": "armory/sniper_rifle_t1",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {}
+    },
+    {
+     "name": "Steeple 7",
+     "calibre": "7mm",
+     "art": "armory/sniper_rifle_t2",
+     "dmg_mult": 1.5,
+     "rate_mult": 1.12,
+     "extra": {}
+    },
+    {
+     "name": "Farwatch 338",
+     "calibre": ".338",
+     "art": "armory/sniper_rifle_t3",
+     "dmg_mult": 2.2,
+     "rate_mult": 1.25,
+     "extra": {}
+    },
+    {
+     "name": "Highwire 50",
+     "calibre": ".50 BMG",
+     "art": "armory/sniper_rifle_t4",
+     "dmg_mult": 3.0,
+     "rate_mult": 1.4,
+     "extra": {}
+    }
+   ]
+  },
+  "launcher": {
+   "owner": "commando",
+   "unlock_level": 31,
+   "steps_per_tier": 5,
+   "cost": {
+    "base": 520,
+    "growth": 1.21
+   },
+   "step": {
+    "dmg_mult": 0.05,
+    "rate_mult": 0.01,
+    "extra": {}
+   },
+   "tiers": [
+    {
+     "name": "Stomper 40",
+     "calibre": "40mm",
+     "art": "armory/launcher_t1",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {}
+    },
+    {
+     "name": "Rumbler 60",
+     "calibre": "60mm",
+     "art": "armory/launcher_t2",
+     "dmg_mult": 1.5,
+     "rate_mult": 1.12,
+     "extra": {}
+    },
+    {
+     "name": "Quakemaker 66",
+     "calibre": "66mm",
+     "art": "armory/launcher_t3",
+     "dmg_mult": 2.2,
+     "rate_mult": 1.25,
+     "extra": {}
+    },
+    {
+     "name": "Avalanche 84",
+     "calibre": "84mm",
+     "art": "armory/launcher_t4",
+     "dmg_mult": 3.0,
+     "rate_mult": 1.4,
+     "extra": {}
+    }
+   ]
+  },
+  "finale_pistol": {
+   "owner": "finale_pistol",
+   "unlock_level": 11,
+   "steps_per_tier": 5,
+   "cost": {
+    "base": 120,
+    "growth": 1.17
+   },
+   "step": {
+    "dmg_mult": 0.0,
+    "rate_mult": 0.0,
+    "extra": {
+     "kick_deg_mult": -0.025,
+     "reload_s_mult": -0.015
+    }
+   },
+   "tiers": [
+    {
+     "name": "Snapshot 9",
+     "calibre": "9mm",
+     "art": "armory/finale_pistol_t1",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {
+      "mag_add": 0,
+      "kick_deg_mult": 1.0,
+      "reload_s_mult": 1.0
+     }
+    },
+    {
+     "name": "Quickdraw 10",
+     "calibre": "10mm",
+     "art": "armory/finale_pistol_t2",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {
+      "mag_add": 1,
+      "kick_deg_mult": 0.85,
+      "reload_s_mult": 0.9
+     }
+    },
+    {
+     "name": "Sharpeye 45",
+     "calibre": ".45 ACP",
+     "art": "armory/finale_pistol_t3",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {
+      "mag_add": 2,
+      "kick_deg_mult": 0.7,
+      "reload_s_mult": 0.8
+     }
+    },
+    {
+     "name": "Sunburst 50",
+     "calibre": ".50 AE",
+     "art": "armory/finale_pistol_t4",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {
+      "mag_add": 3,
+      "kick_deg_mult": 0.55,
+      "reload_s_mult": 0.7
+     }
+    }
+   ]
+  },
+  "finale_bow": {
+   "owner": "finale_bow",
+   "unlock_level": 21,
+   "steps_per_tier": 5,
+   "cost": {
+    "base": 200,
+    "growth": 1.17
+   },
+   "step": {
+    "dmg_mult": 0.0,
+    "rate_mult": 0.0,
+    "extra": {
+     "draw_s_mult": -0.02,
+     "shake_deg_mult": -0.025,
+     "steady_s_mult": 0.03
+    }
+   },
+   "tiers": [
+    {
+     "name": "Reedline 35",
+     "calibre": "35 lb",
+     "art": "armory/finale_bow_t1",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {
+      "draw_s_mult": 1.0,
+      "shake_deg_mult": 1.0,
+      "steady_s_mult": 1.0
+     }
+    },
+    {
+     "name": "Heron 45",
+     "calibre": "45 lb",
+     "art": "armory/finale_bow_t2",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {
+      "draw_s_mult": 0.88,
+      "shake_deg_mult": 0.85,
+      "steady_s_mult": 1.2
+     }
+    },
+    {
+     "name": "Longreach 55",
+     "calibre": "55 lb",
+     "art": "armory/finale_bow_t3",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {
+      "draw_s_mult": 0.76,
+      "shake_deg_mult": 0.7,
+      "steady_s_mult": 1.4
+     }
+    },
+    {
+     "name": "Stormwing 70",
+     "calibre": "70 lb",
+     "art": "armory/finale_bow_t4",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {
+      "draw_s_mult": 0.65,
+      "shake_deg_mult": 0.55,
+      "steady_s_mult": 1.65
+     }
+    }
+   ]
+  },
+  "finale_stars": {
+   "owner": "finale_stars",
+   "unlock_level": 31,
+   "steps_per_tier": 5,
+   "cost": {
+    "base": 280,
+    "growth": 1.17
+   },
+   "step": {
+    "dmg_mult": 0.0,
+    "rate_mult": 0.0,
+    "extra": {
+     "swipe_fast_mult": -0.018,
+     "ricochet_len_mult": 0.025
+    }
+   },
+   "tiers": [
+    {
+     "name": "Pinwheel",
+     "calibre": "4-point",
+     "art": "armory/finale_stars_t1",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {
+      "swipe_fast_mult": 1.0,
+      "ricochet_len_mult": 1.0
+     }
+    },
+    {
+     "name": "Cogstar",
+     "calibre": "6-point",
+     "art": "armory/finale_stars_t2",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {
+      "swipe_fast_mult": 0.9,
+      "ricochet_len_mult": 1.15
+     }
+    },
+    {
+     "name": "Razorbloom",
+     "calibre": "8-point",
+     "art": "armory/finale_stars_t3",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {
+      "swipe_fast_mult": 0.8,
+      "ricochet_len_mult": 1.3
+     }
+    },
+    {
+     "name": "Sunwheel",
+     "calibre": "12-point",
+     "art": "armory/finale_stars_t4",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {
+      "swipe_fast_mult": 0.7,
+      "ricochet_len_mult": 1.5
+     }
+    }
+   ]
+  },
+  "finale_sniper": {
+   "owner": "finale_sniper",
+   "unlock_level": 41,
+   "steps_per_tier": 5,
+   "cost": {
+    "base": 380,
+    "growth": 1.17
+   },
+   "step": {
+    "dmg_mult": 0.0,
+    "rate_mult": 0.0,
+    "extra": {
+     "sway_deg_mult": -0.025,
+     "steady_s_mult": 0.03,
+     "cycle_s_mult": -0.015
+    }
+   },
+   "tiers": [
+    {
+     "name": "Stillwater 308",
+     "calibre": ".308",
+     "art": "armory/finale_sniper_t1",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {
+      "sway_deg_mult": 1.0,
+      "steady_s_mult": 1.0,
+      "cycle_s_mult": 1.0
+     }
+    },
+    {
+     "name": "Coldbore 7",
+     "calibre": "7mm",
+     "art": "armory/finale_sniper_t2",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {
+      "sway_deg_mult": 0.85,
+      "steady_s_mult": 1.2,
+      "cycle_s_mult": 0.9
+     }
+    },
+    {
+     "name": "Far Shore 338",
+     "calibre": ".338",
+     "art": "armory/finale_sniper_t3",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {
+      "sway_deg_mult": 0.7,
+      "steady_s_mult": 1.4,
+      "cycle_s_mult": 0.8
+     }
+    },
+    {
+     "name": "Last Light 50",
+     "calibre": ".50 BMG",
+     "art": "armory/finale_sniper_t4",
+     "dmg_mult": 1.0,
+     "rate_mult": 1.0,
+     "extra": {
+      "sway_deg_mult": 0.55,
+      "steady_s_mult": 1.65,
+      "cycle_s_mult": 0.7
+     }
+    }
+   ]
+  }
+ }
+}

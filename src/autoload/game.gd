@@ -24,15 +24,25 @@ extends Node
 ## Police station: room_level(room)  room_cost(room) (-1 maxed or locked)  room_state(room)
 ##   -> {lv, max, cost, locked (district to liberate, 0 = open), maxed, can_buy}
 ##   buy_room(room) -> bool  upgrades()  coin_bonus()
-## Squad Power (v1.1): squad_power()  recommended_power(level)  room_power_gain(room)
-##   best_purchase(t) -> {kind, id, cost, gain} or {} (the map's pointing hand)
-##   best_upgrade_after_loss() -> {room, cost, gain, affordable} or {} (the loss screen)
+## Squad Power (v2 section 12.4: the HUD's firepower unit, a float; Economy.fmt_power shows it):
+##   squad_power()  recommended_power(level)  room_power_gain(room)  weapon_power_gain(id)
+##   best_purchase(t) -> {kind: room|weapon|building, id, cost, gain, value} or {} (the map's hand)
+##   best_upgrade_after_loss() -> {kind: room|weapon, id, room, cost, gain, value, affordable} or {}
+##   (the loss screen)
 ##   take_improvements() -> [{room, before, after}] bought since the last level start
 ## New Rank card: rank_card_due(level) -> ally id or ""  mark_rank_card(unit)
-## Boosters: boosters() -> {headstart, shield, bomb}  use_booster(id) -> bool
-##   use_boosters({id: n}) -> what was really spent
+## Boosters: boosters() -> {headstart, shield, bomb} (shield / bomb = power charges available)
+##   use_booster(id) -> bool  use_boosters({id: n}) -> what was really spent (head start only;
+##   shield and bomb come into every level by themselves)
 ##   booster_ad_available(id) -> bool  grant_booster_ad(id) -> bool (after a rewarded ad)
-##   level_upgrades(chosen) -> dict for LevelSim (station effects + chosen boosters)
+##   level_upgrades(chosen) -> dict for LevelSim (station effects, armory weapons, the power
+##   charges the player has, chosen boosters); remembers the charges brought in
+## Powers (v2): power_state(id, t) -> {free, free_max, stored, available, seconds_left}
+##   power_available(id, t)  use_power(id, t) -> bool  can_refill_power(id, t)
+##   refill_power(id, t) -> bool (after a rewarded ad)  settle_powers(remaining, t) (level end;
+##   win_level / lose_level call it when info has "charges")
+## Armory (v2): weapon_level(id) -> Vector2i(tier, step)  weapon_cost(id) (-1 maxed)
+##   weapon_locked(id)  buy_weapon(id) -> {ok, evolved, tier, step, cost}
 ## City: city_pending(t)  city_collect(mult := 1, t) -> coins  welcome_back(t) -> coins or 0
 ##   building_state(id, t) -> dict  start_build(id, t) -> bool  speed_up_build(id, t) -> seconds
 ##   city_income(t)  city_storage_cap(t)
@@ -41,7 +51,7 @@ extends Node
 ##   claim_mission_bonus() -> reward
 ## Spin: spin_state() -> dict  spin_free() / spin_ad() -> {index, reward} ({} if not allowed)
 ## Ranks: rank_seen(unit)  mark_rank_seen(unit) -> true the first time
-## Alerts: alerts() -> {daily, missions, spin, star_chest, station, city} for the "!" badges
+## Alerts: alerts() -> {daily, missions, spin, star_chest, station, armory, city} for the "!" badges
 ## Cosmetics, hints, settings: owns, pick_cosmetic, outfit, knife_skin, hint_seen, mark_hint,
 ##   toggle, vibrate, reset_progress.
 ## Rewards returned by claim/open/spin functions are already applied; they hold the concrete
@@ -59,6 +69,8 @@ signal spin_changed
 signal alerts_changed
 signal build_finished(id: String)
 signal mission_completed(index: int)
+signal powers_changed
+signal armory_changed(id: String)
 
 var units: Dictionary
 var economy: Dictionary
@@ -70,6 +82,7 @@ var date_override := ""               # tests: fixed date
 
 var _attempt := 0                     # level attempts this session
 var _booster_ads := {}                # booster id -> [attempt, count]
+var _powers_brought := {}             # shield / bomb charges the player took into this level
 var _tick := 0.0
 var _last_tick := 0
 
@@ -236,6 +249,8 @@ func level_reward(level: int, finale_coins: int) -> int:
 func win_level(level: int, finale_coins: int, stars_won: int, stats: Dictionary = {}, info: Dictionary = {}) -> Dictionary:
 	var first := not level_beaten(level)
 	var coins := level_reward(level, finale_coins)
+	if info.get("charges") is Dictionary:
+		settle_powers(info["charges"])
 	var lib_before := districts_liberated()
 	save["coins"] = int(save["coins"]) + coins
 	var gained := _set_stars(level, stars_won)
@@ -271,6 +286,8 @@ func win_level(level: int, finale_coins: int, stars_won: int, stats: Dictionary 
 
 
 func lose_level(level: int, stats: Dictionary = {}, info: Dictionary = {}) -> void:
+	if info.get("charges") is Dictionary:
+		settle_powers(info["charges"])
 	_record(stats)
 	write_save()
 	var params := info.duplicate()
@@ -401,9 +418,12 @@ func buy_room(room: String) -> bool:
 	return true
 
 
-## Bonuses handed to LevelSim (knife, speed, squad, capacity, coins, shield, bomb).
+## Bonuses handed to LevelSim: the station's (squad, capacity, coins) and the armory's
+## weapons ({owner: {dmg_mult, rate_mult}}).
 func upgrades() -> Dictionary:
-	return SaveData.effects(economy, save["station"])
+	var up := SaveData.effects(economy, save["station"])
+	up["weapons"] = Armory.sim_upgrades(save)["weapons"]
+	return up
 
 
 func coin_bonus() -> float:
@@ -415,16 +435,26 @@ func coin_bonus() -> float:
 var _improved: Array = []                # [{room, before, after}] since the last level start
 
 
-func squad_power() -> int:
-	return Economy.station_power(save["station"], units, economy)
+func squad_power() -> float:
+	return Economy.save_power(save, units, economy)
 
 
-func recommended_power(level: int) -> int:
+func recommended_power(level: int) -> float:
 	return Economy.recommended_power(level, economy)
 
 
-func room_power_gain(room: String) -> int:
+func room_power_gain(room: String) -> float:
 	return Economy.room_power_gain(save["station"], room, units, economy)
+
+
+## Squad Power the next step of weapon track `id` adds (0 for Bottle Shot tracks or maxed).
+## units.json allies with the player's Armory multipliers (the Codex's "= N constables").
+func upgraded_allies() -> Dictionary:
+	return Economy.upgraded_allies(units.get("allies", {}), Armory.sim_upgrades(save)["weapons"])
+
+
+func weapon_power_gain(id: String) -> float:
+	return Economy.weapon_power_gain(save, id, units, economy)
 
 
 func best_purchase(t := -1) -> Dictionary:
@@ -473,10 +503,15 @@ func mark_rank_card(unit: String) -> void:
 # ---------------------------------------------------------------- boosters
 
 func boosters() -> Dictionary:
-	return (save["boosters"] as Dictionary).duplicate()
+	var b := (save["boosters"] as Dictionary).duplicate()
+	for id in SaveData.POWERS:
+		b[id] = power_available(id)
+	return b
 
 
 func use_booster(id: String) -> bool:
+	if SaveData.POWERS.has(id):
+		return use_power(id)
 	if int(save["boosters"].get(id, 0)) <= 0:
 		return false
 	save["boosters"][id] = int(save["boosters"][id]) - 1
@@ -489,6 +524,8 @@ func use_booster(id: String) -> bool:
 func use_boosters(chosen: Dictionary) -> Dictionary:
 	var used := {}
 	for id in chosen:
+		if not SaveData.BOOSTERS.has(id):
+			continue  # v2: shield and bomb are not taken in as tokens any more
 		for k in int(chosen[id]):
 			if int(save["boosters"].get(id, 0)) <= 0:
 				break
@@ -523,14 +560,105 @@ func grant_booster_ad(id: String) -> bool:
 
 ## Station effects plus the boosters chosen for this level: shield / bomb add charges,
 ## headstart is passed as a count and as headstart_troops (count x boosters.headstart.troops).
+## v2: every shield / bomb charge the player has (free + stored) comes along; settle_powers()
+## spends the ones used. Chosen shield / bomb (debug runs only) add free extra charges.
 func level_upgrades(chosen: Dictionary = {}) -> Dictionary:
 	var up := upgrades()
 	var b: Dictionary = economy.get("boosters", {})
-	up["shield"] = int(up["shield"]) + int(chosen.get("shield", 0)) * int(b.get("shield", {}).get("charges", 1))
-	up["bomb"] = int(up["bomb"]) + int(chosen.get("bomb", 0)) * int(b.get("bomb", {}).get("charges", 1))
+	_powers_brought = {}
+	for id in SaveData.POWERS:
+		_powers_brought[id] = power_available(id)
+		up[id] = int(_powers_brought[id]) + int(chosen.get(id, 0)) * int(b.get(id, {}).get("charges", 1))
 	up["headstart"] = int(chosen.get("headstart", 0))
 	up["headstart_troops"] = int(up["headstart"]) * int(b.get("headstart", {}).get("troops", 5))
 	return up
+
+
+# ---------------------------------------------------------------- powers (v2)
+
+func power_state(id: String, t := -1) -> Dictionary:
+	var tt := _t(t)
+	return {
+		"free": PowersTimer.free_ready(save, id, tt, economy), "free_max": PowersTimer.free_max(id, economy),
+		"stored": int(PowersTimer.entry(save, id)["stored"]),
+		"available": PowersTimer.available(save, id, tt, economy),
+		"seconds_left": PowersTimer.seconds_left(save, id, tt, economy),
+	}
+
+
+func power_available(id: String, t := -1) -> int:
+	return PowersTimer.available(save, id, _t(t), economy)
+
+
+func use_power(id: String, t := -1) -> bool:
+	if not PowersTimer.use(save, id, _t(t), economy):
+		return false
+	write_save()
+	powers_changed.emit()
+	boosters_changed.emit(boosters())
+	return true
+
+
+## True while a free charge is recharging (the "refill with an ad" button).
+func can_refill_power(id: String, t := -1) -> bool:
+	return PowersTimer.free_ready(save, id, _t(t), economy) < PowersTimer.free_max(id, economy)
+
+
+## After the rewarded ad: the free charges are ready now.
+func refill_power(id: String, t := -1) -> bool:
+	if not can_refill_power(id, t):
+		return false
+	PowersTimer.refill_free(save, id, _t(t), economy)
+	write_save()
+	_log("power_refill", {"id": id})
+	powers_changed.emit()
+	boosters_changed.emit(boosters())
+	return true
+
+
+## Level end: `remaining` = the sim's charges left. Spends the owned charges that were used
+## (the level's own and power-gate charges count as used first). Returns {id: spent}.
+func settle_powers(remaining: Dictionary, t := -1) -> Dictionary:
+	var out := {}
+	for id in SaveData.POWERS:
+		if not _powers_brought.has(id):
+			continue
+		out[id] = PowersTimer.settle(save, id, int(_powers_brought[id]), int(remaining.get(id, 0)), _t(t), economy)
+	_powers_brought = {}
+	if not out.is_empty():
+		write_save()
+		powers_changed.emit()
+		boosters_changed.emit(boosters())
+	return out
+
+
+# ---------------------------------------------------------------- armory (v2)
+
+func weapon_level(id: String) -> Vector2i:
+	return Armory.level(save, id)
+
+
+func weapon_cost(id: String) -> int:
+	return Armory.next_cost(save, id)
+
+
+func weapon_locked(id: String) -> bool:
+	return Armory.is_locked(id, int(save["unlocked"]))
+
+
+func buy_weapon(id: String) -> Dictionary:
+	var before := Armory.index(save, id)
+	var r := Armory.buy(save, id)
+	if not bool(r["ok"]):
+		return r
+	_note_improvement(id, before, Armory.index(save, id))
+	_record({"upgrade": 1})
+	write_save()
+	_log("purchase", {"kind": "weapon", "id": id, "tier": r["tier"], "step": r["step"], "cost": r["cost"], "evolved": r["evolved"]})
+	coins_changed.emit(int(save["coins"]))
+	armory_changed.emit(id)
+	alerts_changed.emit()
+	return r
 
 
 # ---------------------------------------------------------------- city
@@ -727,9 +855,11 @@ func _grant(raw: Dictionary, scale := -1.0) -> Dictionary:
 	Rewards.apply(save, reward)
 	if int(reward.get("coins", 0)) != 0:
 		coins_changed.emit(int(save["coins"]))
-	for b in SaveData.BOOSTERS:
+	for b in SaveData.BOOSTERS + SaveData.POWERS:
 		if reward.has(b):
 			boosters_changed.emit(boosters())
+			if SaveData.POWERS.has(b):
+				powers_changed.emit()
 			break
 	return reward
 
@@ -759,6 +889,12 @@ func alerts(t := -1) -> Dictionary:
 		if c >= 0 and int(save["coins"]) >= c:
 			station = true
 			break
+	var armory := false
+	for id in Armory.ids():
+		var c := Armory.next_cost(save, String(id))
+		if c >= 0 and int(save["coins"]) >= c and not weapon_locked(String(id)):
+			armory = true
+			break
 	var city := City.pending_income(save, tt, economy) >= int(economy["city"].get("welcome_back", {}).get("min_coins", 1))
 	if not city:
 		for id in City.ids(economy):
@@ -775,6 +911,7 @@ func alerts(t := -1) -> Dictionary:
 		"spin": Spin.can_spin_free(save, date, economy) and not first,
 		"star_chest": bool(star_chest_progress()["ready"]),
 		"station": station,
+		"armory": armory,
 		"city": city,
 	}
 

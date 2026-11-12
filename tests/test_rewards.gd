@@ -7,12 +7,14 @@ var eco := Config.economy()
 func test_scale_and_apply() -> void:
 	var s := SaveData.migrate({}, eco)
 	s["coins"] = 10
-	s["boosters"] = {"headstart": 0, "shield": 0, "bomb": 0}
-	var r := Rewards.scaled({"coins": 100, "bomb": 2}, 1.5, eco)
-	eq(r, {"coins": 150, "bomb": 2}, "coins scaled, boosters not")
+	s["boosters"] = {"headstart": 0}
+	var r := Rewards.scaled({"coins": 100, "bomb": 2, "headstart": 1}, 1.5, eco)
+	eq(r, {"coins": 150, "bomb": 2, "headstart": 1}, "coins scaled, boosters not")
 	Rewards.apply(s, r)
 	eq(int(s["coins"]), 160, "coins added")
-	eq(int(s["boosters"]["bomb"]), 2, "bombs added")
+	eq(int(s["powers"]["bomb"]["stored"]), 2, "bombs added as stored charges (v2)")
+	eq(int(s["boosters"]["headstart"]), 1, "head-start token added")
+	check(not s["boosters"].has("bomb"), "bomb is not a booster token")
 	Rewards.apply(s, {"cosmetic": "fire"})
 	check((s["owned"] as Array).has("fire"), "cosmetic owned")
 	Rewards.apply(s, {"cosmetic": "fire"})

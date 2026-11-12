@@ -25,5 +25,9 @@ static func economy() -> Dictionary:
 	return load_json("res://config/economy.json")
 
 
+static func armory() -> Dictionary:
+	return load_json("res://config/armory.json")
+
+
 static func level(n: int) -> Dictionary:
 	return load_json("res://config/levels/level_%d.json" % n)

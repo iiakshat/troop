@@ -106,7 +106,7 @@ static func run(eco: Dictionary, finale: Dictionary, units: Dictionary, opts: Di
 		row["bought"] = bought
 		row["buys"] = bought.filter(func(b): return not String(b).begins_with("c:")).size()
 		row["left"] = int(save["coins"])
-		row["power"] = Economy.station_power(save["station"], units, eco)
+		row["power"] = Economy.save_power(save, units, eco)
 		row["rec"] = Economy.recommended_power(L + 1, eco)
 		row["income_h"] = int(round(City.income_per_hour(save, t, eco)))
 		rows.append(row)
@@ -121,7 +121,7 @@ static func run(eco: Dictionary, finale: Dictionary, units: Dictionary, opts: Di
 
 
 ## Spends like the map's pointer suggests until nothing useful is affordable (one cosmetic
-## when nothing else was). Returns what was bought ("r:armory", "b:cafe", "c:fire").
+## when nothing else was). Returns what was bought ("r:training", "w:knives", "b:cafe", "c:fire").
 static func _spend(save: Dictionary, t: int, eco: Dictionary, units: Dictionary, o: Dictionary) -> Array:
 	var bought := []
 	while true:
@@ -140,6 +140,9 @@ static func _spend(save: Dictionary, t: int, eco: Dictionary, units: Dictionary,
 
 
 static func _buy(save: Dictionary, p: Dictionary, t: int, eco: Dictionary) -> void:
+	if p["kind"] == "weapon":
+		Armory.buy(save, String(p["id"]))  # spends the coins itself
+		return
 	save["coins"] = int(save["coins"]) - int(p["cost"])
 	match String(p["kind"]):
 		"room":
@@ -179,7 +182,7 @@ static func _spin_value(eco: Dictionary) -> float:
 	return v / maxf(total, 1.0)
 
 
-## Share of wins after which the coins bought 1-3 progress items (rooms, buildings; the
+## Share of wins after which the coins bought 1-3 progress items (rooms, weapons, buildings; the
 ## pointer's picks, cheapest-first ties), and the wins with none or more than 3.
 ## {in_band, none: [levels], over: [levels]}.
 static func summary(rows: Array) -> Dictionary:

@@ -337,10 +337,10 @@ static func fly_coins(layer: Node, from: Vector2, to: Vector2, count := 8, on_ea
 
 
 ## Counts a pill's number from `from` to `to` (after coins land) and gives it a little bump.
-static func pill_count(p: HBoxContainer, from: int, to: int, duration := 0.45) -> void:
+static func pill_count(p: HBoxContainer, from: float, to: float, duration := 0.45, fmt := Callable()) -> void:
 	var l: Label = p.get_meta("label")
 	var tw := p.create_tween()
-	tw.tween_method(func(v: float): l.text = str(int(round(v))), float(from), float(to), duration)
+	tw.tween_method(func(v: float): l.text = String(fmt.call(v)) if fmt.is_valid() else str(int(round(v))), from, to, duration)
 	bump(p)
 
 
