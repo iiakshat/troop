@@ -92,6 +92,7 @@ var _warm_at := Vector3(0, -8, -16)
 var _hq: Node3D
 var _hq_fill: MeshInstance3D
 var finale: BottleShot = null
+var _finale_warm: BottleShot = null   # this level's finale, built at load and resting (prewarm)
 var item_card: NewItemCard = null   # v2 §11: the "this is new" card + gold outline (new_item_card())
 var _hero_throw_t := -1.0
 var _bomb_throw_t := -1.0          # seconds into the hero's bomb throw (-1: none; spec v2 §12.5)
@@ -2238,25 +2239,8 @@ func _prewarm() -> void:
 			hint_ids.append(String(e.get("id", "")))
 	if not hint_ids.is_empty():
 		new_item_card().prewarm(hint_ids)
-	# The district's Bottle Shot stash, bottles and weapon (spec v2 §3): built out of sight now,
-	# their pipelines compiled while loading, not on the burst into the stash (a 173 ms frame
-	# with 38 pipeline compiles at L11's finish).
-	var bs := BottleShot.new().setup(world, fx, font, level_id, 0, Vector3.ZERO, 0.0)
-	bs.warm = true
-	var cam: Camera3D = world.camera if world else null
-	var deep := Vector3(0, -24, -40)
-	if cam != null and cam.is_inside_tree():
-		var vs := cam.get_viewport().get_visible_rect().size
-		var dir := cam.project_ray_normal(Vector2(vs.x * 0.5, vs.y * 0.75))
-		if dir.y < -0.2:
-			deep = cam.global_position + dir * ((cam.global_position.y + 22.0) / -dir.y)
-	# The bottle wall (about 1.5 m up, `distance` ahead of the hero) lands on that view ray,
-	# 22 m under the road.
-	bs.position = deep - Vector3(0, 1.5, -bs.logic.distance)
-	add_child(bs)
-	_warm.append(bs)
-	# The squad stands in the stash's lights there too: their lit and shadow variants compile now.
-	_warm_stash_at = bs.position + Vector3(0, 0, -bs.logic.distance * 0.5)
+	if not demo:
+		_prewarm_finale()   # the lobby's street never reaches a stash
 	# Every icon this level shows (UiKit caches them), and every glyph at every label size and
 	# outline the street uses (the font is rasterised per size on first draw).
 	for e in _level.get("events", []):
@@ -2278,6 +2262,28 @@ func _prewarm() -> void:
 		add_child(lab)
 		_warm.append(lab)
 		j += 1
+
+
+## This level's Bottle Shot (spec v2 §3): stash, bottles, HUD and weapon built now and drawn
+## out of sight while loading, then resting hidden; the burst into the stash plays this one
+## (it was a 173 ms frame with 38 pipeline compiles at L11's finish, then ~80 ms of building).
+func _prewarm_finale() -> void:
+	var bs := BottleShot.new().setup(world, fx, font, level_id, 0, Vector3.ZERO, 0.0)
+	bs.dormant = true
+	var cam: Camera3D = world.camera if world else null
+	var deep := Vector3(0, -24, -40)
+	if cam != null and cam.is_inside_tree():
+		var vs := cam.get_viewport().get_visible_rect().size
+		var dir := cam.project_ray_normal(Vector2(vs.x * 0.5, vs.y * 0.75))
+		if dir.y < -0.2:
+			deep = cam.global_position + dir * ((cam.global_position.y + 22.0) / -dir.y)
+	# The bottle wall (about 1.5 m up, `distance` ahead of the hero) lands on that view ray,
+	# 22 m under the road.
+	bs.position = deep - Vector3(0, 1.5, -bs.logic.distance)
+	add_child(bs)
+	_finale_warm = bs
+	# The squad stands in the stash's lights there too: their lit and shadow variants compile now.
+	_warm_stash_at = bs.position + Vector3(0, 0, -bs.logic.distance * 0.5)
 
 
 ## A point below the road along a view ray through the lower screen: drawn (inside the view
@@ -2311,6 +2317,8 @@ func _warm_frame() -> void:
 	_spot_ring.visible = false
 	if not _finish_live:
 		_finish.visible = false
+	if BottleShot.reusable(_finale_warm, level_id):
+		_finale_warm.rest()   # hidden and still until the squad reaches the stash
 
 
 func _spawn_finish(at: float) -> void:
@@ -2347,6 +2355,7 @@ func _build_finish() -> void:
 
 func _begin_strike() -> void:
 	# The squad gathers behind the hero; Bottle Shot takes over the camera.
+	var t0 := Time.get_ticks_usec()
 	_state = "finale"
 	_time_scale = 1.0
 	fx.scroll_speed = 0.0
@@ -2362,10 +2371,17 @@ func _begin_strike() -> void:
 	# district 5 pays like a full squad in district 1 and the economy's curve holds.
 	# Spec v2 §2: tapping adds finale coins (LevelSim.tap_coin_bonus_pct, the level's mean heat).
 	var bonus := Game.coin_bonus() + sim.tap_coin_bonus_pct() / 100.0
-	finale = BottleShot.new().setup(world, fx, font, level_id, sim.coin_troops(), hero, bonus)
+	var reuse := BottleShot.reusable(_finale_warm, level_id)
+	finale = _finale_warm if reuse else BottleShot.new().setup(world, fx, font, level_id, sim.coin_troops(), hero, bonus)
+	_finale_warm = null
 	finale.on_throw = func(): _hero_throw_t = 0.0
 	finale.done.connect(_on_finale_done)
-	add_child(finale)
+	if reuse:
+		finale.wake(sim.coin_troops(), hero, bonus)   # built at load: nothing to build now
+	else:
+		add_child(finale)
+	if perf_on:
+		perf_marks.append("strike_cpu:%.1f%s" % [(Time.get_ticks_usec() - t0) / 1000.0, "" if reuse else ":built"])
 
 
 func _on_finale_done(r: Dictionary) -> void:

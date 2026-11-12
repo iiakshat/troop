@@ -339,6 +339,16 @@ func _tick_casings(d: float) -> void:
 		i += 1
 
 
+func warm_parts() -> Array:
+	var b := WeaponModels.bullet(5.0)
+	var glint := OmniLight3D.new()
+	glint.light_color = Color("ffd9a0")
+	glint.light_energy = 2.0
+	glint.omni_range = 0.6
+	b.add_child(glint)
+	return [b, WeaponModels.casing(true), World._box(Vector3(0.12, 0.12, 0.01), Color(0.06, 0.05, 0.04))]
+
+
 func finish() -> void:
 	visible = false
 	_ui.queue_free()

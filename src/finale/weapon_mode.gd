@@ -144,6 +144,18 @@ func finish() -> void:
 	visible = false
 
 
+## Level-load prewarm (BottleShot dormant): `on` shows the weapon's parts that only appear
+## mid-shot (a muzzle flash...) so they draw out of sight while the level loads; off hides them.
+func warm(_on: bool) -> void:
+	pass
+
+
+## Level-load prewarm: one of each thing this weapon makes during play (tracers, casings,
+## projectiles...), built the same way, for BottleShot to draw out of sight while loading.
+func warm_parts() -> Array:
+	return []
+
+
 # ---------------------------------------------------------------- screen checks
 
 ## Pixel position of camera-space point `q` for the game camera (KEEP_WIDTH: `fov_h` is the

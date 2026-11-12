@@ -221,6 +221,10 @@ func _land(p: Vector3, dir: Vector3, any_hit: bool) -> void:
 	shot._scale = 1.0
 
 
+func warm_parts() -> Array:
+	return [WeaponModels.star()]
+
+
 func finish() -> void:
 	visible = false
 	_ui.queue_free()

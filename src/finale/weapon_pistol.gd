@@ -302,6 +302,15 @@ func _tick_reload(delta: float) -> void:
 			_auto = false
 
 
+func warm(on: bool) -> void:
+	_flash.visible = on
+
+
+func warm_parts() -> Array:
+	return [FinaleWeapon.streak_mesh(Color(1.0, 0.85, 0.45, 0.9), 0.014), WeaponModels.casing(),
+		WeaponModels.magazine(), World._box(Vector3(0.05, 0.05, 0.01), Color(0.06, 0.05, 0.04))]
+
+
 func finish() -> void:
 	visible = false
 	if is_instance_valid(shot.hud):
