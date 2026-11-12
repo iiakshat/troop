@@ -605,11 +605,11 @@ func _on_row_pass(e: Dictionary) -> void:
 	fx.burst(src + Vector3(0, 1.6, 0), col.lightened(0.3), 26, 7.0, 0.22, 0.6)
 	match String(g["op"]):
 		"num", "pct", "div", "mul", "recruit":
-			var txt := ("+%d" % delta) if delta >= 0 else ("%d" % delta)
+			var txt := NumFormat.signed(delta) if delta != 0 else "+0"
 			if g["op"] == "mul":
-				txt = "×%d  →  %d" % [int(g["k"]), int(e["after"])]
+				txt = "×%d  →  %s" % [int(g["k"]), NumFormat.fmt(int(e["after"]))]
 			elif g["op"] == "recruit":
-				txt = "+%d %s" % [delta, String(g["unit"]).to_upper()]
+				txt = "+%s %s" % [NumFormat.fmt(delta), String(g["unit"]).to_upper()]
 			if delta >= 0:
 				Sfx.play("gate_good")
 				Sfx.play("recruit", -4.0)
@@ -1147,7 +1147,7 @@ func _update_boss_bar(hv: Dictionary, d: float) -> void:
 	var fill: MeshInstance3D = hv["bar_fill"]
 	if hp != int(hv["bar_hp"]):
 		hv["bar_hp"] = hp
-		(hv["bar_num"] as Label3D).text = str(hp)
+		(hv["bar_num"] as Label3D).text = NumFormat.fmt(hp)
 		var frac := clampf(hp / mx, 0.0, 1.0)
 		fill.scale.x = maxf(frac, 0.001)
 		fill.position.x = -1.65 * (1.0 - frac)
@@ -1905,7 +1905,7 @@ func _update_obstacle(od: Dictionary, d: float) -> void:
 		var wood := String(ob.get("kind", "")) == "barricade"
 		fx.burst(on.position + Vector3(randf_range(-0.8, 0.8), 1.0, 0.4), Color("b88a52") if wood else Color(0.85, 0.85, 0.8), 3, 4.0, 0.14, 0.3)
 	od["hp_shown"] = hp
-	(lab as Label3D).text = str(hp)
+	(lab as Label3D).text = NumFormat.fmt(hp)
 	(lab as Label3D).visible = hp > 0 and not armed
 	var frac := float(ob["hp"]) / maxf(float(ob.get("hp_max", 1.0)), 1.0)
 	var cracks: Array = od["cracks"]
