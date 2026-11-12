@@ -911,22 +911,21 @@ static func harder_row(r: Dictionary) -> String:
 ## routes win at least RANDOM_FLOOR, and the no-ad guarantee holds.
 func calibrate_harder(n: int, base: Dictionary) -> Dictionary:
 	var b: Dictionary = BANDS[band(n, base)]
-	var keep_t := band_mid(b["keep"])
-	var fail_t := band_mid(b["fail"])
 	var routes := sample_routes(n, Autopilot.gate_row_count(base), fit_routes)
 	var k := 1.0
 	var kf := 1.0
 	for round_i in 2:
-		k = _fit_fail(n, base, kf, fail_t)
-		kf = _fit_keep(n, base, k, keep_t)
+		k = _fit_fail(n, base, k, kf, b["fail"])
+		kf = _fit_keep(n, base, k, kf, b["keep"])
 		if kf >= KF_MAX * 0.97:
 			# Even a huge last gang can't bring the greedy player down to the band: keep a
 			# modest climax and fit the rest to the fail rate.
 			kf = KF_FALLBACK
-			k = _fit_fail(n, base, kf, fail_t)
+			k = _fit_fail(n, base, k, kf, b["fail"])
 			break
 	if verbose:
-		print("      L%d fit k %.3f kf %.3f (noisy fails -> %.0f%%, greedy keeps -> %.0f%%)" % [n, k, kf, fail_t * 100.0, keep_t * 100.0])
+		print("      L%d fit k %.3f kf %.3f (%s band: noisy fails %s, greedy keeps %s)" % [n, k, kf, band(n, base),
+			str(b["fail"]), str(b["keep"])])
 	for i in 14:
 		var lv := scaled_level(base, k, kf)
 		var g := greedy_result(n, lv)
@@ -947,30 +946,41 @@ func calibrate_harder(n: int, base: Dictionary) -> Dictionary:
 	return evaluate_harder(n, base, k, kf)
 
 
-## k (every gang) that makes the noisy player fail the first try at about `want`.
-func _fit_fail(n: int, base: Dictionary, kf: float, want: float) -> float:
+## k (every gang) that brings the noisy player's first-try fail rate into `band_fail`: a
+## bisection in log k that starts at the current k0 and stops as soon as the rate is in band
+## (a level already in band is left alone).
+func _fit_fail(n: int, base: Dictionary, k0: float, kf: float, band_fail: Array) -> float:
 	var lo := log(0.15)
 	var hi := log(5.0)
+	var mid := clampf(log(k0), lo, hi)
 	for i in 9:
-		var mid := (lo + hi) * 0.5
-		if noisy_fail(n, scaled_level(base, exp(mid), kf)) < want:
-			lo = mid
+		var f := noisy_fail(n, scaled_level(base, exp(mid), kf))
+		if in_band(f, band_fail):
+			break
+		if f < float(band_fail[0]):
+			lo = mid   # too forgiving: bigger gangs
 		else:
 			hi = mid
-	return exp((lo + hi) * 0.5)
+		mid = (lo + hi) * 0.5
+	return exp(mid)
 
 
-## kf (the last wave, on top of k) that leaves the greedy player about `want` of his peak.
-func _fit_keep(n: int, base: Dictionary, k: float, want: float) -> float:
+## kf (the last wave, on top of k) that brings the greedy player's end ÷ peak squad into
+## `band_keep`, the same way from the current kf0.
+func _fit_keep(n: int, base: Dictionary, k: float, kf0: float, band_keep: Array) -> float:
 	var lo := log(0.4)
 	var hi := log(KF_MAX)
+	var mid := clampf(log(kf0), lo, hi)
 	for i in 8:
-		var mid := (lo + hi) * 0.5
-		if _ratio(greedy_result(n, scaled_level(base, k, exp(mid)))) > want:
-			lo = mid
+		var keep := _ratio(greedy_result(n, scaled_level(base, k, exp(mid))))
+		if in_band(keep, band_keep):
+			break
+		if keep > float(band_keep[1]):
+			lo = mid   # keeps too much: a bigger last wave
 		else:
 			hi = mid
-	return exp((lo + hi) * 0.5)
+		mid = (lo + hi) * 0.5
+	return exp(mid)
 
 
 ## checks=1 (spec v2.1 §2 guard checks): per level the greedy player at the pace (keep share
