@@ -19,8 +19,8 @@ extends Node
 ##   popup even under autoplay)
 ##   tutor=auto (the first-run tutorials run even under autoplay and act themselves out
 ##   after 1.6 s, for screenshots)
-##   perf=1 (frame-time log: _local/perf.log, one line per frame: frame, ms, events; plus
-##   the worst frames printed at quit; perf=path writes there)
+##   perf=1 (frame-time log: _local/perf.log, one line per frame: frame, ms, pipelines
+##   compiled, events; the worst level frames are printed when the level ends; perf=path)
 ##   panel=station|style|settings|daily|missions|spin|codex|booster|chest|welcome|revive|
 ##         liberation|map   (open that screen over the map; map = the map alone)
 ## Autoplay skips boosters, the revive offer, the ad popups and the tutorials.
@@ -50,7 +50,10 @@ var _back_armed := 0         # msec of the last Back on the bare map (twice in 2
 var _perf: FileAccess = null # perf=1 frame-time log
 var _perf_last := 0          # usec of the previous frame
 var _perf_level_t := 0.0     # seconds since the level started (the first 2 s are loading)
-var _perf_worst: Array = []  # [ms, frame, marks] over 33 ms, after the first 2 s of a level
+var _perf_worst: Array = []  # [ms, frame, pipelines, marks]: slow or compiling level frames after 2 s
+var _perf_pipes: Array = []   # pipeline compilations so far per kind (Performance monitors)
+var _perf_max := 0.0         # the slowest level frame after the first 2 s
+var _perf_done := false      # the level's PERF report is printed
 
 
 func _ready() -> void:
@@ -317,6 +320,9 @@ func _start_level(n: int, boosters: Dictionary = {}) -> void:
 	view = LevelView.new().setup(level, Game.level_upgrades(boosters), world, fx, UiKit.FONT)
 	view.perf_on = _perf != null
 	_perf_level_t = 0.0
+	_perf_done = false
+	_perf_max = 0.0
+	_perf_worst.clear()
 	add_child(view)
 	if world.has_method("set_theme"):
 		world.set_theme(ceili(n / 10.0))
@@ -629,37 +635,60 @@ func _on_frame() -> void:
 		get_tree().quit()
 
 
-## perf=1: one line per frame: frame, wall ms, cpu ms (process + physics + render setup and
-## draw calls, i.e. what vsync hides on a fast PC), gpu ms, level state:squad, sim events.
-## Frames over 33 ms (wall or cpu) after a level's first 2 s are printed, worst first, at quit.
+## perf=1: one line per frame: frame, wall ms, process ms, gpu ms, pipelines compiled this
+## frame (shader/material first use: the classic join hitch), level state:squad, sim events.
+## Frames over 33 ms or with a pipeline compile after a level's first 2 s are listed, worst
+## first, when the level ends (PERF lines on stdout) and at quit.
 func _perf_frame() -> void:
 	var now := Time.get_ticks_usec()
 	var ms := (now - _perf_last) / 1000.0
 	_perf_last = now
 	var marks := ""
 	var st := "menu"
+	var playing := false
 	if is_instance_valid(view):
 		_perf_level_t += ms / 1000.0
 		st = "%s:%d" % [view._state, view.sim.squad.total()]
+		playing = view._state == "play"
 		marks = " ".join(view.perf_marks)
 		view.perf_marks.clear()
-	var vp := get_viewport().get_viewport_rid()
-	var cpu := (Performance.get_monitor(Performance.TIME_PROCESS) + Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)) * 1000.0 \
-			+ RenderingServer.viewport_get_measured_render_time_cpu(vp) + RenderingServer.get_frame_setup_time_cpu()
-	var gpu := RenderingServer.viewport_get_measured_render_time_gpu(vp)
-	_perf.store_line("%d %.1f %.1f %.1f %s %s" % [_frame, ms, cpu, gpu, st, marks])
-	var worst := maxf(ms, cpu)
-	if worst > 33.0 and is_instance_valid(view) and _perf_level_t > 2.0:
-		_perf_worst.append([worst, _frame, st + " " + marks])
+	var proc := Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
+	var gpu := RenderingServer.viewport_get_measured_render_time_gpu(get_viewport().get_viewport_rid())
+	var compiled := 0
+	var mons := [Performance.PIPELINE_COMPILATIONS_CANVAS, Performance.PIPELINE_COMPILATIONS_MESH,
+			Performance.PIPELINE_COMPILATIONS_SURFACE, Performance.PIPELINE_COMPILATIONS_DRAW,
+			Performance.PIPELINE_COMPILATIONS_SPECIALIZATION]
+	for i in mons.size():
+		var c := int(Performance.get_monitor(mons[i]))
+		if _perf_pipes.size() > i and c > int(_perf_pipes[i]):
+			compiled += c - int(_perf_pipes[i])
+			marks += " pipe:%s+%d" % [["canvas", "mesh", "surface", "draw", "spec"][i], c - int(_perf_pipes[i])]
+		if _perf_pipes.size() <= i:
+			_perf_pipes.append(c)
+		_perf_pipes[i] = c
+	_perf.store_line("%d %.1f %.1f %.1f %d %s %s" % [_frame, ms, proc, gpu, compiled, st, marks])
+	if playing and _perf_level_t > 2.0:
+		_perf_max = maxf(_perf_max, ms)
+		if ms > 33.0 or compiled > 0:
+			_perf_worst.append([ms, _frame, compiled, st + " " + marks])
+	if _perf_level_t > 2.0 and not playing and not _perf_done and is_instance_valid(view):
+		_perf_done = true
+		_perf_report()
 	if _frame % 120 == 0:
 		_perf.flush()
 
 
+func _perf_report() -> void:
+	_perf_worst.sort_custom(func(a, b): return a[0] > b[0])
+	print("PERF level max frame %.1f ms after 2 s; %d frames over 33 ms or compiling" % [_perf_max, _perf_worst.size()])
+	for w in _perf_worst.slice(0, 12):
+		print("PERF %.1f ms frame %d pipelines %d %s" % w)
+	_perf.store_line("# max %.1f worst: %s" % [_perf_max, str(_perf_worst.slice(0, 12))])
+	_perf.flush()
+
+
 func _exit_tree() -> void:
 	if _perf:
-		_perf_worst.sort_custom(func(a, b): return a[0] > b[0])
-		print("PERF frames over 33 ms after 2 s: %d" % _perf_worst.size())
-		for w in _perf_worst.slice(0, 12):
-			print("PERF %.1f ms frame %d %s" % w)
-		_perf.store_line("# worst: %s" % str(_perf_worst.slice(0, 12)))
+		if not _perf_done:
+			_perf_report()
 		_perf.close()

@@ -46,6 +46,7 @@ var world: World
 var fx: Fx
 var font: Font
 var level_id := 1
+var _level: Dictionary = {}    # the level config (pre-warm reads its gates and icons)
 var district := 1
 var demo := false
 var paused := false
@@ -76,6 +77,11 @@ var _label_pop := 0.0
 var _shield: MeshInstance3D
 var _shield_mat: StandardMaterial3D
 var _finish: Node3D
+var _finish_live := false      # the finish was spawned (it is built hidden at load to pre-warm)
+const WARM_FRAMES := 3         # spec v2 §3: every crowd, effect, obstacle, gate and the stash
+var _warm: Array[Node3D] = []  # draws out of sight for the first frames, so their shaders
+var _warm_left := 0            # compile during loading and not when a rank joins
+var _warm_at := Vector3(0, -8, -16)
 var _hq: Node3D
 var _hq_fill: MeshInstance3D
 var finale: BottleShot = null
@@ -128,6 +134,7 @@ func setup(level: Dictionary, upgrades: Dictionary, w: World, f: Fx, fnt: Font, 
 	font = fnt
 	demo = is_demo
 	level_id = int(level.get("id", 1))
+	_level = level
 	district = district_of(level)
 	sim = LevelSim.new(level, Game.units, upgrades)
 	fx.scroll_speed = 0.0
@@ -172,6 +179,7 @@ func _ready() -> void:
 	_squad_label.modulate = Color("8fd0ff")
 	add_child(_squad_label)
 	_build_shield()
+	_prewarm()
 	var outfit := Game.outfit()
 	var hc: Dictionary = Game.economy["hero_colors"]
 	(_crowds["hero"] as Crowd).recolor({Color(String(hc["shirt"])): Color(String(outfit["shirt"])),
@@ -1439,6 +1447,8 @@ func _update_visuals(d: float) -> void:
 		(_crowds[fd["kind"]] as Crowd).push(Transform3D(basis, p), "hit", 0.1, 0.0)
 		i += 1
 
+	if _warm_left > 0:
+		_warm_frame()
 	for k in _crowds:
 		(_crowds[k] as Crowd).finish()
 	_update_telegraphs(d)
@@ -1447,7 +1457,7 @@ func _update_visuals(d: float) -> void:
 	for id in _rows:
 		var v: GateRowView = _rows[id]
 		v.position.z = float(v.row["z"])
-	if _finish:
+	if _finish and _finish_live:
 		_finish.position.z = -(sim.finish_at - sim.traveled)
 	for oid in _obstacles:
 		_update_obstacle(_obstacles[oid], d)
@@ -1801,10 +1811,104 @@ func _build_shield() -> void:
 	add_child(_shield)
 
 
+# ---------------------------------------------------------------- pre-warm (spec v2 §3)
+
+## Everything that first appears mid-level (each rank and enemy crowd, the effects, every
+## obstacle kind, a gate row, the rings, the stash) is drawn once below the road, inside the
+## camera's view and shadow range, for the first WARM_FRAMES frames. The GPU pipelines compile
+## while the level loads instead of as a hitch when followers join or the stash appears.
+func _prewarm() -> void:
+	_warm_at = _warm_spot()
+	_warm_left = WARM_FRAMES
+	_build_finish()
+	_finish.position = _warm_at + Vector3(0, -6, -6)
+	_spot_ring = _ground_ring(GateRowView.GOLD)
+	_spot_ring.position = _warm_at
+	var kinds := ["pothole", "barricade", "car", "barrel"]
+	for i in kinds.size():
+		var fake := {"id": -100 - i, "kind": kinds[i], "lane": 1, "z": 0.0, "hp": 10.0, "hp_max": 10.0,
+			"dmg": 1, "fall": 1, "x": 0.0}
+		_spawn_obstacle(fake)
+		var od: Dictionary = _obstacles[-100 - i]
+		_obstacles.erase(-100 - i)
+		_warm.append(od["node"])
+		(od["node"] as Node3D).position = _warm_at + Vector3(-4.5 + 3.0 * i, 0, -3)
+	var row := {"id": -1, "z": 0.0, "gates": [
+		{"lane": 0, "op": "num", "v": 5}, {"lane": 1, "op": "num", "v": -5, "step": 1.0, "max": 6},
+		{"lane": 2, "op": "power", "id": "bomb", "n": 1}]}
+	var gv := GateRowView.new().setup(row, font, LANE_X)
+	add_child(gv)
+	gv.position = _warm_at + Vector3(0, 0, 3)
+	_warm.append(gv)
+	if fx.has_method("prewarm"):
+		fx.prewarm(_warm_at)
+	# Every icon this level shows (UiKit caches them), and every glyph at every label size and
+	# outline the street uses (the font is rasterised per size on first draw).
+	for e in _level.get("events", []):
+		for g in (e as Dictionary).get("gates", []):
+			var icon := String(GateRowView.describe(g).get("icon", ""))
+			if icon != "":
+				UiKit.icon_texture(icon)
+			if String(g.get("op", "")) == "recruit":
+				UiKit.icon_texture(String(g.get("unit", "constable")))
+		if String(e.get("type", "")) == "hint":
+			UiKit.icon_texture(String(e.get("icon", "")))
+	var j := 0
+	for so in [[150, 36], [130, 36], [108, 36], [100, 36], [84, 36], [120, 28], [110, 26], [100, 24],
+			[90, 21], [84, 20]]:
+		var lab := GateRowView._label(font, so[0], 0.011)
+		lab.outline_size = so[1]
+		lab.text = "+-×÷%0123456789?"
+		lab.position = _warm_at + Vector3(0, 0.5, -1.0 - j)
+		add_child(lab)
+		_warm.append(lab)
+		j += 1
+
+
+## A point below the road along a view ray through the lower screen: drawn (inside the view
+## and the sun's shadow range) but hidden under the street.
+func _warm_spot() -> Vector3:
+	var cam: Camera3D = world.camera if world else null
+	if cam == null or not cam.is_inside_tree():
+		return Vector3(0, -8, -16)
+	var size := cam.get_viewport().get_visible_rect().size
+	var o := cam.global_position
+	var dir := cam.project_ray_normal(Vector2(size.x * 0.5, size.y * 0.7))
+	if dir.y > -0.2:
+		return Vector3(0, -8, -16)
+	# Far enough along the ray to sit 8 m under the road.
+	return o + dir * ((o.y + 8.0) / -dir.y)
+
+
+func _warm_frame() -> void:
+	_warm_left -= 1
+	var i := 0
+	for k in _crowds:
+		(_crowds[k] as Crowd).push(Transform3D(Basis(), _warm_at + Vector3(-6.0 + 0.7 * i, -1.0, 0)), "run", 0.0, 0.5)
+		i += 1
+	if _warm_left > 0:
+		return
+	for n in _warm:
+		n.queue_free()
+	_warm.clear()
+	_spot_ring.visible = false
+	if not _finish_live:
+		_finish.visible = false
+
+
 func _spawn_finish(at: float) -> void:
+	if _finish == null:
+		_build_finish()
+	_finish_live = true
+	_finish.visible = true
+	_finish.position = Vector3(0, 0, -(at - sim.traveled))
+
+
+## The finish line and the gang's stash, built at load (out of sight, pre-warm) and shown when
+## the sim spawns the finish: building it then cost a 70 ms frame on a cold shader cache.
+func _build_finish() -> void:
 	_finish = Node3D.new()
 	add_child(_finish)
-	_finish.position.z = -(at - sim.traveled)
 	# Chequered line
 	for i in 20:
 		for j in 2:

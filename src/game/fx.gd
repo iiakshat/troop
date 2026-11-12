@@ -48,6 +48,17 @@ func set_knife_skin(blade: Color, trail: String) -> void:
 	_trail = Color(trail) if trail != "" else Color.TRANSPARENT
 
 
+## Spec v2 §3: one of every effect at `at` (below the road, out of sight) so their shaders
+## compile while a level loads; the floating-number pool is filled now, not mid-fight.
+func prewarm(at: Vector3) -> void:
+	for k in ["knife", "bullet"]:
+		shoot(k, at, at + Vector3(0, 0, -0.5), 1.0)
+	lob(at, at + Vector3(0, 0, -0.5), 0.3, 0.2)
+	burst(at, Color.WHITE, 2, 0.1, 0.2, 0.1, 0.0, 0.0)
+	for i in 12:
+		float_text("0", at, Color(1, 1, 1, 0), 1.0, 0.0, 0.05)
+
+
 func clear() -> void:
 	_proj.clear()
 	_parts.clear()
