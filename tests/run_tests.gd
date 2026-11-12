@@ -17,8 +17,15 @@ func _initialize() -> void:
 		game.save_path = TEST_SAVE
 	var total := 0
 	var failed := 0
+	# `-- only=test_squad,test_level_sim` runs just those files (quick loops while building).
+	var only: Array = []
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("only="):
+			only = a.trim_prefix("only=").split(",")
 	for file in DirAccess.get_files_at("res://tests"):
 		if not file.begins_with("test_") or not file.ends_with(".gd") or file == "test_case.gd":
+			continue
+		if not only.is_empty() and not only.has(file.trim_suffix(".gd")):
 			continue
 		var script: GDScript = load("res://tests/" + file)
 		var suite = script.new()
