@@ -1,0 +1,12 @@
+A key-art exploration board for a mobile action game: six different cinematic shots arranged in a clean 3 columns x 2 rows grid of equal square cells, separated by thin dark gaps. NO text, NO letters, NO numbers, NO logos, NO UI anywhere in the image.
+
+Art style for every shot: exactly the look of the reference image - chunky stylised 3D cartoon characters with big round heads, simple toon shading, clean dark outlines, bold saturated colours - but lit and framed like a blockbuster movie poster: dramatic camera angle, shallow depth of field with soft bokeh, red and blue police-siren light spilling across the scene, rich atmosphere, premium polish like Subway Surfers or Brawl Stars key art. Fun and cool for every age; no blood, nothing gritty.
+
+The hero is the character in the teal t-shirt, blue jeans and short brown hair from the reference (an ordinary guy who throws knives). His squad are the cartoon police from the reference: constables in blue caps and navy uniforms, SWAT in dark armour. The city is a colourful street of tall painted brick apartment buildings.
+
+Cell 1 (top left) HERO CLOSE-UP: the hero's face and shoulders fill the frame from a slightly low angle, a confident half-smile, one throwing knife raised beside his cheek catching a bright glint; red siren light on one side of his face, blue on the other; blurred city street lights behind.
+Cell 2 (top middle) SIREN MACRO: an extreme close-up of a chunky cartoon police light-bar on a car roof at dusk, the red and blue lenses blazing with light rays and lens flare, a few raindrops, the squad as soft out-of-focus silhouettes behind.
+Cell 3 (top right) GLASS MOMENT: a frozen instant of a spinning knife shattering a glass bottle on a wooden shelf, glittering shards flying, red and blue rim light, more bottles blurred in the background.
+Cell 4 (bottom left) THE CHARGE: a worm's-eye view at road level, the hero sprinting straight toward the camera leading a crowd of constables and SWAT, dust kicked up, siren glow behind them, the colourful buildings towering above.
+Cell 5 (bottom middle) STANDOFF: over the hero's shoulder, knife in hand, looking down a long street at a cartoon gang and their big boss far away, golden-hour sun, long shadows, siren light at the edges.
+Cell 6 (bottom right) THE BADGE: a gold star police badge spinning in mid-air toward the camera in sharp focus, red and blue siren reflections on its metal, the squad charging blurred behind it.
