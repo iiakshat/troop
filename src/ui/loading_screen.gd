@@ -9,13 +9,18 @@ const DURATION := 1.4
 const BAR := preload("res://assets/brand/lightbar.png")
 ## Icon-only tips: icon names, ">" draws an arrow. Each one is a real rule of the game.
 const TIPS := [
-	["hand", ">", "speed"],          # tap: the hero throws faster
+	["hand", ">", "power"],          # tap: the hero throws faster, firepower (lightning) rises
 	["coin", ">", "knife_power"],    # coins buy weapon power
 	["clock", ">", "shield", "bomb"],# time refills the free shield and bomb
 	["barrel", ">", "fire"],         # shoot a barrel: it blasts the gang
 	["star_icon", ">", "star_chest"],# stars fill the star chest
 	["hammer", ">", "city_hall"],    # rebuild the city
 ]
+
+## Icons drawn as a tap gesture: rings ripple out from the fingertip, so the hand reads as
+## "tap the screen", never as a pointer at nothing (spec v2 §12.3).
+const TAP_ICONS := ["hand"]
+const TAP_PERIOD := 0.7
 
 var t := 0.0
 var tip := 0
@@ -73,9 +78,28 @@ func _draw_tip(view: Vector2) -> void:
 			continue
 		var tex := UiKit.icon_texture(String(it))
 		if tex:
-			var bob := sin(t * 5.0 + x * 0.02) * 4.0
-			draw_texture_rect(tex, Rect2(Vector2(x, cy - icon / 2.0 + bob), Vector2(icon, icon)), false, Color(1, 1, 1, a))
+			if TAP_ICONS.has(it):
+				_draw_tap(tex, Rect2(Vector2(x, cy - icon / 2.0), Vector2(icon, icon)), a)
+			else:
+				var bob := sin(t * 5.0 + x * 0.02) * 4.0
+				draw_texture_rect(tex, Rect2(Vector2(x, cy - icon / 2.0 + bob), Vector2(icon, icon)), false, Color(1, 1, 1, a))
 		x += icon + gap
+
+
+## A tapping hand: it presses in (moves along its finger and shrinks a little), and on each
+## press a ring ripples out from the fingertip (Tutorial.TIP, the same spot the tutorials use).
+func _draw_tap(tex: Texture2D, r: Rect2, a: float) -> void:
+	var ph := fmod(t, TAP_PERIOD) / TAP_PERIOD
+	var press := sin(clampf(ph / 0.35, 0.0, 1.0) * PI)  # 0 -> 1 -> 0 over the first 35%
+	var tip_at := r.position + r.size * Tutorial.TIP
+	for k in 2:
+		var age := fmod(t + k * TAP_PERIOD * 0.5, TAP_PERIOD) / TAP_PERIOD
+		var rr := r.size.x * (0.08 + 0.32 * age)
+		draw_arc(tip_at, rr, 0.0, TAU, 32, Color(1, 1, 1, (1.0 - age) * 0.7 * a), maxf(2.0, r.size.x * 0.035), true)
+	var s := 1.0 - 0.08 * press
+	var hr := Rect2(tip_at - r.size * Tutorial.TIP * s, r.size * s)
+	hr.position += Vector2(1, 1) * press * r.size.x * 0.06
+	draw_texture_rect(tex, hr, false, Color(1, 1, 1, a))
 
 
 func _draw_bar(view: Vector2) -> void:

@@ -139,3 +139,19 @@ func test_siren_chirp_throttled() -> void:
 	check(float(sfx_script.MIN_GAP.get("siren_chirp", 0.0)) >= 3.0, "siren_chirp at most once per 3 s")
 	check(ResourceLoader.exists("res://assets/audio/siren_chirp.ogg"), "siren_chirp.ogg exists")
 	check(ResourceLoader.exists("res://assets/audio/siren_whoop.ogg"), "siren_whoop.ogg exists")
+
+
+## BRAND: every loading tip is pictures only, each a real icon (no star_icon fallback), and
+## the tap tip uses the HUD's firepower unit (spec v2 §12.4): a tapping hand -> lightning.
+func test_loading_tips_use_real_icons() -> void:
+	for tip in LoadingScreen.TIPS:
+		for it in tip:
+			if it == ">":
+				continue
+			var name := String(it)
+			check(ResourceLoader.exists("res://assets/icons/gloss/%s.png" % name)
+				or ResourceLoader.exists("res://assets/icons/%s.svg" % name), "tip icon %s exists" % name)
+	var tap_tip: Array = LoadingScreen.TIPS[0]
+	eq(String(tap_tip[0]), "hand", "the first tip is the tap")
+	eq(String(tap_tip[tap_tip.size() - 1]), "power", "tapping raises firepower (the lightning unit)")
+	check(LoadingScreen.TAP_ICONS.has("hand"), "the hand in a tip is drawn as a tap (ripple), not a pointer")
