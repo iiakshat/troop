@@ -8,7 +8,6 @@
   "target_ratio": 0.44,
   "stars": {"star2": 45, "star3": 85},
   "charges": {"shield": 1, "bomb": 2},
-  "need_upgrades": true,
   "route": [1, 1, 2, 2, 0, 0, 0, 2, 0],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "sniper", "n": 6}, {"lane": 1, "op": "num", "v": 36}, {"lane": 2, "op": "num", "v": -1, "step": 0.5, "max": 5}]},

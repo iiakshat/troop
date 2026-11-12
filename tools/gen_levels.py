@@ -106,10 +106,14 @@ def target_ratio(level: int) -> float:
 
 
 # Spec v2 calibration rule 1: upgrades gate progress, gently from mid district 1 and more
-# often after that. In these levels (1, 2, 3, 4, 5 per district, every boss among them)
-# tests/tune.gd sizes the last wave so the best route a tapping player can find loses with
-# zero upgrades, while the no-ad pace (tapping or not) still wins it.
-NEED_UPGRADES = {10, 18, 20, 28, 29, 30, 34, 37, 38, 40, 42, 45, 47, 49, 50}
+# often after that. In these levels (district 2: 1, district 3: 2, district 4: 3, district 5:
+# 3) even the best route a tapping player can find loses with zero upgrades, while the no-ad
+# pace (tapping or not) wins it; tests/tune.gd keeps it so (it grows the last wave when needed
+# and refits the earlier ones). Tried and dropped (2026-11-12): L7-L10, L20, L40, L45, L49 -
+# a last wave that beats a capped zero-upgrade squad also beats most random routes (10-15%
+# wins instead of 45-54%). District 1's gate is milder: the planned route fails without the
+# pace's steps at L5-L10, so a non-upgrader must find another lane.
+NEED_UPGRADES = {18, 28, 29, 34, 37, 38, 42, 47, 50}
 
 
 def need_upgrades(level: int) -> bool:
