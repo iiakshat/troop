@@ -17,6 +17,12 @@
     "figure_radius": 0.2,
     "red_gate_clear_s": 2.5
   },
+  "input": {
+    "_note": "Tap vs swipe (src/core/touch_classifier.gd). A touch that stays within tap_max_px (times the screen scale) and lifts within tap_max_s is a tap: it powers the hero and never steers. Taps count only in the tap zone, from zone_top of the screen height down. Anything that moves further steers.",
+    "tap_max_px": 15,
+    "tap_max_s": 0.25,
+    "zone_top": 0.5
+  },
   "allies": {
     "hero":      { "name": "Hero",      "unlock": 1,  "dmg": 1,  "rate": 3.0,  "pierce": false, "proj": "knife" },
     "constable": { "name": "Constable", "unlock": 1,  "dmg": 1,  "rate": 1.6,  "pierce": false, "proj": "bullet" },

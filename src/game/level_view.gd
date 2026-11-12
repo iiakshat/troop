@@ -86,6 +86,9 @@ var _danger_at := Vector3.ZERO
 var _was_standoff := false
 var _boss_step := 0.0            # boss footfall clock (camera thump, dust)
 var _touching := false
+var _touch: TouchClassifier = null   # tap vs swipe per finger (spec v2 §2)
+var _steer_id := -1              # the finger that steers (-1: none)
+var _flick_t := 9.0              # seconds since the last tap (the hero's hand flick)
 var _drag_from_x := 0.0          # finger x when the drag (re)started
 var _steer_from := 0.0           # squad target x at that moment
 var _steer_x := 0.0              # where the finger wants the squad
@@ -183,16 +186,36 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if demo or paused or _state != "play" or not input_enabled:
 		return
-	# Drag to steer: the squad follows the finger 1:1 anywhere on screen; the lane is the
-	# nearest one; letting go settles the squad into it.
+	# Spec v2 §2: a short still touch in the lower half is a tap (powers the hero, never
+	# steers); a touch that moves is a swipe (steers 1:1 anywhere on screen, never fires).
+	if _touch == null:
+		_touch = TouchClassifier.new(Game.units.get("input", {}), touch_density())
+	var now := Time.get_ticks_msec() / 1000.0
 	if event is InputEventScreenTouch:
 		var t := event as InputEventScreenTouch
-		_touching = t.pressed
-		_drag_from_x = t.position.x
-		_steer_from = _squad_x
-		_steer_x = _squad_x
-	elif event is InputEventScreenDrag and _touching:
+		if t.pressed:
+			_touch.press(t.index, t.position, now)
+			return
+		var from: Variant = _touch.origin(t.index)
+		var r := _touch.release(t.index, t.position, now)
+		if r == "tap" and from != null and _touch.in_zone(from, get_viewport().get_visible_rect().size):
+			tap()
+		if t.index == _steer_id:
+			_steer_id = -1
+			_touching = false
+	elif event is InputEventScreenDrag:
 		var d := event as InputEventScreenDrag
+		if _touch.move(d.index, d.position, now) != "steer":
+			return
+		if _steer_id < 0:
+			# The swipe starts where the finger went down, so the first few pixels count too.
+			_steer_id = d.index
+			_touching = true
+			_drag_from_x = (_touch.origin(d.index) as Vector2).x
+			_steer_from = _squad_x
+			_steer_x = _squad_x
+		if d.index != _steer_id:
+			return
 		var w := get_viewport().get_visible_rect().size.x
 		_steer_x = clampf(_steer_from + (d.position.x - _drag_from_x) / w * STEER_PER_SCREEN,
 			LANE_X[0], LANE_X[2])
@@ -216,6 +239,33 @@ func _unhandled_input(event: InputEvent) -> void:
 			use_power("shield")
 		elif k == KEY_B:
 			use_power("bomb")
+		elif k == KEY_SPACE:
+			tap()
+
+
+## Screen density for the tap threshold: the OS scale, or dots per inch over 160 (Android dp).
+static func touch_density() -> float:
+	return maxf(DisplayServer.screen_get_scale(), DisplayServer.screen_get_dpi() / 160.0)
+
+
+## One tap: the hero's heat rises (LevelSim.tap, spec v2 §2) and his hand flicks.
+func tap() -> void:
+	if paused or _state != "play":
+		return
+	if sim.has_method("tap"):
+		sim.call("tap")
+	_flick_t = 0.0
+
+
+## The hero's tap heat 0..1 (LevelSim.tap_heat; 0 until the sim has it).
+func tap_heat() -> float:
+	var h: Variant = sim.get("tap_heat") if sim else null
+	return float(h) if h != null else 0.0
+
+
+## The hero's fire-rate multiplier from the heat (1 until the sim has it).
+func hero_mult() -> float:
+	return float(sim.call("hero_rate_mult")) if sim and sim.has_method("hero_rate_mult") else 1.0
 
 
 func _move(dir: int) -> void:
@@ -1227,7 +1277,7 @@ func _update_visuals(d: float) -> void:
 		elif aim > 0.0 and a["kind"] == "hero" and sim.squad.hero_weapon == "":
 			# Knives: a real overhand throw per knife, the clip sped up to fit the throw rate.
 			var throw := _throw_clip()
-			var per := 1.0 / maxf(float(sim.stats["hero"]["rate"]), 0.5)
+			var per := 1.0 / maxf(float(sim.stats["hero"]["rate"]) * hero_mult(), 0.5)
 			var speed := maxf(Crowd.clip_length(throw) / per, 1.0)
 			(_crowds["hero"] as Crowd).push(Transform3D(basis, pos), throw, minf(_hero_knife_t * speed, Crowd.clip_length(throw)), float(a["flash"]))
 		elif aim > 0.0:
@@ -1489,7 +1539,9 @@ func _fire(a: Dictionary, target: Vector3) -> void:
 	var kind := String(a["kind"])
 	var unit: Dictionary = sim.stats[kind]
 	var rate := float(unit["rate"])
-	if kind != "hero":
+	if kind == "hero":
+		rate *= hero_mult()   # tap heat: idle hero throws slower, a tapping hero at full rate
+	else:
 		# A thinned-out rank fires faster so the screen still shows its real firepower.
 		var per := maxf(float(sim.squad.count(kind)) / maxf(float(_shown_count.get(kind, 1)), 1.0), 1.0)
 		rate *= minf(per, 2.5)
