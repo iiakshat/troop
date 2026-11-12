@@ -200,7 +200,7 @@ func show_loss(level: int, cause: String, progress := -1.0, peak := 0) -> void:
 		cause_row.add_child(pk)
 	col.add_child(UiKit.label(String(info[1]), 52, Color.WHITE, 14))
 	# v1.1: the single upgrade that would have helped most (Game.best_upgrade_after_loss), as
-	# room icon + its in-game number before > after; a hand bobs on the Station when affordable.
+	# room icon + its in-game number before > after; when affordable the menu hand taps its price (the card opens the Station).
 	var tip: Dictionary = Game.best_upgrade_after_loss()
 	tip_room = ""
 	var tip_card: Control = null
@@ -221,7 +221,8 @@ func show_loss(level: int, cause: String, progress := -1.0, peak := 0) -> void:
 	_station = station
 	UiKit.set_alert(station, _station_alert())
 	if tip_card != null and bool(tip.get("affordable", false)):
-		_hand_on(tip_card, Vector2(0.6, 0.6))
+		# On the price, beside the room's icon and its number before ▸ after (spec v2 §11).
+		PointerHand.on(tip_card, Vector2(0.9, 0.6), 96.0).follow(tip_card.get_meta("price", tip_card), Vector2(0.5, 0.55))
 	var retry := UiKit.icon_button("retry", "green", 140)
 	retry.custom_minimum_size.x = 220
 	retry.pressed.connect(func(): retry_pressed.emit())
@@ -261,36 +262,8 @@ func _upgrade_tip(tip: Dictionary) -> Control:
 	price.add_child(UiKit.label(UiKit.fmt_coins(int(tip["cost"])), 36, Color.WHITE, 8))
 	price.modulate.a = 1.0 if bool(tip.get("affordable", false)) else 0.55
 	h.add_child(price)
+	card.set_meta("price", price)   # the menu hand taps here
 	return card
-
-
-## A hand bobbing on a control, freed with it. `at` = where the hand's top-left sits, as a
-## fraction of the control's size (default: fingertip on a button's upper half).
-func _hand_on(b: Control, at := Vector2.ZERO) -> void:
-	var hand := RetentionPanel.icon_safe("hand", 96)
-	hand.size = Vector2(96, 96)
-	hand.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hand.z_index = 5
-	var p0 := Vector2(-4, -44)
-	if at != Vector2.ZERO:
-		# A full-size layer (a container stretches it anyway) with a spot at that fraction of
-		# its size carries the hand, so it follows the control's real layout.
-		var pin := Control.new()
-		pin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		UiKit.full_rect(pin)
-		b.add_child(pin)
-		var spot := Control.new()
-		spot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		pin.add_child(spot)
-		pin.resized.connect(func(): spot.position = pin.size * at)
-		spot.add_child(hand)
-		p0 = -Vector2(0.92, 0.80) * 96.0  # the icon's fingertip (Tutorial.TIP) on the pin
-	else:
-		b.add_child(hand)
-	hand.position = p0
-	var tw := hand.create_tween().set_loops()
-	tw.tween_property(hand, "position", p0 + Vector2(-16, -16), 0.35).set_trans(Tween.TRANS_SINE)
-	tw.tween_property(hand, "position", p0, 0.35).set_trans(Tween.TRANS_SINE)
 
 
 ## Road bar: how far the squad got, flag at the finish, percent above the marker.

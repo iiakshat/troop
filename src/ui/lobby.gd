@@ -34,8 +34,8 @@ var _coins: HBoxContainer
 var _coin_icon: Control
 var _power: HBoxContainer
 var _shown_power := -1.0
-var _hand: TextureRect
-var _hand_tw: Tween
+var _hand: Control = null  # best-purchase pointer on the Station or Armory: tag (before ▸ after) + tapping hand
+var _hand_at := ""
 var _play: Button
 var _play_icon: TextureRect
 var _play_label: Label
@@ -218,22 +218,7 @@ func _build_bottom() -> void:
 	_style.pressed.connect(func(): _open(StylePanel.new()))
 	row.add_child(_style)
 	_play_breathe()
-	# Best-next-purchase pointer for station rooms (no words): a hand tapping the Station.
-	_hand = UiKit.icon("hand", 104)
-	_hand.size = Vector2(104, 104)
-	_hand.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# Mirrored (fingertip lower left, hand body over the map) with a dark drop shadow, so it
-	# reads on the light bottom bar and stays on screen over the leftmost button.
-	_hand.flip_h = true
-	var shade := UiKit.icon("hand", 104, Color(0.05, 0.05, 0.1, 0.7))
-	shade.size = Vector2(104, 104)
-	shade.flip_h = true
-	shade.position = Vector2(5, 6)
-	shade.show_behind_parent = true
-	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_hand.add_child(shade)
-	_hand.visible = false
-	_chrome.add_child(_hand)
+	# Best-next-purchase pointer for station rooms (no words): _point_station.
 
 
 func _play_breathe() -> void:
@@ -353,29 +338,43 @@ func _refresh_power() -> void:
 	_shown_power = p
 
 
+## Spec v2 §11: when the best next purchase is a Station room (or an Armory step), the hand taps
+## on the Station (or Armory) button under the item's icon and its in-game number before ▸ after.
 func _point_station() -> void:
-	if not is_inside_tree() or _hand == null:
+	if not is_inside_tree() or _station == null:
 		return
 	var best: Dictionary = {} if Game.first_build_pending() else Game.best_purchase()
 	var kind := String(best.get("kind", ""))
 	var target: Button = _station if kind == "room" else (_armory if kind == "weapon" else null)
 	var show := target != null and not is_instance_valid(_overlay)
-	if show == _hand.visible and (not show or _hand.get_meta("target", null) == target):
-		return
-	_hand.visible = show
-	_hand.set_meta("target", target)
-	if _hand_tw:
-		_hand_tw.kill()
-		_hand_tw = null
+	var id := String(best.get("id", "")) if show else ""
+	var lv := 0
 	if show:
-		# Fingertip (the mirrored icon's lower left) on the button's upper right.
-		var r := target.get_global_rect()
-		var tip := r.position + Vector2(r.size.x * 0.7, r.size.y * 0.25)
-		_hand.global_position = tip - Vector2(12, 92)
-		var p := _hand.position
-		_hand_tw = _hand.create_tween().set_loops()
-		_hand_tw.tween_property(_hand, "position", p + Vector2(18, -18), 0.35).set_trans(Tween.TRANS_SINE)
-		_hand_tw.tween_property(_hand, "position", p, 0.35).set_trans(Tween.TRANS_SINE)
+		lv = Armory.index(Game.save, id) if kind == "weapon" else Game.room_level(id)
+	var key := "%s:%s:%d" % [kind, id, lv] if show else ""
+	if key == _hand_at:
+		return
+	_hand_at = key
+	if is_instance_valid(_hand):
+		_hand.queue_free()
+	_hand = null
+	if not show:
+		return
+	var icon := String(ArmoryPanel.FALLBACK.get(id, "pistol")) if kind == "weapon" \
+		else String(Game.economy["station"].get(id, {}).get("icon", "station"))
+	# A holder at the fingertip spot carries the tag (above the button's left edge) and the
+	# tapping hand, so the tag never scales with the hand's press.
+	var sz := target.size if target.size.x > 1.0 else target.get_combined_minimum_size()
+	var tip := sz * Vector2(0.55, 0.25)  # the whole hand stays above the screen edge
+	_hand = Control.new()
+	_hand.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hand.z_index = 5
+	_hand.position = tip
+	target.add_child(_hand)
+	var tag := PointerHand.tag(icon, StationPanel.value_text(id, lv), StationPanel.value_text(id, lv + 1), 32)
+	tag.resized.connect(func(): tag.position = -tip - Vector2(0, tag.size.y + 12))
+	_hand.add_child(tag)
+	PointerHand.on(_hand, Vector2.ZERO, 104.0)
 
 
 # ---------------------------------------------------------------- debug (screenshots)

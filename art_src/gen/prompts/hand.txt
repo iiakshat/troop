@@ -1,0 +1,9 @@
+The attached image is the STYLE GUIDE of our existing icon set. Match its rendering exactly (chunky rounded cartoon shapes, bold saturated colours, soft glossy highlights, the same thick dark navy outline around every silhouette), but draw only the NEW subject described below.
+
+A sheet of exactly 4 images in a precise 2 x 2 grid of equal square cells, on a perfectly flat solid pure magenta background (#FF00FF) everywhere, with no cell borders, no tiles, no gradients and no shadows on the background. Each image sits centred in its cell with generous empty magenta margin and never touches another image or the cell edge.
+
+Subject in every cell: a friendly glossy cartoon POINTING HAND used as a tutorial pointer in a premium mobile game (Brawl Stars / Clash Royale / Subway Surfers quality). The index finger is fully extended and points UP and slightly to the LEFT (about 25 degrees left of vertical); the other three fingers are curled into the palm and the thumb rests folded over them. We see the back of the hand. The wrist ends in a neat rounded cut at the lower right (no arm, no sleeve). Warm medium skin tone with a soft peach glossy highlight on the knuckles and the fingertip, a clean fingernail, the same thick dark navy outline. The fingertip is the highest point of the image.
+
+The four cells are four slight variations of this same hand (small changes in finger thickness and highlight); all keep the same pose, the same size and the same up-left pointing direction.
+
+No text, no letters, no numbers, no motion lines, no sparkles. Do not use magenta, pink or purple inside the hand. The hand is fully opaque with no glow halo spilling onto the background.

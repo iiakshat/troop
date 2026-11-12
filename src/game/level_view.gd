@@ -91,6 +91,7 @@ var _warm_at := Vector3(0, -8, -16)
 var _hq: Node3D
 var _hq_fill: MeshInstance3D
 var finale: BottleShot = null
+var item_card: NewItemCard = null   # v2 §11: the "this is new" card + gold outline (new_item_card())
 var _hero_throw_t := -1.0
 var _bomb_throw_t := -1.0          # seconds into the hero's bomb throw (-1: none; spec v2 §12.5)
 var _rf_sfx_t := 0.0               # return fire plays its shot sound at most this often
@@ -336,6 +337,14 @@ func hero_mult() -> float:
 	return float(sim.call("hero_rate_mult")) if sim and sim.has_method("hero_rate_mult") else 1.0
 
 
+## The level's "this is new" card (spec v2 §11), made on first use.
+func new_item_card() -> NewItemCard:
+	if item_card == null:
+		item_card = NewItemCard.new().setup(self)
+		add_child(item_card)
+	return item_card
+
+
 func _move(dir: int) -> void:
 	var before := sim.lane
 	sim.set_lane(sim.lane + dir)
@@ -435,7 +444,8 @@ func _update_time_scale(delta: float) -> void:
 	for id in _rows:
 		var row: Dictionary = (_rows[id] as GateRowView).row
 		var z := float(row["z"])
-		if String(row.get("tutorial", "")) == "swipe" and not _tut_done.has(id) and z > -17.0:
+		# v2 §12.3: only until Tutorial has taught the drag (else: a freeze with no cue, every replay).
+		if String(row.get("tutorial", "")) == "swipe" and not _tut_done.has(id) and z > -17.0 and not Game.hint_seen("swipe"):
 			# Freeze only while the squad sits in a lane with no gate: "swipe to grab one".
 			var empty := true
 			for g in row["gates"]:
@@ -521,6 +531,7 @@ func _handle_events(events: Array) -> void:
 			"shield_on":
 				Sfx.play("shield")
 			"hint":
+				new_item_card().show_item(e["ev"])  # first: it marks the hint seen, so Hud's old hand stays away
 				hint.emit(e["ev"])
 			"finish_spawn":
 				_spawn_finish(float(e["at"]))
