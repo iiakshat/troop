@@ -96,6 +96,8 @@ func test_woken_set_matches_a_fresh_build() -> void:
 		check(a._built.size() > 10, "level %d: the set is built (%d pieces)" % [lv, a._built.size()])
 		var bad := ""
 		for i in mini(a._built.size(), b._built.size()):
+			if a._built[i] == a._reticle:
+				continue   # the aim ring is placed on every aiming frame (and drawn while warming)
 			var why := _same_xforms(_xforms(a._built[i], Transform3D(), []), _xforms(b._built[i], Transform3D(), []))
 			if why != "" and bad == "":
 				bad = "level %d piece %d (%s): %s" % [lv, i, (a._built[i] as Node).name, why]
