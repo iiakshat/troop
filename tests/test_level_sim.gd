@@ -1688,26 +1688,37 @@ func test_boss_hp_not_scaled_and_barrage() -> void:
 				for g in e["groups"]:
 					if g["enemy"] == "boss":
 						g["hp"] = hp
+		# Play the stored route (stepping out of telegraphs) to the boss's halt, then fight him
+		# twice from there: standing still, and dodging.
+		var start := LevelSim.new(lv, units, up)
+		var lead := Autopilot.new(route, false, true, 2.0, 1.0)
+		var boss_seen := false
+		while start.state == "run" and start.time < 600.0 and not boss_seen:
+			lead.drive(start)
+			start.step(1.0 / 30.0)
+			start.drain()
+			for h in start.hordes:
+				boss_seen = boss_seen or (h["boss"] and LevelSim.front_z(h) >= -start.boss_halt)
+		check(boss_seen, "L%d the boss reaches the halt" % n)
+		if not boss_seen:
+			continue
 		for dodge in [false, true]:
-			var sim := LevelSim.new(lv, units, up)
+			var sim := start.clone()
 			var pilot := Autopilot.new(route, false, dodge, 2.0, 1.0)
-			var halt := 0.0
+			var halt := 1.0 / 30.0
 			var barrages := 0
 			var barrage_lost := 0
-			var boss_seen := false
 			while sim.state == "run" and sim.time < 600.0:
 				pilot.drive(sim)
 				sim.step(1.0 / 30.0)
 				for h in sim.hordes:
 					if h["boss"] and LevelSim.front_z(h) >= -sim.boss_halt:
 						halt += 1.0 / 30.0
-						boss_seen = true
 				for e in sim.drain():
 					if e["type"] == "telegraph" and String(e["kind"]) == "barrage":
 						barrages += 1
 					elif e["type"] == "attack_land" and String(e["kind"]) == "barrage":
 						barrage_lost += int(e["lost"])
-			check(boss_seen, "L%d the boss reaches the halt" % n)
 			check(halt >= min_halt, "L%d (dodge %s) the boss halts the street %.1f s (>= %.0f)" % [n, dodge, halt, min_halt])
 			check(barrages >= 2, "L%d (dodge %s) the boss fires %d barrages" % [n, dodge, barrages])
 			if dodge:
