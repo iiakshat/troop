@@ -46,6 +46,16 @@ func test_region_from_locale() -> void:
 	eq(Audience.region_of("en"), "", "no region in a bare language")
 
 
+func test_india_clock_counts_as_india() -> void:
+	# Godot has no device-region API. An Indian phone set to English (US) still runs on India
+	# Standard Time (UTC+5:30, bias 330 minutes), so that clock counts as the region India.
+	eq(Audience.region_from("en_US", 330), "IN", "en_US on an Indian clock is India")
+	eq(Audience.region_from("en_US", -300), "US", "en_US on a US clock")
+	eq(Audience.region_from("hi_IN", 0), "IN", "an Indian locale anywhere")
+	eq(Audience.region_from("en", 60), "", "no signal")
+	check(Audience.is_child(2011, 2026, Audience.region_from("en_US", 330), "en_US"), "15 on an Indian clock is a child")
+
+
 func test_game_stores_birth_year_and_child_flag() -> void:
 	var tree := Engine.get_main_loop() as SceneTree
 	var game: Node = tree.root.get_node_or_null("Game")

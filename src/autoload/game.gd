@@ -855,7 +855,7 @@ func set_birth_year(year: int, region := "", locale := "") -> void:
 	if locale == "":
 		locale = Audience.device_locale()
 	if region == "":
-		region = Audience.region_of(locale)
+		region = Audience.device_region() if locale == Audience.device_locale() else Audience.region_of(locale)
 	var now_year := int(Time.get_datetime_dict_from_unix_time(now())["year"])
 	save["birth_year"] = year
 	save["is_child"] = Audience.is_child(year, now_year, region, locale)

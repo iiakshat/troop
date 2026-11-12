@@ -13,6 +13,7 @@ extends RefCounted
 const CHILD_AGE := 13
 const CHILD_AGE_INDIA := 18
 const WHEEL_SPAN := 100
+const IST_BIAS := 330            # India Standard Time, minutes east of UTC
 
 
 static func is_child(birth_year: int, now_year: int, region: String, locale: String) -> bool:
@@ -51,10 +52,19 @@ static func wheel_years(now_year: int) -> Array:
 	return out
 
 
-## Region and locale of this device (OS.get_locale is "en_IN"-style; there is no separate
-## region API in Godot, so the locale's country part is the region).
+## The region from the locale's country part, or "IN" when the clock runs on India Standard Time
+## (UTC+5:30 = bias 330 minutes). Godot has no device-region API, and an Indian phone set to
+## English (US) still keeps an Indian clock; counting that as India is the safe side.
+static func region_from(locale: String, tz_bias_minutes: int) -> String:
+	if tz_bias_minutes == IST_BIAS:
+		return "IN"
+	return region_of(locale)
+
+
+## Region of this device (see region_from).
 static func device_region() -> String:
-	return region_of(OS.get_locale())
+	var tz: Dictionary = Time.get_time_zone_from_system()
+	return region_from(OS.get_locale(), int(tz.get("bias", 0)))
 
 
 static func device_locale() -> String:
