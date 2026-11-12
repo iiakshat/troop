@@ -51,7 +51,7 @@ extends Node
 ##   claim_mission_bonus() -> reward
 ## Spin: spin_state() -> dict  spin_free() / spin_ad() -> {index, reward} ({} if not allowed)
 ## Ranks: rank_seen(unit)  mark_rank_seen(unit) -> true the first time
-## Alerts: alerts() -> {daily, missions, spin, star_chest, station, city} for the "!" badges
+## Alerts: alerts() -> {daily, missions, spin, star_chest, station, armory, city} for the "!" badges
 ## Cosmetics, hints, settings: owns, pick_cosmetic, outfit, knife_skin, hint_seen, mark_hint,
 ##   toggle, vibrate, reset_progress.
 ## Rewards returned by claim/open/spin functions are already applied; they hold the concrete
@@ -877,6 +877,12 @@ func alerts(t := -1) -> Dictionary:
 		if c >= 0 and int(save["coins"]) >= c:
 			station = true
 			break
+	var armory := false
+	for id in Armory.ids():
+		var c := Armory.next_cost(save, String(id))
+		if c >= 0 and int(save["coins"]) >= c and not weapon_locked(String(id)):
+			armory = true
+			break
 	var city := City.pending_income(save, tt, economy) >= int(economy["city"].get("welcome_back", {}).get("min_coins", 1))
 	if not city:
 		for id in City.ids(economy):
@@ -893,6 +899,7 @@ func alerts(t := -1) -> Dictionary:
 		"spin": Spin.can_spin_free(save, date, economy) and not first,
 		"star_chest": bool(star_chest_progress()["ready"]),
 		"station": station,
+		"armory": armory,
 		"city": city,
 	}
 

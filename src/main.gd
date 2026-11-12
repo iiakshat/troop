@@ -87,6 +87,8 @@ func _ready() -> void:
 	result.lobby_pressed.connect(func(): _leave_result(false))
 	result.retry_pressed.connect(func(): _open_boosters(current_level, true))
 	result.station_pressed.connect(_open_station_from_result)
+	if result.has_signal("tip_pressed"):
+		result.tip_pressed.connect(_open_tip_from_result)
 	ui.add_child(result)
 	result.visible = false
 	if _args.has("level"):
@@ -280,10 +282,23 @@ func _open_boosters(n: int, over_result := false) -> void:
 		ui.add_child(p)
 
 
+## The loss tip's item over the result screen (v2): the Armory on a weapon, else the Station.
+func _open_tip_from_result() -> void:
+	if result.visible and not Armory.track(result.tip_room).is_empty():
+		var a := ArmoryPanel.new()
+		a.focus_id = result.tip_room
+		ui.add_child(a)
+		a.tree_exited.connect(func():
+			if is_instance_valid(result):
+				result.refresh_alerts())
+		return
+	_open_station_from_result()
+
+
 ## Station over the result screen; closing it returns to the result (badges refresh).
 func _open_station_from_result() -> void:
 	var p := StationPanel.new()
-	p.focus_room = result.tip_room if result.visible else ""
+	p.focus_room = result.tip_room if result.visible and Game.economy["station"].has(result.tip_room) else ""
 	ui.add_child(p)
 	p.tree_exited.connect(func():
 		if is_instance_valid(result):
@@ -368,6 +383,9 @@ func _on_rank_joined(unit: String, _first_time: Variant = true) -> void:
 
 
 func _clear_level() -> void:
+	# v2 powers: a level left before its end (restart, home) still spends the charges it used.
+	if is_instance_valid(view) and view.sim != null:
+		Game.settle_powers(view.sim.charges)
 	for n in [view, hud, lobby, pause_panel]:
 		if is_instance_valid(n):
 			n.queue_free()

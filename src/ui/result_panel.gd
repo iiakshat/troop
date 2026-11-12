@@ -17,6 +17,7 @@ signal next_pressed
 signal retry_pressed
 signal lobby_pressed
 signal station_pressed
+signal tip_pressed      # v2: the loss tip card (opens the Armory or the Station on its item)
 signal doubled(extra_coins: int)   # the x2 ad was watched and the coins were paid again
 
 const LOSS := {
@@ -234,7 +235,8 @@ func show_loss(level: int, cause: String, progress := -1.0, peak := 0) -> void:
 func _upgrade_tip(tip: Dictionary) -> Control:
 	var room := String(tip["room"])
 	var r: Dictionary = Game.economy["station"].get(room, {})
-	var lv := Game.room_level(room)
+	var weapon := String(tip.get("kind", "room")) == "weapon"
+	var lv := Armory.index(Game.save, room) if weapon else Game.room_level(room)
 	# A real button (v1.1 fix): tapping it opens the Station on this room.
 	var card := RetentionPanel.card_box(Color("2e8b3e"), 10, 22, 5)
 	card.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -242,13 +244,13 @@ func _upgrade_tip(tip: Dictionary) -> Control:
 	card.gui_input.connect(func(ev: InputEvent):
 		if (ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT) 				or (ev is InputEventScreenTouch and ev.pressed):
 			Sfx.play("tap")
-			station_pressed.emit())
+			tip_pressed.emit())
 	var h := HBoxContainer.new()
 	h.alignment = BoxContainer.ALIGNMENT_CENTER
 	h.add_theme_constant_override("separation", 10)
 	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(h)
-	h.add_child(RetentionPanel.icon_safe(String(r.get("icon", "station")), 84))
+	h.add_child(ArmoryPanel.art_icon(room, 84) if weapon else RetentionPanel.icon_safe(String(r.get("icon", "station")), 84))
 	h.add_child(UiKit.label(StationPanel.value_text(room, lv), 50, Color.WHITE, 10))
 	h.add_child(RetentionPanel.icon_safe("play", 34, UiKit.YELLOW))
 	h.add_child(UiKit.label(StationPanel.value_text(room, lv + 1), 50, UiKit.YELLOW, 10))

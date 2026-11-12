@@ -194,12 +194,13 @@
   },
 
   "cosmetics": {
+    "_note": "Looks only, never power. Outfits recolour the hero's shirt and pants and add one accessory on his head (src/game/hero_accessory.gd: cap, hood, shades, crown) in accessory_color. Knives recolour the blade and trail.",
     "outfits": [
-      { "id": "street",    "price": 0,   "shirt": "21c7b5", "pants": "3d5f9e" },
-      { "id": "tracksuit", "price": 250, "shirt": "d33b3b", "pants": "1e1e1e" },
-      { "id": "biker",     "price": 400, "shirt": "2a2a2a", "pants": "4a3524" },
-      { "id": "suit",      "price": 600, "shirt": "f2f2f2", "pants": "1b1b1b" },
-      { "id": "gold",      "price": 1200, "shirt": "f2c14e", "pants": "8a6a1f" }
+      { "id": "street",    "price": 0,    "shirt": "21c7b5", "pants": "3d5f9e", "accessory": "" },
+      { "id": "tracksuit", "price": 250,  "shirt": "d33b3b", "pants": "1e1e1e", "accessory": "cap",    "accessory_color": "f2f2f2" },
+      { "id": "biker",     "price": 400,  "shirt": "2a2a2a", "pants": "4a3524", "accessory": "hood",   "accessory_color": "2a2a2a" },
+      { "id": "suit",      "price": 600,  "shirt": "f2f2f2", "pants": "1b1b1b", "accessory": "shades", "accessory_color": "15171c" },
+      { "id": "gold",      "price": 1200, "shirt": "f2c14e", "pants": "8a6a1f", "accessory": "crown",  "accessory_color": "ffc93c" }
     ],
     "knives": [
       { "id": "steel", "price": 0,    "blade": "e6eaf0", "trail": "" },

@@ -2,18 +2,19 @@ class_name Lobby
 extends Control
 ## The lobby: the city map (CityMap) fills the screen; over it a top bar (settings, coins),
 ## side buttons (Daily = gift, Spin = wheel, Missions on the left; star chest with its
-## progress on the right) and a bottom bar (Station, Codex, a big Play showing the selected
-## level, Style). Every button has a "!" alert when something is claimable or affordable.
-## Icons and numbers only. v1.1: the top bar shows Squad Power (emblem + number, tap = Station;
-## counts up after an upgrade) and a hand bobs over the Station button when the best next
-## purchase (Game.best_purchase) is a room; the map points at buildings itself.
+## progress on the right) and a bottom bar (Station, Armory, a big Play showing the selected
+## level, Style; v2 moved Codex to the left column). Every button has a "!" alert when
+## something is claimable or affordable. Icons and numbers only. v1.1: the top bar shows Squad
+## Power (emblem + number, tap = Armory since v2; counts up after an upgrade) and a hand bobs
+## over the Station or Armory button when the best next purchase (Game.best_purchase) is a
+## room or a weapon step; the map points at buildings itself.
 ##
 ## Signals for INTEGRATE (RETENTION-UI panels open from main.gd, or via open_panel()):
 ##   play_pressed(level)  Play, or tapping the selected level node again
 ##   play(level)          same moment as play_pressed; kept so main.gd keeps working.
 ##                        Connect only one of the two.
 ##   daily_pressed  spin_pressed  missions_pressed  codex_pressed  star_chest_pressed
-## Station, Style, Settings and BuildingPanel open here (one overlay at a time).
+## Station, Armory, Style, Settings and BuildingPanel open here (one overlay at a time).
 ## close_overlay() -> bool closes the open panel (Android back: close it, else quit).
 ## After a win, lobby.map.advance_from(level_just_beaten) makes the pin hop to the next level.
 ## Debug args (after --): save=path (load that save, never write), building=<id> (open its
@@ -39,6 +40,7 @@ var _play: Button
 var _play_icon: TextureRect
 var _play_label: Label
 var _station: Button
+var _armory: Button
 var _codex: Button
 var _style: Button
 var _daily: Button
@@ -119,7 +121,7 @@ func _build_top() -> void:
 	_power.mouse_filter = Control.MOUSE_FILTER_STOP
 	_power.gui_input.connect(func(ev: InputEvent):
 		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
-			_open(StationPanel.new()))
+			_open(ArmoryPanel.new()))
 	top.add_child(_power)
 	var gap := Control.new()
 	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -147,6 +149,7 @@ func _build_sides() -> void:
 	_daily = _side_button("gift", daily_pressed, left)
 	_spin = _side_button("wheel", spin_pressed, left)
 	_missions = _side_button("missions", missions_pressed, left)
+	_codex = _side_button("badge", codex_pressed, left)
 
 	var right := VBoxContainer.new()
 	right.set_anchors_preset(Control.PRESET_TOP_RIGHT)
@@ -187,10 +190,10 @@ func _build_bottom() -> void:
 	_station.size_flags_vertical = Control.SIZE_SHRINK_END
 	_station.pressed.connect(func(): _open(StationPanel.new()))
 	row.add_child(_station)
-	_codex = UiKit.icon_button("badge", "blue", 126)
-	_codex.size_flags_vertical = Control.SIZE_SHRINK_END
-	_codex.pressed.connect(func(): codex_pressed.emit())
-	row.add_child(_codex)
+	_armory = UiKit.icon_button("pistol", "blue", 126)
+	_armory.size_flags_vertical = Control.SIZE_SHRINK_END
+	_armory.pressed.connect(func(): _open(ArmoryPanel.new()))
+	row.add_child(_armory)
 
 	_play = UiKit.button("", "green", 10, Vector2(0, 142))
 	_play.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -324,6 +327,7 @@ func refresh() -> void:
 	UiKit.set_alert(_spin, bool(al.get("spin", false)))
 	UiKit.set_alert(_missions, bool(al.get("missions", false)))
 	UiKit.set_alert(_station, bool(al.get("station", false)))
+	UiKit.set_alert(_armory, bool(al.get("armory", false)))
 	UiKit.set_alert(_chest, bool(al.get("star_chest", false)))
 	var chest: Dictionary = Game.star_chest_progress()
 	var span := maxi(int(chest.get("need", 0)) - int(chest.get("from", 0)), 1)
@@ -353,16 +357,19 @@ func _point_station() -> void:
 	if not is_inside_tree() or _hand == null:
 		return
 	var best: Dictionary = {} if Game.first_build_pending() else Game.best_purchase()
-	var show := String(best.get("kind", "")) == "room" and not is_instance_valid(_overlay)
-	if show == _hand.visible:
+	var kind := String(best.get("kind", ""))
+	var target: Button = _station if kind == "room" else (_armory if kind == "weapon" else null)
+	var show := target != null and not is_instance_valid(_overlay)
+	if show == _hand.visible and (not show or _hand.get_meta("target", null) == target):
 		return
 	_hand.visible = show
+	_hand.set_meta("target", target)
 	if _hand_tw:
 		_hand_tw.kill()
 		_hand_tw = null
 	if show:
-		# Fingertip (the mirrored icon's lower left) on the Station button's upper right.
-		var r := _station.get_global_rect()
+		# Fingertip (the mirrored icon's lower left) on the button's upper right.
+		var r := target.get_global_rect()
 		var tip := r.position + Vector2(r.size.x * 0.7, r.size.y * 0.25)
 		_hand.global_position = tip - Vector2(12, 92)
 		var p := _hand.position

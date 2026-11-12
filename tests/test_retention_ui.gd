@@ -130,18 +130,26 @@ func test_panels_build_and_close() -> void:
 	check(not d._claim.visible, "claim button gives way to the timer")
 	tree.root.remove_child(d)
 	d.free()
-	# Booster panel spends only what was picked.
-	game.save["boosters"] = {"headstart": 1, "shield": 0, "bomb": 2}
+	# Booster panel: head start is picked and spent; shield and bomb are powers (v2): they come
+	# along by themselves, show the recharge countdown, and an ad refills a recharging one.
+	game.save["boosters"] = {"headstart": 1}
+	game.save["powers"] = {"shield": {"stored": 0, "ready_at": 0, "used": 0}, "bomb": {"stored": 2, "ready_at": 0, "used": 0}}
+	game.use_power("shield")
 	var bp := BoosterPanel.new(3)
 	var got := [{}]
 	bp.start.connect(func(b): got[0] = b)
 	_add(tree, bp)
-	bp._toggle("bomb")
-	bp._toggle("shield")   # none owned: not picked
+	bp._toggle("bomb")     # a power: not a token to pick
+	bp._toggle("headstart")
+	eq(bp.power_count("bomb"), 3, "bomb card counts 1 free + 2 stored")
+	eq(bp.power_count("shield"), 0, "the free shield is recharging")
+	check(bp.power_timer_text("shield") != "", "the shield card shows its countdown")
+	eq(bp.power_timer_text("bomb"), "", "no countdown while the free bomb is ready")
+	check(bp.power_refill_visible("shield") and not bp.power_refill_visible("bomb"), "ad refill only for the recharging power")
 	bp._on_play()
-	eq(got[0], {"bomb": 1}, "start sends what was spent")
-	eq(int(game.save["boosters"]["bomb"]), 1, "one bomb token spent")
-	eq(int(game.save["boosters"]["headstart"]), 1, "unpicked token kept")
+	eq(got[0], {"headstart": 1}, "start sends the head start that was spent")
+	eq(int(game.save["boosters"]["headstart"]), 0, "head-start token spent")
+	eq(int(game.save["powers"]["bomb"]["stored"]), 2, "picking does not spend powers")
 	tree.root.remove_child(bp)
 	bp.free()
 	# Revive: X gives up exactly once.
@@ -197,3 +205,81 @@ func test_map_power_hint() -> void:
 	eq(CityMap.power_hint("locked", 6, 5, 120, 100)["warn"], true, "the next node warns on a real gap")
 	eq(CityMap.power_hint("current", 5, 5, 200, 100, true)["warn"], false, "no warning under the first-build pointer")
 	eq(CityMap.power_hint("locked", 5 + CityMap.POWER_AHEAD + 1, 5, 90, 100)["show"], false, "not too far ahead")
+
+
+func test_armory_panel_shows_lock_and_level() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	var game: Node = tree.root.get_node_or_null("Game")
+	if game == null:
+		check(false, "Game autoload present")
+		return
+	var keep: Dictionary = game.save.duplicate(true)
+	var keep_path: String = game.save_path
+	game.save_path = ""
+	game.boot({})
+	game.save["unlocked"] = 1
+	game.save["coins"] = 5000
+	var ap := ArmoryPanel.new()
+	var closed := [false]
+	ap.closed.connect(func(): closed[0] = true)
+	_add(tree, ap)
+	eq(ap.card_ids(), Armory.ids(), "one card per weapon track, in config order")
+	check(ap.is_card_locked("shotgun"), "the shotgun is locked at level 1")
+	eq(ap.lock_text("shotgun"), str(Armory.unlock_level("shotgun")), "its card shows the unlock level number")
+	check(ap.lock_icon_visible("shotgun"), "and the lock icon")
+	check(not ap.is_card_locked("knives") and not ap.lock_icon_visible("knives"), "knives are open")
+	eq(ap.pips_filled("knives"), 0, "no steps yet")
+	eq(ap.name_text("knives"), String(Armory.tier_info("knives", 1)["name"]), "tier 1 name shown")
+	check(ap.calibre_text("knives") != "", "with its calibre")
+	ap.buy("knives")
+	eq(game.weapon_level("knives"), Vector2i(1, 1), "bought one step")
+	eq(ap.pips_filled("knives"), 1, "one pip filled")
+	for i in 4:
+		ap.buy("knives")
+	eq(game.weapon_level("knives"), Vector2i(2, 0), "the 5th buy evolved the knife")
+	eq(ap.name_text("knives"), String(Armory.tier_info("knives", 2)["name"]), "the new tier's name")
+	eq(ap.pips_filled("knives"), 0, "the bar starts again")
+	check(ap.art_path("knives").ends_with("knives_t2.png"), "the new tier's art")
+	ap.buy("shotgun")
+	eq(game.weapon_level("shotgun"), Vector2i(1, 0), "a locked weapon is not bought")
+	ap._close()
+	check(closed[0], "closed emitted")
+	tree.root.remove_child(ap)
+	ap.free()
+	game.save = keep
+	game.save_path = keep_path
+
+
+func test_style_panel_sells_hero_outfit() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	var game: Node = tree.root.get_node_or_null("Game")
+	if game == null:
+		check(false, "Game autoload present")
+		return
+	var keep: Dictionary = game.save.duplicate(true)
+	var keep_path: String = game.save_path
+	game.save_path = ""
+	game.boot({})
+	game.save["coins"] = 1000
+	for o in game.economy["cosmetics"]["outfits"]:
+		check(o.has("shirt") and o.has("pants"), "%s recolours shirt and pants" % o["id"])
+		if int(o["price"]) > 0:
+			check(String(o.get("accessory", "")) != "", "%s comes with an accessory" % o["id"])
+			check(HeroAccessory.KINDS.has(String(o["accessory"])), "%s accessory can be built" % o["id"])
+	var sp := StylePanel.new()
+	_add(tree, sp)
+	var price := SaveData.cosmetic(game.economy, "outfits", "tracksuit")["price"] as int
+	check(sp.accessory_icon_visible("tracksuit"), "the card shows the outfit's accessory")
+	sp._pick("outfits", "tracksuit")
+	eq(int(game.save["coins"]), 1000 - price, "paid for the outfit")
+	check(game.owns("tracksuit"), "owned")
+	eq(String(game.save["outfit"]), "tracksuit", "and worn")
+	eq(String(game.outfit()["accessory"]), String(SaveData.cosmetic(game.economy, "outfits", "tracksuit")["accessory"]), "the level gets its accessory")
+	game.save["coins"] = 10
+	sp._pick("outfits", "gold")
+	check(not game.owns("gold"), "cannot buy without coins")
+	eq(String(game.save["outfit"]), "tracksuit", "still wearing the tracksuit")
+	tree.root.remove_child(sp)
+	sp.free()
+	game.save = keep
+	game.save_path = keep_path

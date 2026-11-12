@@ -91,7 +91,10 @@ static func show_upgrades(parent: Node, list: Array) -> PanelContainer:
 		var line := HBoxContainer.new()
 		line.add_theme_constant_override("separation", 8)
 		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		line.add_child(RetentionPanel.icon_safe(StationPanel.effect_icon(String(r.get("effect", ""))), 46))
+		if r.is_empty() and not Armory.track(room).is_empty():
+			line.add_child(ArmoryPanel.art_icon(room, 46))   # v2: a weapon step bought
+		else:
+			line.add_child(RetentionPanel.icon_safe(StationPanel.effect_icon(String(r.get("effect", ""))), 46))
 		line.add_child(UiKit.label(StationPanel.value_text(room, int(e["before"])), 38, Color.WHITE, 8))
 		line.add_child(RetentionPanel.icon_safe("play", 28, UiKit.YELLOW))
 		line.add_child(UiKit.label(StationPanel.value_text(room, int(e["after"])), 38, UiKit.YELLOW, 8))
