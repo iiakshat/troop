@@ -26,6 +26,8 @@ const BRUTE_MAX := 6     # rows up to which every route is played
 const MAX_TIME := 92.0   # seconds the best route may take (levels last 60-90 s)
 const KF_MAX := 4.0      # largest extra scale for the last wave
 const KF_FALLBACK := 1.5 # last-wave scale when no kf can reach the best-route target
+const NEED_KF_MAX := 8.0 # need_upgrades: the most the last wave may grow to beat zero upgrades
+const NEED_MARGIN := 1.08 # ... and how far past the point where zero upgrades lose it goes
 
 var units: Dictionary
 var upgrades := {}
@@ -263,7 +265,86 @@ func calibrate_level(n: int, base: Dictionary) -> Dictionary:
 		else:
 			k *= 0.9
 			kf = maxf(kf * 0.92, 0.4)
+	if bool(base.get("need_upgrades", false)) and not pace.is_empty():
+		var kk: Array = _fit_need(n, base, routes, target, k, kf)
+		k = kk[0]
+		kf = kk[1]
 	return evaluate(n, base, k, kf)
+
+
+## Spec v2 calibration rule 1, for levels with `need_upgrades` (tools/gen_levels.py): the last
+## wave grows until the best route a tapping player with ZERO upgrades can find loses (plus a
+## small margin); then the earlier waves are refitted to the win target (never made harder)
+## with that last wave held. The no-ad pace must still win: its best route while tapping, and
+## a non-tapper on that same route. Returns [k, kf].
+func _fit_need(n: int, base: Dictionary, routes: Array, target: float, k: float, kf: float) -> Array:
+	if _zero_loses(base, k, kf) and _paced_ok(base, k, kf):
+		return [k, kf]
+	var lo := log(kf)
+	var hi := log(kf * NEED_KF_MAX)
+	if not _zero_loses(base, k, exp(hi)):
+		print("      need: L%d zero upgrades still win with the last wave x%.0f" % [n, NEED_KF_MAX])
+		return [k, kf]
+	for i in 6:
+		var mid := (lo + hi) * 0.5
+		if _zero_loses(base, k, exp(mid)):
+			hi = mid
+		else:
+			lo = mid
+	var final := k * exp(hi) * NEED_MARGIN   # the last wave's absolute scale
+	var k2 := minf(_fit_win_final(base, routes, target, final), k)
+	var kf2 := final / k2
+	for j in 6:
+		var ok := _paced_ok(base, k2, kf2)
+		var zl := _zero_loses(base, k2, kf2)
+		if ok and zl:
+			return [k2, kf2]
+		kf2 *= 0.96 if not ok else 1.05
+	print("      need: L%d no last wave splits zero upgrades from the pace; kept the win fit" % n)
+	return [k, kf]
+
+
+## The win-rate fit with the last wave held at the absolute scale `final` (kf = final / k).
+func _fit_win_final(base: Dictionary, routes: Array, target: float, final: float) -> float:
+	var lo := log(0.15)
+	var hi := log(5.0)
+	for i in 9:
+		var mid := (lo + hi) * 0.5
+		var lv := scaled_level(base, exp(mid), final / exp(mid))
+		var wins := 0
+		for route in routes:
+			if Autopilot.run(lv, units, route, upgrades, use_powers, DT, false, tap_rate)["state"] == "strike":
+				wins += 1
+		if float(wins) / routes.size() > target:
+			lo = mid
+		else:
+			hi = mid
+	return exp((lo + hi) * 0.5)
+
+
+## The best route a tapping player with zero upgrades finds (no powers) loses.
+func _zero_loses(base: Dictionary, k: float, kf: float) -> bool:
+	var keep := upgrades
+	var keep_tap := tap_rate
+	upgrades = {}
+	tap_rate = 4.0
+	var r: Dictionary = best_route(scaled_level(base, k, kf), false)["result"]
+	upgrades = keep
+	tap_rate = keep_tap
+	return r["state"] != "strike"
+
+
+## The no-ad pace wins: its best route while tapping (in time), and a non-tapper on that route.
+func _paced_ok(base: Dictionary, k: float, kf: float) -> bool:
+	var lv := scaled_level(base, k, kf)
+	var keep_tap := tap_rate
+	tap_rate = 4.0
+	var b: Dictionary = best_route(lv, false)
+	tap_rate = keep_tap
+	var r: Dictionary = b["result"]
+	if r["state"] != "strike" or float(r["time"]) > MAX_TIME:
+		return false
+	return Autopilot.run(lv, units, b["route"], upgrades, false, DT, false, 0.0)["state"] == "strike"
 
 
 func _fit_win(base: Dictionary, routes: Array, target: float, kf: float) -> float:

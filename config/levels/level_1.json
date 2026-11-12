@@ -8,8 +8,7 @@
   "target_ratio": -1.0,
   "stars": {"star2": 45, "star3": 85},
   "charges": {},
-  "route": [2, 1, 2, 2, 2, 2],
-  "route_np": [2, 1, 2, 2, 2, 2],
+  "route": [2, 1, 2, 0, 2, 1],
   "events": [
     {"at": 31, "type": "wave", "fixed": true, "groups": [{"enemy": "thug", "n": 5}]},
     {"at": 33, "type": "hint", "id": "red_gate", "icon": "aim"},

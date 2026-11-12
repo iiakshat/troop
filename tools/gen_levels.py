@@ -105,6 +105,17 @@ def target_ratio(level: int) -> float:
     return [0.0, 0.58, 0.5, 0.45, 0.4][d - 1] - (0.06 if is_boss(level) else 0.0)
 
 
+# Spec v2 calibration rule 1: upgrades gate progress, gently from mid district 1 and more
+# often after that. In these levels (1, 2, 3, 4, 5 per district, every boss among them)
+# tests/tune.gd sizes the last wave so the best route a tapping player can find loses with
+# zero upgrades, while the no-ad pace (tapping or not) still wins it.
+NEED_UPGRADES = {10, 18, 20, 28, 29, 30, 34, 37, 38, 40, 42, 45, 47, 49, 50}
+
+
+def need_upgrades(level: int) -> bool:
+    return level in NEED_UPGRADES
+
+
 def difficulty(level: int) -> float:
     """0..~1.1, sawtooth: ramps inside a district, each district starts harder."""
     d = district(level)
@@ -1081,6 +1092,8 @@ def build(level: int, seen: set, cal_all: dict) -> dict:
         "stars": star_thresholds(level, cal),
         "charges": lv["charges"],
     }
+    if need_upgrades(level):
+        out["need_upgrades"] = True
     # A lane route tests/tune.gd found to win (route_np: without powers, levels 1-10).
     for key in ("route", "route_np"):
         if cal.get(key):
