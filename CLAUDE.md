@@ -21,6 +21,14 @@ Last updated: 2026-11-12
 
 ## Status
 
+- **2026-11-12, v2 review fixes (FIX, same branch):**
+  - Bomb (owner): the hero winds up with the bomb in his hand (`powers.bomb.windup` 0.4 s), lets go at the throw clip's release, and a black bomb with a pale rim and orange fuse sparks arcs high to a red ring that marks the landing spot at the blast radius. The blast fills that radius. One bomb in the air at a time; none in the last metres before the stash; a nearby obstacle the squad reaches first is never the target. A boss loses `big_pct` 10 % of its health per bomb.
+  - Powers: the L1 lesson's shield and bomb come back (no 5 h timer on the first level), the clock-back exploit is closed, countdowns read h:mm:ss, effects freeze with pause and lesson holds, and a press right after a fire tap next to the button is ignored.
+  - Tapping adds finale coins (`hero.tap.coin_pct` 25 × the level's mean heat), shown on the result. L2-L3 start half warm (`start_heat`), so 2 taps/s wins and 0-1 loses.
+  - A lit barrel that reaches the squad goes off on it. Enemy "new" cards show when the gang comes within range (the boss card used to show after the boss died). Gate numbers fit their lanes. An escort's count never covers the boss, and the boss is drawn 3.2× (was 2.6×).
+  - The finale's stash, bottles and weapon are prewarmed at level load. L28 was recalibrated after the barrel change.
+  - 286 tests pass.
+
 - **2026-11-12, v2 "Siren Squad" (integrated on `worktree-wf_3f6888da-ab3-9` from the CORE, VIEW+COMBAT, ECON, UX, FINALE, BRAND and SDK worktrees; spec `2026-11-12-siren-squad-v2-design.md`):**
   - Brand: Siren Squad name and package, axnex intro, logo and light-bar loading screen, siren sounds, launcher icons (adaptive and monochrome).
   - Tap-to-fire hero (tap heat, tap vs swipe, heat arc, hand flick). No mid-level slow-down; rank joins, the boss bar and the new-item card are pre-warmed. Lower camera, a squad about one lane wide, and the smudge fix.
@@ -34,6 +42,7 @@ Last updated: 2026-11-12
 - **Known open items (v2):**
   - The owner has not yet tried any of it on a phone: tap feel, the bomb throw, return fire, the Armory, the boot screens, the age screen, or a test ad.
   - `tests/smoke_lobby.gd` still fails "Play shows the selected level" (predates v1.1).
+  - The burst into Bottle Shot still costs one long frame (about 90-115 ms on this laptop), mostly the CPU build of the stash and weapon. The GPU compiles are prewarmed.
   - No release (signed) preset yet.
   - The owner's AdMob and Firebase setup is still to do (`docs/owner_ads_setup.md`), as is the ipindia.gov.in name check for "Siren Squad".
 - **2026-11-09, v1.1 (owner play-test round, integrated on `worktree-wf_2d68997e-b87-5` from the GAMEPLAY, ECON-UI, FINALE and CHAR worktrees):**

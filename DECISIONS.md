@@ -231,3 +231,25 @@ Unity wasn't installed, would need about 15 GB plus a licence sign-in, and is he
 - FINALE: the docks' upper rows stand on a plank on two posts, because crates hid the lower bottles. The carnival shelves are thin, with a flush lighter edge, because the old lip hid the necks. The bar and rooftop string lights hang above the tallest bottle. The L10 knife lens is 0.5° wider (spec §12.1).
 - BRAND: the save stays at `%APPDATA%/Godot/app_userdata/Troop` through `custom_user_dir_name`. The boot screens play only on a plain launch (any debug arg skips them, `boot=1` forces them).
 - UX: one hint language. Gesture hands appear only in gesture lessons. A new object gets the top card (icon ▸ effects) and a gold outline, never a hand. A menu hand always carries the item icon and before ▸ after. The old HUD hint hand is gone.
+
+## v2 review fixes (2026-11-12, FIX)
+
+**The bomb is a separate throw.** The bomb used to leave at the tap, 0.32 s before the hand came forward, and it was a small pale ball, so it read as one more knife. Now the sim lands it at `windup + flight`. The view holds it in the hero's hand and plays the throw clip slowed so the release lands exactly at `windup`, then flies it for the rest of the time. The arithmetic stays exact. The bomb is drawn unshaded and near-black with a pale rim (an inside-out shell), like the HUD icon.
+
+**What a bomb aims at.** It targets a gang whose front will be in reach when the bomb lands, not only one in reach now. It skips an obstacle that the squad reaches before landing: that throw used to cost a crash and a wasted charge. With no target it lands at max reach.
+
+**Bomb guards.** Only one bomb flies at a time, and a second press spends nothing. No bomb can be thrown in the last metres before the stash when no gang is left. As a safety net, a bomb still in the air at the finish goes off before Bottle Shot. A press within `power_guard_s` of a fire tap is ignored only when that tap landed next to the button (a thumb that slid onto it), so a press with the other thumb still works.
+
+**The lesson's charge comes back.** The L1 shield and bomb lessons spent the only free charges. Both buttons then showed a "5:00" timer for the rest of the first session. Now the lesson refunds its charge in the sim, so no recharge starts and the player can still throw a bomb afterwards. Countdowns read h:mm:ss, and settle never uses a clock earlier than the level start.
+
+**Tapping pays in coins, not damage.** From L4 on, the hero's 3 dps is lost among hundreds of troops, so taps changed nothing. A damage "rally" would have moved every level's balance and the non-tapper rule. Instead, Bottle Shot coins get `coin_pct` 25 % × the level's mean tap heat, and the result screen shows it (fire-rate icon, +N %). The economy model's pace does not include it, so the pace stays the floor and a tapper is slightly ahead of it.
+
+**L2-L3 start half warm** (`start_heat` 0.5). Their hero-alone openings were decided in the first 4 s: 2 taps/s lost L3. Now 2 taps/s wins and 0-1 taps/s still loses (the level test checks both).
+
+**A lit barrel goes off on the squad** (`armed_pct` 100 % of its number, footprint only). It used to roll past as "rubber" whenever its gang died at range. After this change only L28 left its target band (22 % vs 35 %), so it was recalibrated (now 32 %, still a need-upgrades level).
+
+**Enemy hints fire from the sim** when the first gang of that kind comes within fire range + 10 m. The wave's `at` is only the fallback. A boss halts the street before its wave's `at`, so its card used to show after it died.
+
+**Boss fights.** If a gang's count would land on the boss's body on screen (a projected check), it moves above the boss's bar. Bosses are drawn 3.2× a thug instead of 2.6×.
+
+**Finale prewarm.** The district's Bottle Shot is built out of sight at level load (`BottleShot.warm`), with the squad's figures in its lights. This compiles the stash, bottle, light and shadow pipelines then. The remaining burst frame is the CPU build of the stash and weapon.
