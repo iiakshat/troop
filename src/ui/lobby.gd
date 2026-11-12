@@ -318,8 +318,8 @@ func refresh() -> void:
 	var span := maxi(int(chest.get("need", 0)) - int(chest.get("from", 0)), 1)
 	var into := clampi(int(chest.get("have", 0)) - int(chest.get("from", 0)), 0, span)
 	_chest_label.text = "%d/%d" % [into, span]
-	if map and CityMap.node_state(Game.save, _level, Config.LEVEL_COUNT) == "locked":
-		_level = map.selected
+	if map:
+		_level = map.selected   # Play always shows the map's pin (select() and advance_from() emit nothing)
 	_play_label.text = str(_level)
 	var boss := Economy.is_boss(_level, Game.economy)
 	_play_icon.texture = UiKit.icon_texture("boss_crown" if boss else "play")
