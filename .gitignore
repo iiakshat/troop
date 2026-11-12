@@ -1,4 +1,4 @@
-# Secrets: never commit
+# Secrets: never commit (google-services.json: the owner's Firebase file, see docs/owner_ads_setup.md)
 .env
 .env.*
 *.keystore
@@ -9,6 +9,13 @@ export_credentials.cfg
 # Godot
 .godot/
 *.import.tmp
+# Android Gradle build template (tools/android_template.py installs it; android/build/ is also
+# covered by build/ below). The Firebase plugin's .aar files in android/firebase_*/ are committed.
+/android/build/
+/android/.build_version
+# Generated from config/ads.json by addons/siren_privacy
+/addons/AdmobPlugin/android_export.cfg
+__pycache__/
 
 # Local screenshots, builds, scratch
 /_local/

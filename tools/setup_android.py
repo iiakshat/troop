@@ -7,7 +7,13 @@
                                           out of the 1 GB template pack (HTTP range requests)
   %APPDATA%/Godot/keystores/debug.keystore  standard Android debug key (not secret)
 
-No Android Studio, no sdkmanager, no NDK, no Gradle. Safe to re-run: finished parts are skipped.
+Gradle build (v2: the AdMob and Firebase plugins need it), also:
+  ../_tools/jdk-17                        (Gradle compiles Java/Kotlin) ~190 MB
+  ../_tools/android-sdk/platforms/android-36, build-tools/36.1.0   ~120 MB
+  %APPDATA%/Godot/export_templates/4.7.2.stable/android_source.zip  (the Gradle build template)
+  Gradle itself and the Maven libraries are fetched by the first build into %USERPROFILE%/.gradle.
+
+No Android Studio, no sdkmanager, no NDK. Safe to re-run: finished parts are skipped.
 Every download is checked (SHA-1 from Google's repo index, SHA-256 from Adoptium, CRC from the zip).
 Run: python -I tools/setup_android.py
 """
@@ -16,9 +22,21 @@ from pathlib import Path
 
 GODOT = "4.7.2"
 BUILD_TOOLS = "36.0.0"
-ROOT = Path(__file__).resolve().parents[2] / "_tools"
+GRADLE_BUILD_TOOLS = "36.1.0"  # android_source.zip config.gradle: buildTools
+GRADLE_PLATFORM = "android-36"  # config.gradle: compileSdk
+def _tools_root():
+    """../_tools next to the project; from a git worktree (.claude/worktrees/x) the same folder."""
+    here = Path(__file__).resolve()
+    for p in here.parents:
+        if (p / "_tools" / "godot").is_dir():
+            return p / "_tools"
+    return here.parents[2] / "_tools"
+
+
+ROOT = _tools_root()
 SDK = ROOT / "android-sdk"
 JRE = ROOT / "jre-17"
+JDK = ROOT / "jdk-17"
 GODOT_DATA = Path(os.environ["APPDATA"]) / "Godot"
 TEMPLATES = GODOT_DATA / "export_templates" / f"{GODOT}.stable"
 KEYSTORE = GODOT_DATA / "keystores" / "debug.keystore"
@@ -65,7 +83,8 @@ def google_packages(tmp):
         if not pkg.tag.endswith("remotePackage"):
             continue
         path = pkg.get("path")
-        if path not in ("platform-tools", f"build-tools;{BUILD_TOOLS}"):
+        if path not in ("platform-tools", f"build-tools;{BUILD_TOOLS}",
+                        f"build-tools;{GRADLE_BUILD_TOOLS}", f"platforms;{GRADLE_PLATFORM}"):
             continue
         for arc in pkg.iter():
             if not arc.tag.endswith("archive"):
@@ -99,6 +118,43 @@ def install_sdk(tmp):
             top = z.namelist()[0].split("/")[0]  # e.g. android-16
         unzip_strip(tmp / "bt.zip", SDK / "build-tools" / BUILD_TOOLS, top)
         (tmp / "bt.zip").unlink()
+
+
+def install_gradle_sdk(tmp):
+    """The SDK parts the Gradle build template compiles against."""
+    parts = {f"build-tools;{GRADLE_BUILD_TOOLS}": SDK / "build-tools" / GRADLE_BUILD_TOOLS,
+             f"platforms;{GRADLE_PLATFORM}": SDK / "platforms" / GRADLE_PLATFORM}
+    todo = {k: v for k, v in parts.items() if not (v / "source.properties").exists()}
+    if not todo:
+        say("Android SDK (Gradle): already installed")
+        return
+    pk = google_packages(tmp)
+    for path, dest in todo.items():
+        say(f"Android SDK (Gradle): {path}")
+        url, sha = pk[path]
+        fetch(url, tmp / "part.zip", "sha1", sha)
+        with zipfile.ZipFile(tmp / "part.zip") as z:
+            top = z.namelist()[0].split("/")[0]
+        unzip_strip(tmp / "part.zip", dest, top)
+        (tmp / "part.zip").unlink()
+
+
+def install_jdk(tmp):
+    """A full JDK 17 (Gradle needs javac; the JRE above only runs apksigner/keytool)."""
+    if (JDK / "bin" / "javac.exe").exists():
+        say("Java 17 JDK: already installed")
+        return
+    say("Java 17 JDK (Temurin)")
+    api = ("https://api.adoptium.net/v3/assets/latest/17/hotspot"
+           "?architecture=x64&image_type=jdk&os=windows&vendor=eclipse")
+    with urllib.request.urlopen(urllib.request.Request(api, headers=UA)) as r:
+        assets = json.load(r)
+    pkg = next(a["binary"]["package"] for a in assets if a["binary"]["package"]["name"].endswith(".zip"))
+    fetch(pkg["link"], tmp / "jdk.zip", "sha256", pkg["checksum"])
+    with zipfile.ZipFile(tmp / "jdk.zip") as z:
+        top = z.namelist()[0].split("/")[0]
+    unzip_strip(tmp / "jdk.zip", JDK, top)
+    (tmp / "jdk.zip").unlink()
 
 
 def install_jre(tmp):
@@ -154,17 +210,19 @@ class RemoteFile(io.RawIOBase):
 
 
 def install_templates():
-    want = ["android_debug.apk", "android_release.apk", "version.txt"]
-    if all((TEMPLATES / w).exists() for w in want):
+    # android_source.zip is the Gradle build template (AdMob/Firebase plugins need a Gradle build).
+    want = ["android_debug.apk", "android_release.apk", "android_source.zip", "version.txt"]
+    missing = [w for w in want if not (TEMPLATES / w).exists()]
+    if not missing:
         say("Godot Android templates: already installed")
         return
-    say("Godot Android templates (only the Android files from the pack)")
+    say("Godot Android templates (only the Android files from the pack): " + ", ".join(missing))
     url = (f"https://github.com/godotengine/godot/releases/download/{GODOT}-stable/"
            f"Godot_v{GODOT}-stable_export_templates.tpz")
     remote = io.BufferedReader(RemoteFile(url), buffer_size=1 << 20)
     TEMPLATES.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(remote) as z:
-        for w in want:
+        for w in missing:
             with z.open("templates/" + w) as src, open(TEMPLATES / (w + ".part"), "wb") as dst:
                 shutil.copyfileobj(src, dst, 1 << 20)  # zipfile checks the CRC at the end
             os.replace(TEMPLATES / (w + ".part"), TEMPLATES / w)
@@ -189,7 +247,8 @@ def point_godot():
     path = GODOT_DATA / "editor_settings-4.7.tres"
     want = {
         "export/android/android_sdk_path": SDK.as_posix(),
-        "export/android/java_sdk_path": JRE.as_posix(),
+        # The JDK when present (Gradle build); it also runs apksigner and keytool.
+        "export/android/java_sdk_path": (JDK if (JDK / "bin" / "javac.exe").exists() else JRE).as_posix(),
         "export/android/debug_keystore": KEYSTORE.as_posix(),
         "export/android/debug_keystore_user": "androiddebugkey",
         "export/android/debug_keystore_pass": "android",
@@ -209,6 +268,8 @@ def main():
         tmp = Path(t)
         install_sdk(tmp)
         install_jre(tmp)
+        install_gradle_sdk(tmp)
+        install_jdk(tmp)
     install_templates()
     make_keystore()
     point_godot()
