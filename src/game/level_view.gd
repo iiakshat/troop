@@ -108,6 +108,7 @@ var _touching := false
 var _touch: TouchClassifier = null   # tap vs swipe per finger (spec v2 §2)
 var _steer_id := -1              # the finger that steers (-1: none)
 var _flick_t := 9.0              # seconds since the last tap (the hero's hand flick)
+var taps := 0                    # hero taps this level (analytics: taps per minute)
 const FLICK_S := 0.14            # the flick's length (s)
 var _heat_ring: MeshInstance3D   # spec v2 §2: the tap-heat arc at the hero's feet
 var _heat_mat: ShaderMaterial
@@ -282,6 +283,8 @@ static func touch_density() -> float:
 func tap() -> void:
 	if paused or _state != "play":
 		return
+	taps += 1
+	Analytics.note_tap(level_id, sim.time)  # spec v2 §2: taps per 10 s of each level (tap fatigue)
 	if sim.has_method("tap"):
 		sim.call("tap")
 	else:

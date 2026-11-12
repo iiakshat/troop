@@ -117,6 +117,29 @@ func test_heat_arc_follows_taps() -> void:
 	_drop(parts)
 
 
+## Spec v2 §2 analytics: every hero tap is counted (taps per minute on level_end) and feeds the
+## 10 s tap_rate buckets (tap fatigue), which close at the level end.
+func test_taps_feed_the_tap_rate_analytics() -> void:
+	var analytics: Node = (Engine.get_main_loop() as SceneTree).root.get_node("Analytics")
+	analytics.end_taps()   # an earlier test's open bucket
+	var seen: Array = []
+	analytics.sink = func(n: String, p: Dictionary): seen.append([n, p])
+	var parts := _view(1)
+	var view: LevelView = parts[0]
+	view._process(1.0 / 60.0)
+	for i in 5:
+		view.tap()
+	eq(view.taps, 5, "five taps counted")
+	analytics.end_taps()
+	var rates := seen.filter(func(e): return e[0] == "tap_rate")
+	eq(rates.size(), 1, "one tap_rate bucket closed")
+	if rates.size() == 1:
+		eq(int(rates[0][1]["taps"]), 5, "with the five taps")
+		eq(int(rates[0][1]["level"]), 1, "of level 1")
+	analytics.sink = Callable()
+	_drop(parts)
+
+
 ## Spec v2 §4: a full squad spreads about one lane wide (formation_half_width), not a blob.
 func test_full_squad_is_about_one_lane_wide() -> void:
 	var w: Dictionary = Config.units()["world"]

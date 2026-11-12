@@ -462,10 +462,14 @@ func _run_stats(r: Dictionary) -> Dictionary:
 	return s
 
 
+## level_end's params. Spec v2 §2 analytics: taps per minute of the level, so wins and losses
+## split by tap-rate band (the last 10 s tap_rate bucket is closed here too).
 func _run_info(r: Dictionary) -> Dictionary:
+	Analytics.end_taps()
 	return {"troops": view.sim.squad.total(), "peak": view.sim.peak_squad,
 		"time": snappedf(view.sim.time, 0.1), "boosters": _boosters, "revived": view.sim.revived,
-		"cause": String(r.get("cause", "")), "charges": view.sim.charges.duplicate()}
+		"cause": String(r.get("cause", "")), "charges": view.sim.charges.duplicate(),
+		"taps_per_min": int(round(view.taps * 60.0 / maxf(view.sim.time, 1.0)))}
 
 
 func _on_finished(r: Dictionary) -> void:

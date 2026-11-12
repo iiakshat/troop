@@ -14,7 +14,11 @@ Glass: Gravity Sound (CC BY 4.0), spookymodem (CC BY 3.0)
 Gunshots: Vincent Sevedge (CC BY 3.0)
 Music: made with Google Lyria
 Painted art: made with Google Gemini
-Fonts: Luckiest Guy (Apache 2.0), Lilita One (OFL)"""
+Fonts: Luckiest Guy (Apache 2.0), Lilita One (OFL)
+Ads: Godot AdMob plugin by Cengiz and the Godot SDK
+Integrations community (MIT), Google Mobile Ads SDK
+Analytics: Godotx Firebase by Paulo Coutinho (MIT),
+Google Firebase"""
 
 
 func _ready() -> void:

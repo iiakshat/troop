@@ -98,7 +98,8 @@ func start_sdk() -> void:
 func event(name: String, params: Dictionary = {}) -> void:
 	if sink.is_valid():
 		sink.call(name, params)
-	if not enabled:
+	# A SceneTree script (tests, tools) never writes the player's log, even before _ready ran.
+	if not enabled or (Engine.get_main_loop() != null and Engine.get_main_loop().get_script() != null):
 		return
 	var line := JSON.stringify({"t": int(Time.get_unix_time_from_system()), "s": session, "e": name, "p": params})
 	_append(line)
