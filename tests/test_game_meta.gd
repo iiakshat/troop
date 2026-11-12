@@ -71,17 +71,17 @@ func test_star_chest() -> void:
 func test_station_gated_by_district() -> void:
 	var g := _game()
 	g.save["coins"] = 100000
-	check(g.buy_room("armory"), "lv 1")
-	check(g.buy_room("armory"), "lv 2")
-	check(g.buy_room("armory"), "lv 3 (v1.1: open in district 1)")
-	eq(g.room_cost("armory"), -1, "lv 4 locked")
-	var st: Dictionary = g.room_state("armory")
+	check(g.buy_room("training"), "lv 1")
+	check(g.buy_room("training"), "lv 2")
+	check(g.buy_room("training"), "lv 3 (v1.1: open in district 1)")
+	eq(g.room_cost("training"), -1, "lv 4 locked")
+	var st: Dictionary = g.room_state("training")
 	eq(int(st["locked"]), 1, "needs district 1")
 	check(int(st["cost"]) > 0 and not bool(st["can_buy"]), "price shown, cannot buy")
-	check(not g.buy_room("armory"), "refused")
+	check(not g.buy_room("training"), "refused")
 	g.save["stars"]["10"] = 1
-	check(g.buy_room("armory"), "open after the boss")
-	eq(g.room_level("armory"), 4, "lv 4")
+	check(g.buy_room("training"), "open after the boss")
+	eq(g.room_level("training"), 4, "lv 4")
 	eq(int(g.save["stats"]["upgrade"]), 4, "upgrades counted for missions")
 	g.free()
 
@@ -89,23 +89,66 @@ func test_station_gated_by_district() -> void:
 func test_boosters() -> void:
 	var g := _game()
 	var start := int(g.boosters()["bomb"])
-	check(start >= 1, "starter bomb")
+	eq(start, 1, "one free bomb")
 	check(g.use_booster("bomb"), "use")
-	eq(int(g.boosters()["bomb"]), start - 1, "spent")
-	g.save["boosters"]["shield"] = 1
-	eq(g.use_boosters({"shield": 3, "headstart": 1}), {"shield": 1, "headstart": 1}, "spends only what exists")
-	check(g.booster_ad_available("shield"), "ad booster available")
-	check(g.grant_booster_ad("shield"), "granted after the ad")
-	eq(int(g.boosters()["shield"]), 1, "token added")
-	check(not g.booster_ad_available("shield"), "one ad per booster per level")
-	check(not g.grant_booster_ad("shield"), "refused")
-	check(g.booster_ad_available("bomb"), "other boosters still have their ad")
+	eq(int(g.boosters()["bomb"]), 0, "spent, recharging")
+	check(g.can_refill_power("bomb"), "the ad refill is offered")
+	check(g.refill_power("bomb"), "refilled after the ad")
+	eq(int(g.boosters()["bomb"]), 1, "ready again")
+	check(not g.refill_power("bomb"), "nothing to refill")
+	g.save["boosters"]["headstart"] = 1
+	eq(g.use_boosters({"shield": 3, "headstart": 2}), {"headstart": 1}, "only head-start tokens are taken in")
+	check(g.booster_ad_available("headstart"), "ad booster available")
+	check(g.grant_booster_ad("headstart"), "granted after the ad")
+	eq(int(g.boosters()["headstart"]), 1, "token added")
+	check(not g.booster_ad_available("headstart"), "one ad per booster per level")
+	check(not g.grant_booster_ad("headstart"), "refused")
+	check(not g.booster_ad_available("shield"), "shield is a power now, not a booster")
 	g.level_started(1, {})
-	check(g.booster_ad_available("shield"), "next level, next ad")
-	var up: Dictionary = g.level_upgrades({"shield": 1, "bomb": 2, "headstart": 2})
-	var base: Dictionary = g.upgrades()
-	eq(int(up["shield"]), int(base["shield"]) + 1, "shield charge added")
-	eq(int(up["bomb"]), int(base["bomb"]) + 2, "bomb charges added")
+	check(g.booster_ad_available("headstart"), "next level, next ad")
+	PowersTimer.add_stored(g.save, "shield", 2)
+	var up: Dictionary = g.level_upgrades({"headstart": 2})
+	eq(int(up["shield"]), 3, "1 free + 2 stored shields come along")
+	eq(int(up["bomb"]), 1, "the free bomb comes along")
+	check(up.has("weapons") and (up["weapons"] as Dictionary).has("hero"), "armory weapons for the sim")
+	# The level ended with 2 shields left and no bomb: one shield and one bomb were used.
+	g.lose_level(1, {}, {"charges": {"shield": 2, "bomb": 0}})
+	eq(g.power_available("shield"), 2, "one shield spent (the free one first)")
+	eq(int(g.save["powers"]["shield"]["stored"]), 2, "stored ones kept")
+	eq(g.power_available("bomb"), 0, "the bomb is recharging")
+	eq(int(g.power_state("bomb")["seconds_left"]), int(g.economy["powers"]["recharge_s"]), "5 h countdown")
+	var base := g.level_upgrades({})
+	g.win_level(1, 10, 1, {}, {"charges": base.duplicate()})
+	eq(g.power_available("shield"), 2, "nothing used: nothing spent")
+	g.free()
+
+
+func test_daily_shield_reward_is_stored() -> void:
+	var g := _game()
+	g._grant({"shield": 2})
+	eq(int(g.save["powers"]["shield"]["stored"]), 2, "reward shields are stored charges")
+	eq(g.power_available("shield"), 3, "on top of the free one")
+	g.free()
+
+
+func test_buy_weapon_through_game() -> void:
+	var g := _game()
+	g.save["coins"] = 100000
+	var p0: int = g.squad_power()
+	var r: Dictionary = g.buy_weapon("knives")
+	check(bool(r["ok"]), "bought")
+	eq(g.weapon_level("knives"), Vector2i(1, 1), "step 1")
+	eq(int(g.save["stats"]["upgrade"]), 1, "counted for missions")
+	check(g.squad_power() > p0, "Squad Power grew")
+	check(g.weapon_locked("shotgun"), "shotgun locked at level 1")
+	check(not bool(g.buy_weapon("shotgun")["ok"]), "cannot buy it")
+	eq(g.take_improvements(), [{"room": "knives", "before": 0, "after": 1}], "improvement noted")
+	g.free()
+
+
+func test_headstart_troops() -> void:
+	var g := _game()
+	var up: Dictionary = g.level_upgrades({"headstart": 2})
 	eq(int(up["headstart"]), 2, "headstart count")
 	eq(int(up["headstart_troops"]), 2 * int(g.economy["boosters"]["headstart"]["troops"]), "headstart troops")
 	g.free()
@@ -229,7 +272,7 @@ func test_existing_api_still_works() -> void:
 	check(g.owns("fire") and not g.owns("golden"), "owns")
 	g.mark_hint("swipe")
 	check(g.hint_seen("swipe"), "hint")
-	check(g.upgrades().has("knife") and g.coin_bonus() == 0.0, "upgrades")
+	check(g.upgrades().has("weapons") and g.coin_bonus() == 0.0, "upgrades")
 	g.free()
 
 
@@ -245,8 +288,8 @@ func test_rank_card_due_once_and_improvements() -> void:
 	eq(g.rank_card_due(8), "", "a rank already met in a level needs no card")
 	g.save["coins"] = 100000
 	var p0: int = g.squad_power()
-	check(g.buy_room("armory") and g.buy_room("armory"), "two armory levels")
+	check(g.buy_room("training") and g.buy_room("training"), "two training levels")
 	check(g.squad_power() > p0, "Squad Power grew")
-	eq(g.take_improvements(), [{"room": "armory", "before": 0, "after": 2}], "one line per room, first before to last after")
+	eq(g.take_improvements(), [{"room": "training", "before": 0, "after": 2}], "one line per room, first before to last after")
 	eq(g.take_improvements(), [], "cleared once taken")
 	g.free()

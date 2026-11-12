@@ -99,7 +99,11 @@ static func apply(save: Dictionary, reward: Dictionary) -> Dictionary:
 	if not (save.get("boosters") is Dictionary):
 		save["boosters"] = {}
 	for b in BOOSTERS:
-		if reward.has(b):
+		if not reward.has(b):
+			continue
+		if SaveData.POWERS.has(b):
+			PowersTimer.add_stored(save, b, int(reward[b]))  # v4: stored shield / bomb charges
+		else:
 			save["boosters"][b] = maxi(int(save["boosters"].get(b, 0)) + int(reward[b]), 0)
 	var cosmetic := String(reward.get("cosmetic", ""))
 	if cosmetic != "":

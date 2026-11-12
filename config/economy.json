@@ -15,16 +15,27 @@
     "replay_mult": 0.5
   },
 
-  "_station_note": "Cost of level k = base x growth^(k-1), rounded (price_round). req[k-1] = district that must be liberated before level k can be bought (0 = open from the start). Effects: knife +per damage, speed +per (sim: +0.5 throws/s each), squad +per starting constables, capacity +per squad cap, coins +per finale coin bonus, charges: shield ceil(lv/2), bomb floor(lv/2).",
+  "_station_note": "Cost of level k = base x growth^(k-1), rounded (price_round). req[k-1] = district that must be liberated before level k can be bought (0 = open from the start). Effects: squad +per starting constables, capacity +per squad cap, coins +per finale coin bonus. v2: the knife and speed rooms moved to the Armory (config/armory.json) and the garage's charges to `powers`.",
   "station": {
-    "armory":   { "icon": "knife",      "max": 10, "base": 80,  "growth": 1.45, "req": [0, 0, 0, 1, 1, 2, 2, 3, 4, 4], "effect": "knife",    "per": 1 },
-    "range":    { "icon": "speed",      "max": 10, "base": 80,  "growth": 1.45, "req": [0, 0, 0, 1, 1, 2, 2, 3, 4, 4], "effect": "speed",    "per": 1 },
     "training": { "icon": "badge",      "max": 10, "base": 110, "growth": 1.45, "req": [0, 0, 0, 1, 1, 2, 2, 3, 4, 4], "effect": "squad",    "per": 1 },
     "barracks": { "icon": "station",    "max": 6,  "base": 150, "growth": 1.6,  "req": [0, 1, 2, 3, 4, 4],             "effect": "capacity", "per": 25 },
-    "evidence": { "icon": "money",      "max": 6,  "base": 200, "growth": 1.6,  "req": [0, 1, 2, 3, 4, 4],             "effect": "coins",    "per": 0.1 },
-    "garage":   { "icon": "police_car", "max": 4,  "base": 300, "growth": 2.2,  "req": [0, 1, 2, 4],                   "effect": "charges",  "per": 1 }
+    "evidence": { "icon": "money",      "max": 6,  "base": 200, "growth": 1.6,  "req": [0, 1, 2, 3, 4, 4],             "effect": "coins",    "per": 0.1 }
   },
-  "station_order": ["armory", "range", "training", "barracks", "evidence", "garage"],
+  "station_order": ["training", "barracks", "evidence"],
+
+  "legacy_station_v3": {
+    "_note": "Save migration v3 -> v4 only: the prices of the removed rooms. The coins a player spent on armory (knife) and range (speed) levels become hero-knife track steps worth at least as much (rounded up; anything past a maxed track comes back as coins). Garage level g becomes ceil(g/2) stored shields and floor(g/2) stored bombs.",
+    "armory": { "max": 10, "base": 80,  "growth": 1.45 },
+    "range":  { "max": 10, "base": 80,  "growth": 1.45 },
+    "garage": { "max": 4,  "base": 300, "growth": 2.2 },
+    "knife_track": "knives"
+  },
+
+  "powers": {
+    "_note": "Shield and bomb (src/core/powers_timer.gd): `free` charges of each recharge recharge_s seconds after the first is used (real clock, guarded against moving it back); a rewarded ad refills them at once. Stored charges from daily rewards, spin, chests and missions come on top. Every charge the player has is available in each level; only the ones used are spent.",
+    "free": { "shield": 1, "bomb": 1 },
+    "recharge_s": 18000
+  },
 
   "power": {
     "_note": "Squad Power (lobby top bar, level nodes) = dps x (hero knife dmg x throws/s + starting constables x constable dmg x rate) + cap x squad cap + charge x (shields + bombs) + coin_pct x evidence coin bonus in percent; all from the station's real effects (units.json base numbers). recommended = [[level, power], ...], linear between anchors, fitted with tests/econ_sim.gd to what a player who spends their coins has at that level. More than 15% below it, the current or next node shows a warning tint (never under the first-build pointer); every level is still winnable without upgrades.",
@@ -162,7 +173,8 @@
     "shield":    { "icon": "shield",    "charges": 1 },
     "bomb":      { "icon": "bomb",      "charges": 1 },
     "ad_per_level": 1,
-    "start": { "headstart": 1, "shield": 1, "bomb": 1 }
+    "_start": "v2: shield and bomb are no longer picked here; they come from `powers` (free + stored). start = head-start tokens a new save begins with.",
+    "start": { "headstart": 1 }
   },
 
   "ads": {

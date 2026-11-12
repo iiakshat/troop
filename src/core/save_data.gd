@@ -14,9 +14,16 @@ extends RefCounted
 ##   star_chests_opened, stats {stat: lifetime count}, rank_seen [unit ids]
 ##   last_interstitial_level = lifetime wins (stats.win) when the last interstitial showed,
 ##   last_interstitial_at = unix time of it.
+## v4 (Siren Squad v2):
+##   armory {track_id: {tier, step}}         weapon tracks (Armory); the station lost knife,
+##                                           speed and garage
+##   powers {shield|bomb: {stored, ready_at, used}}  free charges on a timer + stored ones
+##                                           (PowersTimer); boosters keep only headstart
+##   last_seen_time                          latest clock seen by the power timers
 
-const VERSION := 3
-const BOOSTERS := ["headstart", "shield", "bomb"]
+const VERSION := 4
+const BOOSTERS := ["headstart"]
+const POWERS := ["shield", "bomb"]
 
 
 static func default_save() -> Dictionary:
@@ -25,7 +32,11 @@ static func default_save() -> Dictionary:
 		"station": {}, "owned": ["street", "steel"], "outfit": "street", "knife": "steel",
 		"seen_hints": [], "sound": true, "music": true, "vibration": true,
 		"stars": {}, "city": {}, "city_collected_at": 0, "city_bank": 0,
-		"boosters": {"headstart": 0, "shield": 0, "bomb": 0},
+		"boosters": {"headstart": 0},
+		"armory": {}, "powers": {
+			"shield": {"stored": 0, "ready_at": 0, "used": 0},
+			"bomb": {"stored": 0, "ready_at": 0, "used": 0}},
+		"last_seen_time": 0,
 		"daily": {"day": 0, "last_claim_date": "", "streak": 0},
 		"missions": {"date": "", "list": [], "bonus_claimed": false},
 		"spin": {"date": "", "free_used": 0, "ad_used": 0},
@@ -37,7 +48,10 @@ static func default_save() -> Dictionary:
 ## Brings any older or edited save up to the current shape, keeping everything it can.
 ## v1 lobby upgrades (knife / speed / squad) become armory / range / training levels. v2 saves
 ## keep their station levels (rooms only grew), get a star for every level they had beaten,
-## and receive the starter boosters.
+## and receive the starter boosters. v3 -> v4: the coins spent on armory and range levels
+## become hero-knife track steps worth at least as much (anything past a maxed track comes
+## back as coins), garage level g becomes ceil(g/2) stored shields and floor(g/2) stored bombs
+## on top of the shield / bomb tokens the save had. Nothing bought is lost.
 static func migrate(raw: Variant, economy: Dictionary) -> Dictionary:
 	var s := default_save()
 	var src: Dictionary = raw if raw is Dictionary else {}
@@ -53,6 +67,13 @@ static func migrate(raw: Variant, economy: Dictionary) -> Dictionary:
 		station["range"] = maxi(_int(station.get("range", 0)), _int(up.get("speed", 0)))
 		station["training"] = maxi(_int(station.get("training", 0)), _int(up.get("squad", 0)))
 		s.erase("upgrades")
+	var legacy_knife := 0     # coins spent on the v3 armory and range rooms
+	var legacy_garage := 0
+	if old_version < 4:
+		for room in ["armory", "range"]:
+			legacy_knife += legacy_spent(economy, room, _int(station.get(room, 0)))
+		var gmax := int(economy.get("legacy_station_v3", {}).get("garage", {}).get("max", 4))
+		legacy_garage = clampi(_int(station.get("garage", 0)), 0, gmax)
 	var clean := {}
 	for room in economy["station"]:
 		clean[room] = clampi(_int(station.get(room, 0)), 0, int(economy["station"][room]["max"]))
@@ -118,6 +139,38 @@ static func migrate(raw: Variant, economy: Dictionary) -> Dictionary:
 		else:
 			boosters[id] = maxi(_int(start.get(id, 0)), 0)
 	s["boosters"] = boosters
+
+	# Powers (v4): free charge timers and stored charges.
+	var powers := {}
+	var src_p: Dictionary = src.get("powers", {}) if src.get("powers") is Dictionary else {}
+	for id in POWERS:
+		var p: Dictionary = src_p.get(id, {}) if src_p.get(id) is Dictionary else {}
+		powers[id] = {"stored": maxi(_int(p.get("stored", 0)), 0),
+			"ready_at": maxi(_int(p.get("ready_at", 0)), 0), "used": maxi(_int(p.get("used", 0)), 0)}
+	if old_version < 4:
+		var old_tokens: Dictionary = src_b if src_b is Dictionary else {}
+		powers["shield"]["stored"] += maxi(_int(old_tokens.get("shield", 0)), 0) + ceili(legacy_garage / 2.0)
+		powers["bomb"]["stored"] += maxi(_int(old_tokens.get("bomb", 0)), 0) + floori(legacy_garage / 2.0)
+	s["powers"] = powers
+	s["last_seen_time"] = maxi(_int(s.get("last_seen_time", 0)), 0)
+
+	# Armory (v4): keep known tracks; v3 knife and speed rooms become knife-track steps.
+	var arm := {}
+	var src_a: Dictionary = src.get("armory", {}) if src.get("armory") is Dictionary else {}
+	var acfg := Armory.cfg()
+	for id in src_a:
+		if Armory.track(String(id), acfg).is_empty() or not (src_a[id] is Dictionary):
+			continue
+		arm[String(id)] = {"tier": _int(src_a[id].get("tier", 1)), "step": _int(src_a[id].get("step", 0))}
+	s["armory"] = arm
+	for id in arm.keys():
+		Armory.set_index(s, id, Armory.index(s, id, acfg), acfg)  # clamps junk tiers / steps
+	if legacy_knife > 0:
+		var knife := String(economy.get("legacy_station_v3", {}).get("knife_track", "knives"))
+		var conv := Armory.steps_for_coins(knife, legacy_knife + Armory.spent(s, knife, acfg), acfg)
+		if int(conv["index"]) > Armory.index(s, knife, acfg):
+			Armory.set_index(s, knife, int(conv["index"]), acfg)
+		s["coins"] = int(s["coins"]) + int(conv["refund"])
 
 	# Daily calendar.
 	var d: Dictionary = src.get("daily", {}) if src.get("daily") is Dictionary else {}
@@ -192,6 +245,18 @@ static func _int(v: Variant) -> int:
 	return 0
 
 
+## Coins a v3 save had spent on the first `lv` levels of a room the station no longer has
+## (economy.legacy_station_v3; save migration only).
+static func legacy_spent(economy: Dictionary, room: String, lv: int) -> int:
+	var r: Dictionary = economy.get("legacy_station_v3", {}).get(room, {})
+	if r.is_empty():
+		return 0
+	var sum := 0
+	for k in range(1, clampi(lv, 0, int(r.get("max", 10))) + 1):
+		sum += Economy.round_price(float(r["base"]) * pow(float(r["growth"]), k - 1), economy)
+	return sum
+
+
 ## Price of the next level of a room, or -1 when it is maxed or still locked behind a district
 ## (`liberated` = number of districts the player has liberated).
 static func room_cost(economy: Dictionary, station: Dictionary, room: String, liberated := 99) -> int:
@@ -216,18 +281,15 @@ static func room_lock(economy: Dictionary, station: Dictionary, room: String, li
 
 ## What the sim and economy get from the station.
 static func effects(economy: Dictionary, station: Dictionary) -> Dictionary:
-	var out := {"knife": 0, "speed": 0, "squad": 0, "capacity": 0, "coins": 0.0, "shield": 0, "bomb": 0}
+	var out := {"squad": 0, "capacity": 0, "coins": 0.0}
 	for room in economy["station"]:
 		var r: Dictionary = economy["station"][room]
 		var lv := int(station.get(room, 0))
 		match String(r["effect"]):
-			"knife", "speed", "squad", "capacity":
+			"squad", "capacity":
 				out[r["effect"]] = lv * int(r["per"])
 			"coins":
 				out["coins"] = lv * float(r["per"])
-			"charges":
-				out["shield"] = ceili(lv / 2.0)
-				out["bomb"] = floori(lv / 2.0)
 	return out
 
 

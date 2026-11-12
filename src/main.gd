@@ -397,7 +397,7 @@ func _run_stats(r: Dictionary) -> Dictionary:
 func _run_info(r: Dictionary) -> Dictionary:
 	return {"troops": view.sim.squad.total(), "peak": view.sim.peak_squad,
 		"time": snappedf(view.sim.time, 0.1), "boosters": _boosters, "revived": view.sim.revived,
-		"cause": String(r.get("cause", ""))}
+		"cause": String(r.get("cause", "")), "charges": view.sim.charges.duplicate()}
 
 
 func _on_finished(r: Dictionary) -> void:
