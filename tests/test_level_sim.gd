@@ -695,7 +695,7 @@ func test_red_gate_climb_past_zero_keeps_the_level_step() -> void:
 func test_standoff_stops_the_street() -> void:
 	var lvl := {"events": [
 		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 30}]},
-		{"at": 90, "type": "wave", "groups": [{"enemy": "gunman", "n": 6, "hp": 30, "shot_dmg": 0}]},
+		{"at": 90, "type": "wave", "groups": [{"enemy": "gunman", "n": 6, "hp": 30, "return_fire": {"rate": 0.0, "share": 0}}]},
 		{"at": 160, "type": "finish"}]}
 	var sim := LevelSim.new(lvl, units)
 	sim.set_lane(1)
@@ -850,6 +850,83 @@ func test_huge_gang_is_drawn_and_fought_in_capped_rows() -> void:
 	_step_until(sim, func(): return sim.state != "run")
 	eq(sim.state, "strike", "25K troops beat 18K thugs")
 	check(sim.squad.total() > 10000, "and keep most of the squad (%d)" % sim.squad.total())
+
+
+## Gunmen that cannot be shot down (a do-nothing squad), 19 constables + the hero.
+func _return_fire_level(district: int, enemy := "gunman", n := 4) -> Dictionary:
+	return {"district": district, "events": [
+		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 19}]},
+		{"at": 80, "type": "wave", "groups": [{"enemy": enemy, "n": n, "hp": 100000}]},
+		{"at": 200, "type": "finish"}]}
+
+
+func test_return_fire_kills_followers_one_by_one_then_the_hero() -> void:
+	var rf: Dictionary = units["enemies"]["gunman"]["return_fire"]
+	check(float(rf["rate"]) > 0.0 and int(rf["share"]) == 100, "every gunman carries a gun")
+	var sim := LevelSim.new(_return_fire_level(1), units)
+	sim.set_lane(1)
+	var shots := 0
+	var lost := 0
+	var hero_kept := true
+	var events := 0
+	for i in 20000:
+		sim.step(1.0 / 30.0)
+		for e in sim.drain():
+			if e["type"] != "return_fire":
+				continue
+			events += 1
+			shots += int(e["shots"])
+			lost += int(e["lost"])
+			check(int(e["lost"]) <= int(e["shots"]), "a hit kills at most one")
+			if sim.squad.total() > 0 and sim.squad.count("constable") > 0 and not sim.squad.hero_alive():
+				hero_kept = false
+		if sim.state != "run":
+			break
+	check(events >= 5, "a stream of shots, not one volley (%d)" % events)
+	check(hero_kept, "the hero stands while any follower is left")
+	eq(sim.state, "lost", "the squad is worn down")
+	eq(sim.lose_cause, "gunman", "cause")
+	eq(lost, 20, "every follower, then the hero")
+	check(shots >= lost, "each hit is one troop")
+
+
+func test_return_fire_is_blocked_by_the_shield() -> void:
+	var sim := LevelSim.new(_return_fire_level(1), units)
+	sim.set_lane(1)
+	var first := _until_event(sim, "return_fire")
+	check(not first.is_empty(), "the gunmen fire back")
+	sim.charges["shield"] = 1
+	check(sim.use_power("shield"), "shield up")
+	var before := sim.squad.total()
+	var blocked := 0
+	while sim.shield_t > 0.1:
+		sim.step(1.0 / 30.0)
+		for e in sim.drain():
+			if e["type"] == "return_fire":
+				check(bool(e["blocked"]), "shots under the shield are blocked")
+				eq(int(e["lost"]), 0, "nobody falls under the shield")
+				blocked += 1
+	check(blocked > 0, "shots hit the shield (%d)" % blocked)
+	eq(sim.squad.total(), before, "squad intact")
+
+
+func test_return_fire_from_district_two_and_gunmen_everywhere() -> void:
+	var share := int(units["enemies"]["thug"]["return_fire"]["share"])
+	check(share > 0 and share < 100, "some thugs carry guns (%d%%)" % share)
+	eq(int(units["return_fire"]["from_district"]), 2, "gangs fire back from district 2")
+	# District 1: thugs never fire back (today's rules); district 2: they do.
+	for d in [1, 2]:
+		var sim := LevelSim.new(_return_fire_level(d, "thug", 30), units)
+		sim.set_lane(1)
+		var fired := not _until_event(sim, "return_fire").is_empty()
+		eq(fired, d >= 2, "district %d thugs fire back: %s" % [d, d >= 2])
+	# Gunmen use return fire in district 1 too, and no longer fire volleys.
+	var g := LevelSim.new(_return_fire_level(1), units)
+	g.set_lane(1)
+	var seen := _step_until(g, func(): return g.state != "run")
+	check(not _events_of(seen, "return_fire").is_empty(), "district 1 gunmen fire back")
+	for e in _events_of(seen, "hurt"):
+		check(String(e["cause"]) != "gunman", "no old volley from the gunmen")
 
 
 func test_coin_troops_are_district_one_equivalents() -> void:

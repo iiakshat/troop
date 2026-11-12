@@ -66,6 +66,7 @@ var weapons: Dictionary
 var enemy_defs: Dictionary
 var obstacle_defs: Dictionary
 var powers: Dictionary
+var rf_cfg: Dictionary     # units.return_fire: from_district, range
 var revive_cfg: Dictionary
 var star_cfg: Dictionary
 
@@ -139,6 +140,7 @@ func _init(level: Dictionary = {}, units_cfg: Dictionary = {}, upgrades: Diction
 	enemy_defs = units_cfg["enemies"]
 	obstacle_defs = units_cfg.get("obstacles", {})
 	powers = units_cfg["powers"]
+	rf_cfg = units_cfg.get("return_fire", {})
 	revive_cfg = units_cfg.get("revive", {})
 	star_cfg = level.get("stars", units_cfg.get("stars", {}))
 
@@ -371,6 +373,9 @@ func step(dt: float) -> void:
 	_gunfire(dt)
 	if state != "run":
 		return
+	_return_fire(dt)
+	if state != "run":
+		return
 	_firebombs()
 	if state != "run":
 		return
@@ -527,6 +532,13 @@ func _spawn_horde(sp: Dictionary, early := false) -> void:
 	# A huge gang stands in at most gang_figs figures: each carries `per` people, a row is
 	# cols x per of them (killed_rows), and its front row strikes together (_contacts).
 	h["per"] = maxi((int(h["start"]) + gang_figs - 1) / gang_figs, 1)
+	# Return fire (spec v2 §12.2): rate per shooter, share with guns, range; 0 = never.
+	var rf: Dictionary = def.get("return_fire", {})
+	var on := district >= int(rf.get("from_district", rf_cfg.get("from_district", 2)))
+	h["rf_rate"] = float(rf.get("rate", 0.0)) if on else 0.0
+	h["rf_share"] = int(rf.get("share", 0))
+	h["rf_range"] = float(rf.get("range", rf_cfg.get("range", 32.0)))
+	h["rf_acc"] = 0.0
 	if h["boss"]:
 		h["max_hp"] = float(h["hp"]) * int(h["count"])
 	if h["count"] <= 0:
@@ -829,6 +841,35 @@ func _gunfire(dt: float) -> void:
 						return
 
 
+## Gangs with guns fire back while their front is within range (spec v2 §12.2): every
+## shooter (share % of the gang, rounded up) fires rf_rate shots/s; each hit kills one troop,
+## lowest rank first, so the hero falls last. The shield blocks it. One event per gang and
+## tick with the shots fired, so the view draws the muzzle flashes and tracers.
+func _return_fire(dt: float) -> void:
+	for h in hordes:
+		if float(h.get("rf_rate", 0.0)) <= 0.0 or h["melee"] or int(h["count"]) <= 0:
+			continue
+		if front_z(h) < -float(h["rf_range"]):
+			continue
+		h["rf_acc"] = float(h["rf_acc"]) + float(shooters(h)) * float(h["rf_rate"]) * dt
+		var shots := int(floor(float(h["rf_acc"])))
+		if shots <= 0:
+			continue
+		h["rf_acc"] = float(h["rf_acc"]) - shots
+		var blocked := shield_t > 0.0
+		var lost := 0
+		if not blocked:
+			lost = _hurt(shots, String(h["enemy"]), h["id"], false)
+		out.append({"type": "return_fire", "horde": h["id"], "shots": shots, "lost": lost, "blocked": blocked})
+		if state != "run":
+			return
+
+
+## How many of a gang carry guns: its rf_share percent, rounded up (0 when it has none).
+static func shooters(h: Dictionary) -> int:
+	return (int(h["count"]) * int(h.get("rf_share", 0)) + 99) / 100
+
+
 ## Firebombs land in the lane they were thrown at; the squad burns only if it is still there.
 func _firebombs() -> void:
 	for fb in firebombs.duplicate():
@@ -1078,7 +1119,7 @@ func clone() -> LevelSim:
 	var c := LevelSim.new()
 	for p in ["S", "S_base", "accel", "fire_range", "spawn_dist", "contact_z", "melee_tick",
 			"boss_halt", "finish_hold", "boss_hit_every", "weapons", "enemy_defs", "obstacle_defs",
-			"powers", "revive_cfg", "star_cfg", "lane", "squad_x", "_x_driven", "lane_w", "form_half",
+			"powers", "rf_cfg", "revive_cfg", "star_cfg", "lane", "squad_x", "_x_driven", "lane_w", "form_half",
 			"fig_cap", "fig_r", "gate_clear_s", "gang_priority", "gang_figs", "district", "caps",
 			"tap_heat", "tap_auto", "tap_per",
 			"tap_hold_s", "tap_decay_s", "_tap_hold", "traveled", "time", "state", "lose_cause",

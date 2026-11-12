@@ -170,7 +170,7 @@ static func threats(u: Dictionary) -> Array:
 		out.append("boss_crown")
 	if u.has("burn") or u.has("throw_every"):
 		out.append("fire")
-	elif u.has("shoot_every"):
+	elif u.has("shoot_every") or int(u.get("return_fire", {}).get("share", 0)) >= 50:
 		out.append("aim" if u.has("aim") else "pistol")
 	if int(u.get("armour", 0)) > 0:
 		out.append("armour")

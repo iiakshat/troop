@@ -33,6 +33,7 @@ const ALLY_SFX := {
 }
 const CHAR_H := 1.85            # baked character height (config/characters.json)
 const BOSS_SCALE := 2.6         # bosses are drawn this much bigger than a thug
+const DEPTH_SPREAD := 1.3       # a full squad's rows open up this much in depth (view only; smudge fix)
 const ENEMY_SCALE := 1.3        # gang members are drawn bigger than troops so far fights read
 const BOSS_BEAT_Z := -35.0      # a boss closer than this pulls the camera in (World.beat)
 const CAM_FOLLOW := 0.5         # the camera follows the squad sideways by this share
@@ -1195,7 +1196,7 @@ func _kill_overlap(e: Dictionary, hole: bool) -> void:
 	for a in _allies:
 		if a["kind"] == "hero" and sim.squad.hero_alive():
 			continue
-		var sx := at_x + Squad.slot_offset(int(a["slot"]), n, sim.form_half).x
+		var sx := at_x + Squad.slot_offset(_place_of(int(a["slot"]), n), n, sim.form_half).x  # where it stands
 		order.append([absf(sx - ob_x), int(a["slot"]), a])
 	order.sort_custom(func(x, y): return x[0] < y[0] or (x[0] == y[0] and x[1] < y[1]))
 	for i in mini(k, order.size()):
@@ -1282,8 +1283,19 @@ func _slot_pos(slot: int, n: int) -> Vector3:
 	var lift := -7.0 if demo else 0.0  # lobby: squad further up the street, above the menu
 	# The same formation the sim hits obstacles with (Squad.slot_offset), around _squad_x.
 	var o := Squad.slot_offset(_place_of(slot, n), n, sim.form_half if sim else 0.0)
+	# Spec v2 §4 smudge: a big squad packs its rows so tight that only caps show (a dark blob).
+	# Rows open up in depth around the formation's centre; depth is the view's alone (the sim
+	# hits obstacles by x only), so the arithmetic is untouched.
+	if slot > 0:
+		var zc := 1.1 + 0.18 * crowd_scale(n) * sqrt(maxf(n, 1))  # Squad.slot_offset's centre
+		o.y = zc + (o.y - zc) * depth_spread(n)
 	# A hair of height per place keeps overlapping caps and hats from z-fighting.
 	return Vector3(_squad_x + o.x, 0.012 * (slot % 4), o.y + lift)
+
+
+## How much a squad of n shown figures opens up in depth (1 = the sim's rows).
+static func depth_spread(n: int) -> float:
+	return lerpf(1.0, DEPTH_SPREAD, clampf((n - 30) / 40.0, 0.0, 1.0))
 
 
 ## Spec v2 §4 smudge fix. The formation's places are the sim's (Squad.slot_offset); this only
