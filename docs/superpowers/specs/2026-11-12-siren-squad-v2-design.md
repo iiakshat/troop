@@ -29,7 +29,7 @@ The owner played v1.1 on a phone. Verdict: "okayish, promising, but it feels bui
 
 - New Bottle Shot features. The owner: "don't overdo it, it's already good." Only fix what is broken there.
 - New playable heroes with different abilities. Heroes are cosmetic only.
-- New characters before the owner's Mixamo files arrive (see §9).
+- New character rigs or Mixamo (see §9).
 - Online features, IAP, or the store listing text (a later round).
 
 ## Anti-goals (a failure even if it works)
@@ -189,7 +189,7 @@ The owner played v1.1 on a phone. Verdict: "okayish, promising, but it feels bui
   - From mid district 1 (about L5-L7) on, the levels assume a player who spends coins on weapons at the expected pace: gently at first, then more. A player who never upgrades stalls in late district 1 or early district 2.
   - Good decisions still matter as much as power.
   - Extend `tests/econ_sim.gd` so coins (with and without the x2 ad) → upgrades → power keep each level's win target, and show 1-3 meaningful buys after most wins.
-- **Hero skins:** cosmetic only, sold for coins in the existing Style panel. Outfits for the current hero model now; Mixamo heroes later.
+- **Hero skins:** cosmetic only, sold for coins in the existing Style panel. Outfits for the current hero model.
 
 ## 7. Powers: shield and bomb
 
@@ -231,15 +231,15 @@ The owner played v1.1 on a phone. Verdict: "okayish, promising, but it feels bui
 - **Owner checklist** (10 minutes): create the AdMob app and ad units, create the Firebase Android app with the package ID, download `google-services.json`, and send the IDs.
 - **Content rating:** keep the game in the "cartoon violence" range. Defeated enemies fall and fade (no blood), and weapon art is stylised.
 
-## 9. Mixamo characters (waiting on the owner)
+## 9. Characters: polish, no Mixamo (owner, 2026-11-12)
 
-- The owner is downloading Mixamo characters and animations into `art_src/mixamo/`. They will send a message when done.
-- **Repo rule:** `art_src/mixamo/` is git-ignored, because the repo is public and Adobe's terms forbid sharing the raw files. Only the baked in-game data is committed.
-- **When the files arrive:**
-  - extend `tools/bake_vat.gd` to import the FBX characters and retarget the Mixamo clips onto the clip table (run, idle, pistol run, rifle run, throw, death, hit, shoot, punch, victory, boss walk)
-  - re-bake
-  - keep the cartoon look and the toon shader
-  - Until then, polish the current characters only (§4 smudge, boss visibility).
+- The owner dropped Mixamo ("too much for a simple hyper-casual game").
+- Keep the current Quaternius VAT characters and polish only where needed:
+  - fix the crowd-centre smudge
+  - make bosses fully visible and imposing
+  - clean colours that fit the new grade
+  - small outfit or headgear touches if a rank reads poorly
+- No new rigs. `art_src/mixamo/` stays git-ignored in case this comes back.
 
 ## 10. Process notes
 

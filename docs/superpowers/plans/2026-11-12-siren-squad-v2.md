@@ -183,7 +183,8 @@ func test_gang_within_priority_takes_fire_before_red_gate() -> void:
 - [ ] **Step 5: Barrel** model and states, as in the files above. Contact cost stays as in config. An unarmed barrel blocks like an obstacle with its cost tag, never "rubber".
 - [ ] **Step 6: Colour grade.** No orange haze; street, squad, threats and pickups read clearly. Before and after screenshots for districts 1-5 (`tools/preview_world.tscn`).
 - [ ] **Step 7: Heat arc** at the hero's feet (cold → hot, from `sim.tap_heat`), plus the hand flick on each tap.
-- [ ] **Step 8:** Tests pass. **Commit** after each step.
+- [ ] **Step 8: Character polish** (spec §9, no Mixamo): fix only what reads poorly after Steps 3-6 (rank headgear, colours under the new grade, an imposing boss). Screenshots before and after.
+- [ ] **Step 9:** Tests pass. **Commit** after each step.
 
 ### Task 5: Armory core (builder ECON)
 
@@ -452,4 +453,3 @@ func test_gang_within_priority_takes_fire_before_red_gate() -> void:
 - [ ] Run `build_apk.bat noinstall`: the Gradle build with test ad IDs.
 - [ ] Fast-forward `main`, then push both with the per-command auth header.
 - [ ] Report to the owner per spec section, plus the owner checklist (`docs/owner_ads_setup.md`, the ipindia.gov.in name check).
-- [ ] When the owner's Mixamo files arrive, start a separate round per spec §9.
