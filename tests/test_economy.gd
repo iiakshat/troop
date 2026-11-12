@@ -181,6 +181,21 @@ func test_purchase_curve_holds() -> void:
 		check(float(r["power"]) + 0.001 >= float(r["rec"]), "a spending player meets the recommended power at L%d" % (int(r["level"]) + 1))
 
 
+## Plan v2 Task 13 / review focus 5: the levels are calibrated against the no-ad pace (the
+## upgrades this model's player brings into each level). A player who earns only by playing
+## (no ads, no city, no daily rewards) and buys only squad progress affords that pace at every
+## level with at most 2 replays of the previous level, and a brand-new player has nothing at L1.
+func test_no_ad_pace_reaches_every_level() -> void:
+	var Model = load("res://tests/econ_model.gd")
+	var rows: Array = Model.run(eco, Config.load_json("res://config/finale.json"), Config.units())
+	var pc: Dictionary = Model.pace_check(rows)
+	check((pc["fails"] as Array).is_empty(), "no_ad_pace_reaches_every_level (more than 2 replays at %s)" % str(pc["fails"]))
+	var p1: Dictionary = Model.pace(rows)["1"]
+	check((p1["armory"] as Dictionary).is_empty() and int(p1["squad"]) == 0, "level 1 is played with no upgrades")
+	var p10: Dictionary = Model.pace(rows)["10"]
+	check(not (p10["armory"] as Dictionary).is_empty(), "by level 10 the pace has weapon steps")
+
+
 func test_squad_power_and_pointers() -> void:
 	var units := Config.units()
 	var hero: Dictionary = units["allies"]["hero"]

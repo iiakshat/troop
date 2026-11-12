@@ -29,4 +29,23 @@ func _initialize() -> void:
 		print("district %d: %.1f buys per win, %d coins per win" % [d, float(per_d[d][0]) / per_d[d][2], per_d[d][1] / per_d[d][2]])
 	var s: Dictionary = Model.summary(rows)
 	print("in band (1-3 bought): %d%%  none at: %s  over 3 at: %s" % [int(round(float(s["in_band"]) * 100.0)), str(s["none"]), str(s["over"])])
+	# Plan v2 Task 13: the no-ad pace (what the levels are calibrated against) and its check.
+	print("\nL   pace (armory steps; station squad/cap%%/coins)   coins: power spent / earned by playing  replays")
+	var pc: Dictionary = Model.pace_check(rows)
+	for i in rows.size():
+		var r: Dictionary = rows[i]
+		var p: Dictionary = r["pace"]
+		print("%-3d %-46s %6d / %-6d  %d" % [r["level"], "%s; %d/%d/%.1f" % [str(p["armory"]), p["squad"], p["capacity"], p["coins"]],
+			r["power_cost"], r["play_before"], pc["replays"][i]])
+	print("no_ad_pace_reaches_every_level: %s (worst %d replays of the previous level; over 2 at %s)" % [
+		"PASS" if (pc["fails"] as Array).is_empty() else "FAIL", pc["worst"], str(pc["fails"])])
+	var out := "res://_local/pace.json"
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("pace="):
+			out = a.substr(5)
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(out).get_base_dir())
+	var f := FileAccess.open(out, FileAccess.WRITE)
+	if f:
+		f.store_string(JSON.stringify(Model.pace(rows), " "))
+		print("pace written to ", out)
 	quit()
