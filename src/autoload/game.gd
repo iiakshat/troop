@@ -76,9 +76,16 @@ var _last_tick := 0
 
 func _ready() -> void:
 	# Headless tools and tests (a SceneTree script) must not overwrite the player's save.
-	if Engine.get_main_loop() and Engine.get_main_loop().get_script() != null:
+	if scripted():
 		save_path = ""
 	boot()
+
+
+## True under a SceneTree script (tests, tune, tools): the autoload exists there before its
+## _ready runs, so write_save checks this too and never writes the real save.json.
+static func scripted() -> bool:
+	var ml := Engine.get_main_loop()
+	return ml != null and ml.get_script() != null
 
 
 ## Loads configs and the save (or migrates `raw` when given, for tests) and rolls today's
@@ -145,7 +152,7 @@ func load_save() -> void:
 ## Atomic: writes save.json.tmp, keeps the previous file as save.json.bak, then renames the
 ## new file into place, so a kill mid-write never leaves a truncated save.
 func write_save() -> void:
-	if save_path == "":
+	if save_path == "" or (save_path == SAVE_PATH and scripted()):
 		return
 	var tmp := save_path + ".tmp"
 	var f := FileAccess.open(tmp, FileAccess.WRITE)
