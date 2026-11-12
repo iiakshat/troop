@@ -71,8 +71,8 @@ func test_station_costs_and_gates() -> void:
 		eq(Economy.station_cost(room, mx + 1, eco), -1, room + " past max")
 		eq(Economy.station_cost(room, 0, eco), -1, room + " level 0 invalid")
 	# geometric: cost(k) = base x growth^(k-1), rounded
-	var a: Dictionary = eco["station"]["armory"]
-	eq(Economy.station_cost("armory", 3, eco), Economy.round_price(float(a["base"]) * pow(float(a["growth"]), 2), eco), "geometric")
+	var a: Dictionary = eco["station"]["training"]
+	eq(Economy.station_cost("training", 3, eco), Economy.round_price(float(a["base"]) * pow(float(a["growth"]), 2), eco), "geometric")
 	eq(Economy.station_cost("nope", 1, eco), -1, "unknown room")
 
 
@@ -154,7 +154,7 @@ func test_reward_tables_are_sane() -> void:
 		stats[m["stat"]] = true
 	check(stats.size() >= int(eco["missions"]["per_day"]), "enough distinct mission stats")
 	for b in eco["boosters"]["order"]:
-		check(SaveData.BOOSTERS.has(b), b + " is a booster")
+		check(SaveData.BOOSTERS.has(b) or SaveData.POWERS.has(b), b + " is a booster or a power")
 	for p in ["x2_coins", "revive", "x2_offline", "spin", "booster_headstart", "booster_shield", "booster_bomb"]:
 		check((eco["ads"]["placements"] as Array).has(p), "placement " + p)
 

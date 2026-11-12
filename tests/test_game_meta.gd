@@ -117,7 +117,7 @@ func test_boosters() -> void:
 	eq(int(g.save["powers"]["shield"]["stored"]), 2, "stored ones kept")
 	eq(g.power_available("bomb"), 0, "the bomb is recharging")
 	eq(int(g.power_state("bomb")["seconds_left"]), int(g.economy["powers"]["recharge_s"]), "5 h countdown")
-	var base := g.level_upgrades({})
+	var base: Dictionary = g.level_upgrades({})
 	g.win_level(1, 10, 1, {}, {"charges": base.duplicate()})
 	eq(g.power_available("shield"), 2, "nothing used: nothing spent")
 	g.free()
