@@ -735,11 +735,21 @@ HINTS = {  # mechanic -> (hint id, icon, power)
     "sniper": ("sniper", "sniper", None),
     "grenadier": ("grenadier", "grenadier", None),
     "commando": ("commando", "commando", None),
+    "car": ("car", "police_car", None),
+    "return_fire": ("return_fire", "thug", None),  # spec v2.1 §1.1: L11, gang ▸ bullet ▸ squad -
 }
 
 
-def mechanics_of(ev: dict) -> list[tuple[str, float]]:
-    """(mechanic, distance at which its hint should show) for one event."""
+def fires_back_by_district(enemy: str, level: int) -> bool:
+    """True when `enemy` fires back in `level` under the district-wide return-fire rule (gangs
+    from return_fire.from_district on). An enemy with its own from_district (the gunmen, from
+    L3) is left out: its first appearance already teaches the shield."""
+    rf = ENEMIES.get(enemy, {}).get("return_fire")
+    return bool(rf) and "from_district" not in rf and district(level) >= int(RF.get("from_district", 2))
+
+
+def mechanics_of(ev: dict, level: int = 0) -> list[tuple[str, float]]:
+    """(mechanic, distance at which its hint should show) for one event of `level`."""
     out = []
     at = float(ev["at"])
     if ev["type"] == "gates":
@@ -760,6 +770,8 @@ def mechanics_of(ev: dict) -> list[tuple[str, float]]:
     elif ev["type"] == "wave":
         for g in ev["groups"]:
             out.append((g["enemy"], at - 8))
+            if level and fires_back_by_district(g["enemy"], level):
+                out.append(("return_fire", at - 8))
     return out
 
 
@@ -1074,7 +1086,7 @@ def build(level: int, seen: set, cal_all: dict) -> dict:
         seen.add("bomb")
     have = {e.get("id") for e in events if e["type"] == "hint"}
     for e in list(events):
-        for mech, at in mechanics_of(e):
+        for mech, at in mechanics_of(e, level):
             if mech in seen or mech not in HINTS:
                 continue
             seen.add(mech)
@@ -1087,7 +1099,8 @@ def build(level: int, seen: set, cal_all: dict) -> dict:
             if e["type"] == "wave":
                 # The sim shows an enemy hint when that gang comes within fire range + 10 m
                 # (its `at` is only the fallback): a boss halts the street before its wave's at.
-                h["enemy"] = mech
+                h["enemy"] = mech if mech != "return_fire" else next(
+                    g["enemy"] for g in e["groups"] if fires_back_by_district(g["enemy"], level))
             hints.append(h)
             have.add(hid)
     events = sorted(events + hints, key=lambda e: (float(e["at"]), e["type"] != "hint"))

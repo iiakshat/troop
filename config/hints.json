@@ -1,52 +1,64 @@
 {
-  "_note": "Spec v2 §11: one visual language for hints. 'items' = the 'this is new' card (NewItemCard): the object's icon, then ▸ its effects as icons and numbers, plus a pulsing gold outline and a '!' burst on the object itself. No hand, no freeze; the card hides after card_s, the outline after outline_s. 'find' says which object on the street to outline: obstacle kind, horde enemy, gate op (+ unit/id), red gate, or a HUD power button. An effect's number is 'text' (literal), or 'from': 'obj.<key>' (the found object's own value: a level override shows; '<key>_pct' wins with fmt_pct when the object has it), 'units.<path>' (config/units.json) or 'value.<rank>' (Codex '= N constables' with the level's upgraded stats). 'hand.tip' = the fingertip in assets/ui/hand.png as a share of its size (tools/make_hand.py prints it).",
-  "card_s": 2.2,
-  "outline_s": 3.0,
+  "_note": "Spec v2 §11 as amended by v2.1 §6: one visual language for hints. 'items' = the 'this is new' card (NewItemCard): the object's icon, then ▸ its effects as icons and numbers, framed and coloured by the item's 'tone' (tones: gain = good for you, threat = bad for you, use = something to shoot or aim at; each tone has a colour and a shape, so they read apart without colour too). The card and its marker share one clock (show_s); the marker is bound to the one object that triggered the hint and fades out in fade_s once that object is dead, passed or removed (it never moves to another one). Markers: a gang gets a toned ring that follows its survivors and the tone chip; an obstacle a small toned tag tag_y metres above it; every matching gate sign in the row a small toned sparkle (sparkle.dx/y = metres from the lane centre, px = size); a HUD power its button's toned pulse. No hand, no freeze. 'find' says which kind of object to bind when the hint event does not name one: obstacle kind, horde enemy (or the event's 'enemy'), gate op (+ unit/id), red gate, or a HUD power button. An effect's number is 'text' (literal), or 'from': 'obj.<key>' (the bound object's own value: a level override shows; '<key>_pct' wins with fmt_pct when the object has it), 'units.<path>' (config/units.json) or 'value.<rank>' (Codex '= N constables' with the level's upgraded stats). default_tone colours a Tutorial ring that has no item (the Bottle Shot aims). 'hand.tip' = the fingertip in assets/ui/hand.png as a share of its size (tools/make_hand.py prints it).",
+  "show_s": 2.6,
+  "fade_s": 0.2,
+  "tag_y": 2.1,
+  "sparkle": {"dx": 0.95, "y": 2.35, "px": 20},
+  "default_tone": "use",
+  "tones": {
+    "gain": {"color": "4fe36b", "shape": "plus"},
+    "threat": {"color": "ff3b30", "shape": "warn"},
+    "use": {"color": "ff9b1a", "shape": "reticle"}
+  },
   "hand": {"tip": [0.08, 0.07]},
   "items": {
-    "barrel": {"icon": "barrel", "find": {"obstacle": "barrel"}, "effects": [
+    "barrel": {"icon": "barrel", "tone": "use", "find": {"obstacle": "barrel"}, "effects": [
       {"icon": "aim"}, {"icon": "fire"}, {"icon": "thug", "from": "obj.kill", "fmt": "-%d"}]},
-    "pothole": {"icon": "pothole", "find": {"obstacle": "pothole"}, "effects": [
+    "pothole": {"icon": "pothole", "tone": "threat", "find": {"obstacle": "pothole"}, "effects": [
       {"icon": "person", "from": "obj.fall", "fmt": "-%d", "fmt_pct": "-%d%%"}]},
-    "barricade": {"icon": "barricade", "find": {"obstacle": "barricade"}, "effects": [
+    "barricade": {"icon": "barricade", "tone": "threat", "find": {"obstacle": "barricade"}, "effects": [
       {"icon": "aim", "from": "obj.hp", "fmt": "%d"}, {"icon": "person", "from": "obj.dmg", "fmt": "-%d", "fmt_pct": "-%d%%"}]},
-    "car": {"icon": "police_car", "find": {"obstacle": "car"}, "effects": [
+    "car": {"icon": "police_car", "tone": "threat", "find": {"obstacle": "car"}, "effects": [
       {"icon": "aim", "from": "obj.hp", "fmt": "%d"}, {"icon": "person", "from": "obj.dmg", "fmt": "-%d", "fmt_pct": "-%d%%"}]},
-    "red_gate": {"icon": "aim", "find": {"red_gate": true}, "effects": [
+    "red_gate": {"icon": "aim", "tone": "use", "find": {"red_gate": true}, "effects": [
       {"icon": "aim"}, {"icon": "upgrade"}]},
-    "shield": {"icon": "shield", "find": {"button": "shield"}, "effects": [
+    "shield": {"icon": "shield", "tone": "gain", "find": {"button": "shield"}, "effects": [
       {"icon": "clock", "from": "units.powers.shield.duration", "fmt": "%d"}]},
-    "bomb": {"icon": "bomb", "find": {"button": "bomb"}, "effects": [
+    "bomb": {"icon": "bomb", "tone": "gain", "find": {"button": "bomb"}, "effects": [
       {"icon": "thug", "from": "units.powers.bomb.kill_pct", "fmt": "-%d%%"}]},
-    "sergeant": {"icon": "sergeant", "find": {"gate": "recruit", "unit": "sergeant"}, "effects": [
+    "sergeant": {"icon": "sergeant", "tone": "gain", "find": {"gate": "recruit", "unit": "sergeant"}, "effects": [
       {"icon": "weapon_shotgun"}, {"icon": "rank_constable", "from": "value.sergeant", "fmt": "×%s"}]},
-    "inspector": {"icon": "inspector", "find": {"gate": "recruit", "unit": "inspector"}, "effects": [
+    "inspector": {"icon": "inspector", "tone": "gain", "find": {"gate": "recruit", "unit": "inspector"}, "effects": [
       {"icon": "armour_pierce"}, {"icon": "rank_constable", "from": "value.inspector", "fmt": "×%s"}]},
-    "swat": {"icon": "swat", "find": {"gate": "recruit", "unit": "swat"}, "effects": [
+    "swat": {"icon": "swat", "tone": "gain", "find": {"gate": "recruit", "unit": "swat"}, "effects": [
       {"icon": "fire_rate"}, {"icon": "rank_constable", "from": "value.swat", "fmt": "×%s"}]},
-    "sniper": {"icon": "sniper", "find": {"gate": "recruit", "unit": "sniper"}, "effects": [
+    "sniper": {"icon": "sniper", "tone": "gain", "find": {"gate": "recruit", "unit": "sniper"}, "effects": [
       {"icon": "aim"}, {"icon": "rank_constable", "from": "value.sniper", "fmt": "×%s"}]},
-    "commando": {"icon": "commando", "find": {"gate": "recruit", "unit": "commando"}, "effects": [
+    "commando": {"icon": "commando", "tone": "gain", "find": {"gate": "recruit", "unit": "commando"}, "effects": [
       {"icon": "weapon_launcher"}, {"icon": "rank_constable", "from": "value.commando", "fmt": "×%s"}]},
-    "armour": {"icon": "brute", "find": {"horde": "brute"}, "effects": [
+    "armour": {"icon": "brute", "tone": "threat", "find": {"horde": "brute"}, "effects": [
       {"icon": "armour", "text": "÷2"}, {"icon": "armour_pierce"}]},
-    "no_armour": {"icon": "armour_break", "find": {"gate": "foe_strip"}, "effects": [
+    "no_armour": {"icon": "armour_break", "tone": "gain", "find": {"gate": "foe_strip"}, "effects": [
       {"icon": "armour", "text": "0"}]},
-    "gang_split": {"icon": "gang_split", "find": {"gate": "foe_div"}, "effects": [
+    "gang_split": {"icon": "gang_split", "tone": "gain", "find": {"gate": "foe_div"}, "effects": [
       {"icon": "thug", "from": "obj.k", "fmt": "÷%d"}]},
-    "turncoat": {"icon": "turncoat", "find": {"gate": "turncoat"}, "effects": [
+    "turncoat": {"icon": "turncoat", "tone": "gain", "find": {"gate": "turncoat"}, "effects": [
       {"icon": "person", "from": "obj.n", "fmt": "+%d"}]},
-    "smg": {"icon": "smg", "find": {"gate": "weapon", "id": "smg"}, "effects": [
+    "smg": {"icon": "smg", "tone": "gain", "find": {"gate": "weapon", "id": "smg"}, "effects": [
       {"icon": "fire_rate", "from": "units.hero_weapons.smg.rate", "fmt": "%d"}]},
-    "riot": {"icon": "riot", "find": {"horde": "riot"}, "effects": [
-      {"icon": "shield", "from": "units.enemies.riot.shield", "fmt": "%d"}]},
-    "molotov": {"icon": "molotov", "find": {"horde": "molotov"}, "effects": [
+    "riot": {"icon": "riot", "tone": "threat", "find": {"horde": "riot"}, "effects": [
+      {"icon": "riot", "from": "units.enemies.riot.shield", "fmt": "%d"}]},
+    "molotov": {"icon": "molotov", "tone": "threat", "find": {"horde": "molotov"}, "effects": [
       {"icon": "fire"}, {"icon": "person", "from": "units.enemies.molotov.burn", "fmt": "-%d"}]},
-    "sniper_foe": {"icon": "sniper_foe", "find": {"horde": "sniper_foe"}, "effects": [
+    "sniper_foe": {"icon": "sniper_foe", "tone": "threat", "find": {"horde": "sniper_foe"}, "effects": [
       {"icon": "aim"}, {"icon": "person", "from": "units.enemies.sniper_foe.shot_dmg", "fmt": "-%d"}]},
-    "grenadier": {"icon": "grenadier", "find": {"horde": "grenadier"}, "effects": [
+    "grenadier": {"icon": "grenadier", "tone": "threat", "find": {"horde": "grenadier"}, "effects": [
       {"icon": "bomb"}, {"icon": "person", "from": "units.enemies.grenadier.shot_dmg", "fmt": "-%d"}]},
-    "boss": {"icon": "boss", "find": {"horde": "boss"}, "effects": [
+    "return_fire": {"icon": "thug", "tone": "threat", "find": {"horde": ""}, "effects": [
+      {"icon": "pistol"}, {"icon": "person", "text": "-"}]},
+    "lieutenant": {"icon": "boss", "tone": "threat", "find": {"horde": "lieutenant"}, "effects": [
+      {"icon": "heart", "from": "obj.max_hp", "fmt": "%d"}]},
+    "boss": {"icon": "boss", "tone": "threat", "find": {"horde": "boss"}, "effects": [
       {"icon": "heart", "from": "obj.max_hp", "fmt": "%d"}]}
   }
 }

@@ -590,13 +590,16 @@ func step(dt: float) -> void:
 
 ## Enemy "new" hints show when the first gang of that kind comes within fire_range + 10 m
 ## (its numbers are on the street then), not by distance travelled: a boss halts the street
-## before its wave's `at`, and a strong squad kills a gang at range before it.
+## before its wave's `at`, and a strong squad kills a gang at range before it. The reported
+## event carries that gang's id (`horde`): its marker stays on it (spec v2.1 §6.1).
 func _enemy_hints_due() -> void:
 	for eh in _enemy_hints.duplicate():
 		for h in hordes:
 			if String(h["enemy"]) == String(eh["enemy"]) and int(h["count"]) > 0 and front_z(h) >= -(fire_range + 10.0):
 				_enemy_hints.erase(eh)
-				_report_hint(eh["ev"])
+				var ev: Dictionary = (eh["ev"] as Dictionary).duplicate()
+				ev["horde"] = h["id"]
+				_report_hint(ev)
 				break
 
 

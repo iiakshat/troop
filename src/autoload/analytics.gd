@@ -7,7 +7,8 @@ extends Node
 ##
 ## Call sites: session_start, level_start, level_end (result, stars, troops, time), purchase
 ## (room / building / cosmetic), ad_offer, ad_watch, ad_interstitial (placement), daily_claim,
-## mission_done, mission_claim, spin, city_collect, build_done, tap_rate (note_tap/end_taps).
+## mission_done, mission_claim, spin, city_collect, build_done, tap_rate (note_tap/end_taps),
+## hint_shown (NewItemCard: item, level, t).
 ##
 ## Provider (v2 §8): "firebase" only for an adult (age screen answered, Game.is_child() false)
 ## on a build with the Firebase plugin (singletons GodotxFirebaseCore + GodotxFirebaseAnalytics);
@@ -151,6 +152,12 @@ func note_tap(level: int, seconds: float) -> void:
 	if _taps.is_empty():
 		_taps = {"level": level, "bucket": bucket, "taps": 0}
 	_taps["taps"] = int(_taps["taps"]) + 1
+
+
+## A "this is new" card and its marker showed (spec v2.1 §6.4): the hints.json item, the
+## level and the seconds into it.
+func hint_shown(item: String, level: int, t: float) -> void:
+	event("hint_shown", {"item": item, "level": level, "t": snappedf(t, 0.1)})
 
 
 func end_taps() -> void:

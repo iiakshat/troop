@@ -744,9 +744,16 @@ func _draw_fx() -> void:
 			_canvas.draw_circle(c, 20.0, UiKit.INK)
 			_canvas.draw_circle(c, 15.0, UiKit.GOLD if i < _taps else Color(1, 1, 1, 0.25))
 	if _ring.x >= 0.0:
+		# The ring takes the item's tone (spec v2.1 §6.2): red gate, barrel and bottles are
+		# "use" (orange, with aim ticks), never the old one-gold-for-everything.
 		var pulse := 0.5 + 0.5 * sin(t * 6.0)
-		_canvas.draw_arc(_ring, _ring_r * (1.0 + 0.08 * pulse), 0, TAU, 48, Color(1.0, 0.85, 0.2, 0.9), 8.0)
-		_canvas.draw_arc(_ring, _ring_r * (1.15 + 0.25 * fmod(t, 1.0)), 0, TAU, 48, Color(1.0, 0.85, 0.2, 0.6 * (1.0 - fmod(t, 1.0))), 5.0)
+		var col := ring_color(_step)
+		var r := _ring_r * (1.0 + 0.08 * pulse)
+		_canvas.draw_arc(_ring, r, 0, TAU, 48, Color(UiKit.INK, 0.6), 12.0)
+		_canvas.draw_arc(_ring, r, 0, TAU, 48, Color(col, 0.95), 8.0)
+		if NewItemCard.tone_shape(NewItemCard.tone(_step)) == "reticle":
+			NewItemCard.draw_ticks(_canvas, _ring, r, Color(col, 0.95), 7.0)
+		_canvas.draw_arc(_ring, _ring_r * (1.15 + 0.25 * fmod(t, 1.0)), 0, TAU, 48, Color(col, 0.6 * (1.0 - fmod(t, 1.0))), 5.0)
 	if _dots and _ring.x >= 0.0 and _a.x >= 0.0:
 		# Ghost bullets fly into the red gate; an up chevron says its number climbs.
 		for i in 5:
@@ -777,6 +784,12 @@ func _draw_fx() -> void:
 			# Tap ripple spreading from the fingertip after each press.
 			var q := fmod(t, 0.9) / 0.9
 			_canvas.draw_arc(_a, 26.0 + 70.0 * q, 0, TAU, 40, Color(1, 1, 1, 0.85 * (1.0 - q)), 5.0)
+
+
+## A lesson ring's colour: the tone of its hints.json item (red_gate, barrel); the Bottle
+## Shot steps have no item and take default_tone.
+static func ring_color(step: String) -> Color:
+	return NewItemCard.tone_color(NewItemCard.tone(step))
 
 
 ## Gate lesson: green chevrons painted on the road from the squad into the best lane, flowing
