@@ -84,3 +84,14 @@ All files are mono 44.1 kHz OGG Vorbis built by `python -I tools/make_sfx.py <do
 | `art_src/brand/feature_graphic.png` (Play feature graphic, 1024x500) | Our Gemini key art (prompt `art_src/gen/prompts/brand_feature.txt`, sheet `art_src/gen/brand_feature.png`) with our logo laid over it by `tools/slice_brand.py` | Our own (AI-generated) |
 | `assets/audio/siren_whoop.ogg` (axnex intro), `siren_chirp.ogg` (backup joins) | Synthesised by us in `tools/make_sfx.py` (band-limited saw voice on a pitch curve, filtered, short room); no recordings | Our own |
 | Boot screens: intro light sweep, beacon flashes, loading light-bar stripes (`src/ui/boot_intro.gd`, `title_logo.gd`, `loading_screen.gd`) | Shader and drawing code written for this game; tip pictures reuse the icons above | Our own |
+
+## Code libraries and SDKs (v2, SDK builder, 2026-11-12)
+
+| Library (in repo) | Source | Licence |
+|---|---|---|
+| `addons/AdmobPlugin/` (GDScript + `bin/*/AdmobPlugin-*.aar`), `addons/GMPShared/` | Godot AdMob plugin v7.0 by Cengiz and Godot Engine Community SDK Integrations, github.com/godot-sdk-integrations/godot-admob (Godot Asset Store "Admob Plugin") | MIT (`addons/AdmobPlugin/LICENSE`) |
+| `addons/godotx_firebase/`, `android/firebase_core/*.aar`, `android/firebase_analytics/*.aar` | Godotx Firebase v3.1.0 by Paulo Coutinho, github.com/godot-x/firebase (Core + Analytics modules only) | MIT (`addons/godotx_firebase/LICENSE`) |
+| `addons/siren_privacy/`, `tools/android_template.py` | Written for this game | Our own |
+| Google Mobile Ads SDK 24.9.0, Firebase Core 22.1.0 / Analytics 23.2.0, AndroidX (fetched by Gradle at build time, not in the repo) | Google Maven | Android Software Development Kit License / Google APIs Terms; AndroidX Apache 2.0 |
+
+The MIT notices must travel with the APK: the credits panel should name both plugins (see the v2 SDK follow-ups).

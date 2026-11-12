@@ -54,6 +54,8 @@ extends Node
 ## Alerts: alerts() -> {daily, missions, spin, star_chest, station, armory, city} for the "!" badges
 ## Cosmetics, hints, settings: owns, pick_cosmetic, outfit, knife_skin, hint_seen, mark_hint,
 ##   toggle, vibrate, reset_progress.
+## Audience (v2): needs_age()  is_child()  set_birth_year(year[, region, locale]); the
+##   audience_ready signal tells Ads/Analytics they may start (child-safe when is_child()).
 ## Rewards returned by claim/open/spin functions are already applied; they hold the concrete
 ## {coins, headstart, shield, bomb, cosmetic, cosmetic_kind, chest} the UI shows.
 
@@ -71,6 +73,9 @@ signal build_finished(id: String)
 signal mission_completed(index: int)
 signal powers_changed
 signal armory_changed(id: String)
+## The age screen was answered (or the answer was loaded): Ads and Analytics may start their
+## SDKs now, child-safe when is_child().
+signal audience_ready
 
 var units: Dictionary
 var economy: Dictionary
@@ -180,7 +185,10 @@ func write_save() -> void:
 
 
 func reset_progress() -> void:
+	var age := {"birth_year": save.get("birth_year", 0), "is_child": save.get("is_child", true)}
 	save = SaveData.migrate({}, economy)
+	if int(age["birth_year"]) > 0:
+		save.merge(age, true)  # the age answer survives a progress reset (no re-asking)
 	write_save()
 	refresh_day()
 	coins_changed.emit(int(save["coins"]))
@@ -969,6 +977,34 @@ func toggle(key: String) -> bool:
 func vibrate(ms: int) -> void:
 	if bool(save.get("vibration", true)) and OS.has_feature("mobile"):
 		Input.vibrate_handheld(ms)
+
+
+# ---------------------------------------------------------------- audience (spec v2 §8)
+# save["birth_year"] (0 = not asked yet) and save["is_child"] (decided once, when answered, from
+# the device region/locale at that time; see Audience). Unknown = child.
+
+## True until the neutral age screen was answered.
+func needs_age() -> bool:
+	return int(save.get("birth_year", 0)) <= 0
+
+
+func is_child() -> bool:
+	if needs_age():
+		return true
+	return bool(save.get("is_child", true))
+
+
+## Stores the age-screen answer and announces it. Region/locale default to the device's.
+func set_birth_year(year: int, region := "", locale := "") -> void:
+	if locale == "":
+		locale = Audience.device_locale()
+	if region == "":
+		region = Audience.device_region() if locale == Audience.device_locale() else Audience.region_of(locale)
+	var now_year := int(Time.get_datetime_dict_from_unix_time(now())["year"])
+	save["birth_year"] = year
+	save["is_child"] = Audience.is_child(year, now_year, region, locale)
+	write_save()
+	audience_ready.emit()
 
 
 # ---------------------------------------------------------------- services

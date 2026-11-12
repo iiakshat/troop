@@ -113,3 +113,89 @@ func test_skipped_ads_grant_at_once() -> void:
 	eq(closed, [1], "interstitial on_closed runs at once")
 	check(not ads.is_showing(), "nothing left on screen")
 	ads.free()
+
+
+# ---------------------------------------------------------------- v2: AdMob + Firebase (Task 12)
+
+const AnalyticsScript := preload("res://src/autoload/analytics.gd")
+
+
+func test_child_request_config() -> void:
+	var c: Dictionary = AdsScript.request_config(true)
+	eq(c.get("child_directed"), true, "child: child-directed tag on")
+	eq(c.get("max_rating"), "G", "child: max ad content rating G")
+	eq(c.get("npa"), true, "child: non-personalised ads")
+	eq(c.get("under_age_of_consent"), true, "child: under the age of consent")
+	eq(c.get("ad_id"), false, "child: no advertising / first-party ID")
+	eq(c.get("consent_form"), false, "child: no UMP form (nothing personal is asked for)")
+
+
+func test_adult_request_config() -> void:
+	var c: Dictionary = AdsScript.request_config(false)
+	eq(c.get("child_directed"), false, "adult: not child-directed")
+	eq(c.get("npa"), false, "adult: personalised allowed (after UMP consent where required)")
+	eq(c.get("consent_form"), true, "adult: UMP consent first")
+	check(String(c.get("max_rating")) in ["G", "PG"], "adult: at most PG (Families policy cap for a mixed audience)")
+	eq(AdsScript.request_config(false, {"adult_tags": {"max_rating": "T"}})["max_rating"], "PG", "config cannot raise it past PG")
+	eq(AdsScript.request_config(true, {"child_tags": {"max_rating": "PG", "npa": false}})["max_rating"], "G", "config cannot loosen the child tags")
+
+
+func test_firebase_not_started_for_child() -> void:
+	eq(AnalyticsScript.provider_for(true, true), "local", "child: Firebase never starts")
+	eq(AnalyticsScript.provider_for(true, false), "local", "child without the plugin: local")
+	eq(AnalyticsScript.provider_for(false, true), "firebase", "adult with the plugin: Firebase")
+	eq(AnalyticsScript.provider_for(false, false), "local", "adult on PC: local")
+
+
+func test_placeholder_when_plugin_missing() -> void:
+	eq(AdsScript.provider_for(false, false, "admob"), "placeholder", "no AdMob plugin (PC, headless)")
+	eq(AdsScript.provider_for(true, true, "admob"), "placeholder", "skip_ads / autoplay")
+	eq(AdsScript.provider_for(true, false, "placeholder"), "placeholder", "config can force the stub")
+	eq(AdsScript.provider_for(true, false, "admob"), "admob", "plugin present")
+	var ads = AdsScript.new()
+	eq(ads.provider, "placeholder", "a fresh Ads starts as the placeholder")
+	ads.free()
+	var tree := Engine.get_main_loop() as SceneTree
+	var live: Node = tree.root.get_node_or_null("Ads")
+	if live:
+		eq(live.provider, "placeholder", "on PC/headless the live provider is the placeholder")
+	var an: Node = tree.root.get_node_or_null("Analytics")
+	if an:
+		eq(an.provider, "local", "on PC/headless analytics stays local")
+
+
+func test_ads_config_uses_google_test_ids() -> void:
+	var a: Dictionary = Config.load_json("res://config/ads.json")
+	var t: Dictionary = a["android"]["test"]
+	eq(t["app_id"], "ca-app-pub-3940256099942544~3347511713", "Google's sample app ID")
+	eq(t["rewarded"], "ca-app-pub-3940256099942544/5224354917", "Google's test rewarded unit")
+	eq(t["interstitial"], "ca-app-pub-3940256099942544/1033173712", "Google's test interstitial unit")
+	eq(bool(a["is_real"]), false, "test IDs until the owner sends real ones")
+
+
+func test_firebase_event_names_are_valid() -> void:
+	eq(AnalyticsScript.firebase_name("level_end"), "level_end", "plain names pass")
+	eq(AnalyticsScript.firebase_name("session_start"), "game_session_start", "reserved names are renamed")
+	eq(AnalyticsScript.firebase_name("firebase_x"), "game_firebase_x", "reserved prefixes are renamed")
+	check(AnalyticsScript.firebase_name("a-b c".repeat(20)).length() <= 40, "at most 40 characters")
+	var p: Dictionary = AnalyticsScript.firebase_params({"a": 1, "b": "x".repeat(300), "c": {"d": 2}, "e": true, "f": 1.5})
+	eq(p["a"], 1, "ints stay")
+	eq(String(p["b"]).length(), 100, "strings cut to 100")
+	check(p["c"] is String, "nested values become strings")
+	eq(p["e"], 1, "bools become 0/1")
+	eq(p["f"], 1.5, "floats stay")
+
+
+func test_tap_rate_buckets() -> void:
+	var an = AnalyticsScript.new()
+	an.enabled = false
+	var out := []
+	an.sink = func(name: String, params: Dictionary): out.append([name, params])
+	for t in [0.5, 1.0, 9.9, 10.0, 25.0, 25.5]:
+		an.note_tap(7, t)
+	an.end_taps()
+	eq(out.size(), 3, "one event per 10 s bucket with taps")
+	eq(out[0], ["tap_rate", {"level": 7, "bucket": 0, "taps": 3}], "0-10 s")
+	eq(out[1], ["tap_rate", {"level": 7, "bucket": 1, "taps": 1}], "10-20 s")
+	eq(out[2], ["tap_rate", {"level": 7, "bucket": 2, "taps": 2}], "20-30 s")
+	an.free()

@@ -120,8 +120,20 @@ func _boot_screens() -> bool:
 	return _args.is_empty() and DisplayServer.get_name() != "headless"
 
 
-## The start of the app flow: a level= run, a brand-new player's level 1, or the map.
+## The start of the app flow, after the boot screens.
 func _begin_flow() -> void:
+	if AgeScreen.needed(_args):
+		# v2 §8: the neutral age screen comes first, once, before any ad or analytics SDK starts.
+		var age := AgeScreen.new()
+		age.done.connect(_begin, CONNECT_ONE_SHOT)
+		ui.add_child(age)
+		return
+	_begin()
+
+
+## The first screen after boot (and after the age screen on a first launch): a level= run, a
+## brand-new player's level 1, or the map.
+func _begin() -> void:
 	if _args.has("level"):
 		_start_level(int(_args["level"]), _debug_boosters())
 	elif _is_new_player() and not _args.has("lobby") and not _args.has("panel"):
