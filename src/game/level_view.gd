@@ -168,6 +168,7 @@ var _steer_x := 0.0              # where the finger wants the squad
 var _last_total := 1
 var _shown_banner: Dictionary = {}
 var _obstacles: Dictionary = {}  # id -> {ob, node, label, cracks, hp_shown, chip_t}
+var _cages: Dictionary = {}      # v2.1 Rescue: cage id -> {cage, view: CageView}
 var _riding: Array = []        # passed obstacle nodes riding the road off screen
 var _falling: Array = []       # {kind, pos, t, spin}: troops dropping into a pothole
 var _death_style := ""         # "fall" while a pothole takes troops
@@ -220,7 +221,7 @@ static func district_of(level: Dictionary) -> int:
 
 
 func _ready() -> void:
-	world.set_theme(district)
+	world.set_theme(district, String(_level.get("look", "")))   # v2.1: night / storm / rush looks
 	for k in ALLY_KINDS + ENEMY_KINDS:
 		var cap := 0
 		if k in ALLY_KINDS:
@@ -643,6 +644,8 @@ func _handle_events(events: Array) -> void:
 				_mark_cause(e)
 			"obstacle_spawn":
 				_spawn_obstacle(e["ob"])
+			"cage_spawn", "cage_open", "cage_free", "cage_lost":
+				_on_cage_event(e)
 			"obstacle_broken":
 				_on_obstacle_broken(e["ob"])
 			"obstacle_hit":
@@ -779,7 +782,7 @@ func _on_horde_spawn(h: Dictionary, lieutenant := false) -> void:
 	var sub := Node3D.new()
 	add_child(sub)
 	var hv := {"h": h, "kind": kind, "offs": offs, "per": per, "label": label, "sub": sub, "shoot_flash": 0.0,
-		"hit_flash": 0.0, "shown": -1, "lt": lt, "bossy": lt or bool(h.get("boss", false))}
+		"hit_flash": 0.0, "shown": -1, "lt": lt, "bossy": lt or bool(h.get("boss", false)), "leader": is_leader(h)}
 	_hordes[h["id"]] = hv
 	if hv["bossy"]:
 		_build_boss_bar(hv)
@@ -1959,6 +1962,8 @@ func _update_visuals(d: float) -> void:
 		var want := int(ceil(int(h["count"]) / float(hv["per"])))
 		var offs: Array = hv["offs"]
 		var esc := _boss_scale(hv) * boss_grow(float(h["z"])) if hv["bossy"] else ENEMY_SCALE
+		if hv.get("leader", false):
+			esc = ENEMY_SCALE * LEADER_SCALE
 		while offs.size() > want:
 			var o: Vector3 = offs.pop_front()
 			var p := _fig_pos(hv, o)
@@ -1966,7 +1971,7 @@ func _update_visuals(d: float) -> void:
 				"basis": Basis(Vector3.UP, PI).scaled(Vector3.ONE * esc * crowd_scale(offs.size() + 1))})
 			fx.puff(p)
 		var crowd: Crowd = _crowds[hv["kind"]]
-		var clip := "shoot" if h["stopped"] else "run"
+		var clip := "shoot" if h["stopped"] else ("idle" if h.has("cage") else "run")
 		var speed := 1.0 if h["stopped"] else RUN_SPEED * clampf(float(h["vrel"]) / 10.0, 0.8, 1.6)
 		if hv["bossy"] and not h["melee"]:
 			# A boss walks in at his real pace during the standoff: a slow, heavy stride whose
@@ -2016,9 +2021,10 @@ func _update_visuals(d: float) -> void:
 					ly = bar.position.y + 0.4 * bar.scale.y + 0.7 * ls
 					lz = bar.position.z
 		lab.position = Vector3(0, ly, lz)
-		if int(h["count"]) != int(hv["shown"]):
-			hv["shown"] = int(h["count"])
-			lab.text = NumFormat.fmt(int(h["count"]))
+		var shown := LevelSim.boss_hp(h) if hv.get("leader", false) else int(h["count"])
+		if shown != int(hv["shown"]):
+			hv["shown"] = shown
+			lab.text = NumFormat.fmt(shown)
 		# Closing in while the squad's fire goes elsewhere (a red gate, an obstacle): the count
 		# pulses so the threat behind the gate is visible before it arrives.
 		var ignored: bool = _state == "play" and not is_same(sim.target_ref, h) and LevelSim.front_z(h) > -18.0 and not h["melee"]
@@ -2110,6 +2116,7 @@ func _update_visuals(d: float) -> void:
 		(_crowds[fd["kind"]] as Crowd).push(Transform3D(basis, p), "hit", 0.1, 0.0)
 		i += 1
 
+	_draw_cages(d)
 	_update_heat_ring(d)
 	if _warm_left > 0:
 		_warm_frame()
@@ -2718,3 +2725,81 @@ func _on_finale_done(r: Dictionary) -> void:
 	r.merge({"won": true, "troops": sim.squad.total(), "kills": sim.kills, "level": level_id,
 		"tap_pct": Economy.heat_pct(sim.mean_heat())})
 	finished.emit(r)
+
+
+# ---------------------------------------------------------------- v2.1: rescue cages, gang leader
+
+const LEADER_SCALE := 2.2   # a gang leader (L1's last wave) is drawn this much bigger than his men
+
+
+## A gang leader: one tough man (a level gives a single gang member at least 10x his kind's
+## health). He is drawn big and his number is his health, so the player sees why he soaks fire.
+static func is_leader(h: Dictionary) -> bool:
+	if h.get("boss", false) or int(h.get("start", 0)) != 1:
+		return false
+	var def: Dictionary = Game.units.get("enemies", {}).get(String(h.get("enemy", "")), {})
+	return not def.is_empty() and float(h.get("hp", 0.0)) >= 10.0 * float(def.get("hp", 1.0))
+
+
+func _on_cage_event(e: Dictionary) -> void:
+	var c: Dictionary = e["cage"]
+	var id := int(c["id"])
+	match String(e["type"]):
+		"cage_spawn":
+			var v := CageView.new().setup(c, font)
+			add_child(v)
+			v.position = Vector3(LANE_X[int(c["lane"])], 0, float(c["z"]))
+			_cages[id] = {"cage": c, "view": v}
+		"cage_open":
+			var cv: Dictionary = _cages.get(id, {})
+			if not cv.is_empty():
+				(cv["view"] as CageView).open()
+				fx.confetti((cv["view"] as Node3D).global_position + Vector3(0, CageView.H, 0), 24)
+				Sfx.play("flip")
+		"cage_free":
+			var cv: Dictionary = _cages.get(id, {})
+			if cv.is_empty():
+				return
+			var v: CageView = cv["view"]
+			v.free_people()
+			Sfx.play("gate_good")
+			Sfx.play("recruit", -4.0)
+			Game.vibrate(35)
+			fx.burst(v.global_position + Vector3(0, 1.6, 0), Color("5df07a"), 26, 7.0, 0.22, 0.6)
+			# The freed people run out of the cage into the formation.
+			_sync_allies(v.global_position)
+			if String(e.get("unit", "constable")) != "constable":
+				rank_joined.emit(String(e["unit"]), false)
+			_riding.append(v)
+			_cages.erase(id)
+		"cage_lost":
+			var cv: Dictionary = _cages.get(id, {})
+			if cv.is_empty():
+				return
+			(cv["view"] as CageView).lost()
+			Sfx.play("gate_bad")
+			cv["lost_t"] = 0.0
+
+
+## Cages ride the road; a lost one is dragged back up the street and shrinks away. The people
+## inside are police figures (the cage's own crowd kind), idle while they wait.
+func _draw_cages(d: float) -> void:
+	for id in _cages.keys():
+		var cv: Dictionary = _cages[id]
+		var c: Dictionary = cv["cage"]
+		var v: CageView = cv["view"]
+		if cv.has("lost_t"):
+			cv["lost_t"] = float(cv["lost_t"]) + d
+			var k := clampf(1.0 - float(cv["lost_t"]) / 1.2, 0.0, 1.0)
+			v.position.z -= d * 22.0
+			v.scale = Vector3.ONE * maxf(k, 0.01)
+			if k <= 0.0:
+				v.queue_free()
+				_cages.erase(id)
+			continue
+		v.position.z = float(c["z"])
+		var unit := String(c.get("unit", "constable"))
+		var crowd: Crowd = _crowds.get(unit, _crowds["constable"])
+		for spot in CageView.spots(int(c.get("hostages", 0))):
+			var p: Vector3 = v.position + (spot as Vector3)
+			crowd.push(Transform3D(Basis(Vector3.UP, PI), p), "idle", _anim_t + p.x)

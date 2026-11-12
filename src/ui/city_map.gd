@@ -106,6 +106,19 @@ static func fallback_layout(districts := 5, per := 10) -> Dictionary:
 
 ## The level the map focuses on and Play starts: the first level not beaten yet (the highest
 ## unlocked one when everything is beaten).
+const BADGE := 56               ## archetype badge size (base px)
+static var _arch_cache := {}
+
+
+## The map badge of level n's archetype (spec v2.1 §4.1): "arch_<archetype>", "" for none and
+## for bosses (they wear the crown). Read once from the level file.
+static func archetype_icon(n: int) -> String:
+	if not _arch_cache.has(n):
+		_arch_cache[n] = String(Config.level(n).get("archetype", ""))
+	var a: String = _arch_cache[n]
+	return "" if a == "" or a == "boss" else "arch_" + a
+
+
 static func current_level(save: Dictionary, count: int) -> int:
 	var top := clampi(int(save.get("unlocked", 1)), 1, maxi(count, 1))
 	for n in range(1, top + 1):
@@ -454,13 +467,21 @@ func _build_nodes() -> void:
 				crown.size = Vector2(72, 72)
 				crown.position = c + Vector2(-36, -dia * 0.5 - 58)
 				_layers["nodes"].add_child(crown)
+			# Spec v2.1 §4.1: the level's archetype badge (rush, night, rescue...) on its rim.
+			var badge: Control = null
+			var arch := archetype_icon(n)
+			if arch != "":
+				badge = UiKit.icon(arch, BADGE)
+				badge.size = Vector2(BADGE, BADGE)
+				badge.position = c + Vector2(-dia * 0.5 - 10, -dia * 0.5 - 10)
+				_layers["nodes"].add_child(badge)
 			# Recommended Squad Power (v1.1): a small pill under the nodes ahead of the player;
 			# red with a warning tint on the node when the squad is weaker than that.
 			var pw := _pill_box(Vector2(124, 46), Color(0.05, 0.1, 0.25, 0.8), "power", 36, 28)
 			pw.position = c + Vector2(-62, dia * 0.5 - 8)
 			pw.visible = false
 			_layers["pills"].add_child(pw)  # above the building price tags
-			_nodes[n] = {"btn": b, "c": c, "r": dia * 0.5, "stars": stars, "lock": lock, "crown": crown, "power": pw}
+			_nodes[n] = {"btn": b, "c": c, "r": dia * 0.5, "stars": stars, "lock": lock, "crown": crown, "power": pw, "badge": badge}
 
 
 func _build_marker() -> void:
@@ -571,6 +592,8 @@ func refresh_levels() -> void:
 			s.modulate = Color.WHITE if i < got else Color(0.18, 0.13, 0.1, 0.75)
 		if e["crown"] != null:
 			(e["crown"] as Control).modulate = Color(0.45, 0.45, 0.5, 0.85) if st == "locked" else Color.WHITE
+		if e.get("badge") != null:
+			(e["badge"] as Control).modulate = Color(0.5, 0.5, 0.56, 0.8) if st == "locked" else Color.WHITE
 		var pw: Panel = e["power"]
 		var rec := Game.recommended_power(n)
 		var info := power_hint(st, n, cur, rec, power, quiet)

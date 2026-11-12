@@ -107,6 +107,7 @@ var obstacles: Array = []
 var hordes: Array = []
 var attacks: Array = []     # telegraphed enemy attacks in the air: {id, kind, lane, src, land, base, pct, cause, x, z}
 var bombs: Array = []       # the squad's bombs in the air: {id, lane, x, land, target, ref, z}
+var cages: Array = []       # hostage cages on the road: {id, at, lane, hostages, unit, z, guard, open}
 var charges: Dictionary = {"shield": 0, "bomb": 0}
 var shield_t := 0.0
 var kills := 0
@@ -133,7 +134,8 @@ func _init(level: Dictionary = {}, units_cfg: Dictionary = {}, upgrades: Diction
 	if units_cfg.is_empty():
 		return  # clone() fills the fields
 	var w: Dictionary = units_cfg["world"]
-	S_base = float(w["scroll_speed"])
+	# Spec v2.1 §4.1: a level may run at its own pace (Rush: 1.2x), else the world's.
+	S_base = float(level.get("scroll_speed", w["scroll_speed"]))
 	S = S_base
 	accel = float(w.get("scroll_accel", 12.0))
 	fire_range = float(w["fire_range"])
@@ -304,6 +306,10 @@ func _build_spawns(events: Array) -> void:
 		match String(e.get("type", "")):
 			"gates", "obstacle":
 				_spawns.append({"kind": e["type"], "ev": e, "at": at, "spawn_at": at - spawn_dist})
+			"cage":
+				# A hostage cage rides the road with its guards standing in front of it (_spawn_cage).
+				_spawns.append({"kind": "cage", "ev": e, "at": at, "spawn_at": at - spawn_dist})
+				_pending_hordes += 1
 			"finish":
 				finish_at = at
 				_spawns.append({"kind": "finish", "ev": e, "at": at, "spawn_at": at - spawn_dist})
@@ -596,6 +602,7 @@ func step(dt: float) -> void:
 	_pass_obstacles()
 	if state != "run":
 		return
+	_pass_cages()
 	peak_squad = maxi(peak_squad, squad.total())
 	_enemy_hints_due()
 	if finish_at > 0.0 and traveled >= finish_at and hordes.is_empty() and _pending_hordes <= 0:
@@ -723,6 +730,9 @@ func _spawn_one(sp: Dictionary, early := false) -> void:
 		"horde":
 			_pending_hordes -= 1
 			_spawn_horde(sp, early)
+		"cage":
+			_pending_hordes -= 1
+			_spawn_cage(sp)
 
 
 func _spawn_horde(sp: Dictionary, early := false) -> void:
@@ -1506,6 +1516,88 @@ func _new_id() -> int:
 	return _next_id
 
 
+# ---------------------------------------------------------------- hostage cages (spec v2.1 §4.1)
+
+const CAGE_GAP := 2.0     # metres between the guards' back row and the cage behind them
+const CAGE_REACH := 2.0   # the cage reaches the squad (opens to it or is lost) this short of it
+
+
+## Rescue: a cage rides the road in its lane with a gang standing guard in front of it. The
+## guards ride with the road (speed 0, never a standoff), so they cannot outrun the cage. Kill
+## every guard before the cage reaches the squad and its people join (`unit`, constables by
+## default, up to the cap); otherwise they are lost. The guards are a gang like any other: the
+## squad's fire takes their front row first, armed ones fire back, and any that reach the squad
+## fight it.
+func _spawn_cage(sp: Dictionary) -> void:
+	var ev: Dictionary = sp["ev"]
+	var at := float(sp["at"])
+	var cage := {"id": _new_id(), "at": at, "lane": clampi(int(ev.get("lane", 1)), 0, 2),
+		"hostages": maxi(int(ev.get("hostages", 0)), 0), "unit": String(ev.get("unit", "constable")),
+		"z": -(at - traveled), "guard": -1, "open": false}
+	var grp: Dictionary = (ev.get("guards", {}) as Dictionary).duplicate(true)
+	if grp.has("enemy") and int(grp.get("n", 0)) > 0:
+		grp["speed"] = 0.0
+		grp["stop_at"] = 0.0
+		grp.erase("gap")
+		var def := enemy_def(grp)
+		var per := maxi((int(grp["n"]) + gang_figs - 1) / gang_figs, 1)
+		var rows_n := ceili(int(grp["n"]) / float(maxi(int(def.get("cols", 9)), 1) * per))
+		var depth := maxf(rows_n - 1, 0) * float(def.get("row_gap", 0.95))
+		var before := hordes.size()
+		_spawn_horde({"ev": grp, "at": at - depth - CAGE_GAP, "wave": -1, "label": ""})
+		if hordes.size() > before:
+			var h: Dictionary = hordes.back()
+			h["cage"] = cage["id"]
+			cage["guard"] = int(h["id"])
+	cages.append(cage)
+	out.append({"type": "cage_spawn", "cage": cage})
+
+
+## The cage's guard gang while any of it still stands, else {}.
+func cage_guard(cage: Dictionary) -> Dictionary:
+	var gid := int(cage["guard"])
+	if gid < 0:
+		return {}
+	for h in hordes:
+		if int(h["id"]) == gid and int(h["count"]) > 0:
+			return h
+	return {}
+
+
+## Cages ride the road. One opens the moment its last guard falls and its people join when it
+## reaches the squad (cage_free). Guards that reach the squad first drag the cage off: its
+## people are lost (cage_lost) and the guards still fight.
+func _pass_cages() -> void:
+	for cage in cages.duplicate():
+		cage["z"] = -(float(cage["at"]) - traveled)
+		var guard := cage_guard(cage)
+		# A guard row that reached the squad this very step may already have fallen striking it
+		# (_contacts): its melee event is still in `out`.
+		var fought := not guard.is_empty() and bool(guard["melee"])
+		if not fought and int(cage["guard"]) >= 0 and not cage["open"]:
+			for e in out:
+				if String(e["type"]) == "melee_start" and int(e["horde"]) == int(cage["guard"]):
+					fought = true
+					break
+		if fought or (not guard.is_empty() and float(cage["z"]) >= -CAGE_REACH):
+			cages.erase(cage)
+			out.append({"type": "cage_lost", "cage": cage})
+			continue
+		if guard.is_empty() and not cage["open"]:
+			cage["open"] = true
+			out.append({"type": "cage_open", "cage": cage})
+		if float(cage["z"]) < -CAGE_REACH:
+			continue
+		cages.erase(cage)
+		var unit := String(cage["unit"])
+		var added := squad.add(unit, int(cage["hostages"]))
+		peak_squad = maxi(peak_squad, squad.total())
+		out.append({"type": "cage_free", "cage": cage, "unit": unit, "n": added})
+		if unit != "constable" and added > 0:
+			out.append({"type": "rank_join", "unit": unit, "n": added, "first_time": not _joined.has(unit)})
+			_joined[unit] = true
+
+
 # ---------------------------------------------------------------- helpers
 
 func progress() -> float:
@@ -1537,6 +1629,7 @@ func clone() -> LevelSim:
 	c.hordes = hordes.duplicate(true)
 	c.attacks = attacks.duplicate(true)
 	c.bombs = bombs.duplicate(true)
+	c.cages = cages.duplicate(true)
 	c.charges = charges.duplicate()
 	c._wave_mods = _wave_mods.duplicate(true)
 	c._joined = _joined.duplicate()
