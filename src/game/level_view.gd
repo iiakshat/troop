@@ -47,6 +47,7 @@ var fx: Fx
 var font: Font
 var level_id := 1
 var _level: Dictionary = {}    # the level config (pre-warm reads its gates and icons)
+var _places: Dictionary = {}   # squad size -> formation place per slot (see _place_of)
 var district := 1
 var demo := false
 var paused := false
@@ -1280,8 +1281,29 @@ static func crowd_scale(n: int) -> float:
 func _slot_pos(slot: int, n: int) -> Vector3:
 	var lift := -7.0 if demo else 0.0  # lobby: squad further up the street, above the menu
 	# The same formation the sim hits obstacles with (Squad.slot_offset), around _squad_x.
-	var o := Squad.slot_offset(slot, n, sim.form_half if sim else 0.0)
-	return Vector3(_squad_x + o.x, 0, o.y + lift)
+	var o := Squad.slot_offset(_place_of(slot, n), n, sim.form_half if sim else 0.0)
+	# A hair of height per place keeps overlapping caps and hats from z-fighting.
+	return Vector3(_squad_x + o.x, 0.012 * (slot % 4), o.y + lift)
+
+
+## Spec v2 §4 smudge fix. The formation's places are the sim's (Squad.slot_offset); this only
+## decides who stands where. Slot 0 (the hero) stays in front; the ranks after him (snipers,
+## commandos, SWAT, inspectors, sergeants, by ALLY_ORDER) take the rear places nearest the
+## camera, seen whole instead of as a clump of purple and brown hats in the middle of the
+## blob; constables fill the rest, rear to front.
+func _place_of(slot: int, n: int) -> int:
+	if slot <= 0 or n <= 2:
+		return slot
+	if not _places.has(n):
+		var half := sim.form_half if sim else 0.0
+		var idx: Array = range(1, n)
+		idx.sort_custom(func(a, b):
+			var za := Squad.slot_offset(a, n, half).y
+			var zb := Squad.slot_offset(b, n, half).y
+			return za > zb or (za == zb and a < b))
+		_places[n] = [0] + idx
+	var p: Array = _places[n]
+	return int(p[slot]) if slot < p.size() else slot
 
 
 # ---------------------------------------------------------------- visuals

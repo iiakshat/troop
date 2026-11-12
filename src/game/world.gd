@@ -40,6 +40,16 @@ static func look(d: int) -> Dictionary:
 	return _looks.get(str(d), {})
 
 
+## The street camera: {pos: [x, y, z], look: [x, y, z]} from config/world_look.json.
+static func camera_rig() -> Dictionary:
+	look(1)
+	return _looks.get("camera", {})
+
+
+static func _vec3(a: Array) -> Vector3:
+	return Vector3(float(a[0]), float(a[1]), float(a[2]))
+
+
 static func look_count() -> int:
 	var n := 0
 	while not look(n + 1).is_empty():
@@ -212,9 +222,12 @@ func _camera() -> void:
 	camera.fov = _base_fov
 	camera.near = 0.5
 	camera.far = 220.0
-	camera.position = Vector3(0, 9.0, 12.0)
+	# Spec v2 §4: the squad sits low (hero about a quarter up the screen) with more street
+	# ahead. Numbers: config/world_look.json "camera".
+	var rig := camera_rig()
+	camera.position = _vec3(rig.get("pos", [0, 9.0, 12.0]))
 	add_child(camera)
-	camera.look_at(Vector3(0, 0.5, -14.0), Vector3.UP)
+	camera.look_at(_vec3(rig.get("look", [0, 0.5, -14.0])), Vector3.UP)
 	_cam_base = camera.transform
 	camera.current = true
 
