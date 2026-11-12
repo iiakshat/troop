@@ -20,6 +20,9 @@ var counts: Dictionary = {"hero": 1, "constable": 0, "sergeant": 0, "inspector":
 	"swat": 0, "sniper": 0, "commando": 0}
 var hero_weapon: String = ""
 var cap := 0   # 0 = no limit
+## Tap heat: the hero's knife (and a held weapon) fires at this share of its rate. LevelSim
+## sets it from tap heat each tick; followers never use it.
+var hero_rate := 1.0
 
 
 func total() -> int:
@@ -113,9 +116,9 @@ func dps(stats: Dictionary, weapons: Dictionary, armour: int, hp := 1.0, enemies
 		var n := count(rank)
 		if n <= 0 or not stats.has(rank) or not _counts_for(stats[rank], which):
 			continue
-		sum += n * hit_value(stats[rank], armour, hp, enemies)
+		sum += n * hit_value(stats[rank], armour, hp, enemies) * _rate_of(rank)
 	if which != Fire.SNIPE and hero_weapon != "" and hero_alive() and weapons.has(hero_weapon):
-		sum += hit_value(weapons[hero_weapon], armour, hp, enemies)
+		sum += hit_value(weapons[hero_weapon], armour, hp, enemies) * hero_rate
 	return sum
 
 
@@ -125,8 +128,12 @@ func pierce_dps(stats: Dictionary, weapons: Dictionary, hp := 1.0, enemies := 1 
 	for rank in counts:
 		var n := count(rank)
 		if n > 0 and stats.has(rank) and bool(stats[rank].get("pierce", false)) and _counts_for(stats[rank], which):
-			sum += n * hit_value(stats[rank], 0, hp, enemies)
+			sum += n * hit_value(stats[rank], 0, hp, enemies) * _rate_of(rank)
 	return sum
+
+
+func _rate_of(rank: String) -> float:
+	return hero_rate if rank == "hero" else 1.0
 
 
 ## True when the squad has at least one living shooter that picks the toughest target.
@@ -256,5 +263,6 @@ func duplicate_squad() -> Squad:
 	var s := Squad.new()
 	s.counts = counts.duplicate()
 	s.hero_weapon = hero_weapon
+	s.hero_rate = hero_rate
 	s.cap = cap
 	return s
