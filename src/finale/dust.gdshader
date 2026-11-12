@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode unshaded, blend_add, cull_disabled, depth_draw_never, shadows_disabled;
+render_mode unshaded, blend_add, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
 // Dust motes drifting in the gallery spotlights. One MultiMesh of tiny quads; each mote
 // drifts on its own slow loop (finale time `t`, so it slows down with the slow motion),
 // faces the camera, twinkles, and only shows while it is inside one of the two beams.

@@ -8,6 +8,8 @@ extends CanvasLayer
 ##              a pistol shows its magazine as rounds and the spare rounds as +N
 ##   top left (under the bottles)  wind (bow): an arrow showing its direction and strength + m/s
 ##   reload     a pulsing magazine with a swipe-down arrow when the pistol is empty
+##   reticle    where the shot goes: a green pin (bow) or a crosshair (pistol); the weapon
+##              moves it every frame while aiming
 
 const AMMO_ICONS := {"knife": "knife", "pistol": "bullet", "sniper": "bullet", "bow": "arrow", "stars": "star"}
 
@@ -27,6 +29,8 @@ var _wind_root: Control
 var _wind_glyph: Glyph
 var _wind_label: Label
 var _reload: Control
+var _reticle: Glyph
+var _wind_max := 1.5
 var _reload_t := 0.0
 var _mult_shown := 1.0
 var _mult_from := 1.0
@@ -64,6 +68,7 @@ class Glyph extends Control:
 		kind = k
 		color = c
 		custom_minimum_size = Vector2(px, px)
+		size = Vector2(px, px)
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	func _draw() -> void:
@@ -134,6 +139,23 @@ class Glyph extends Control:
 				var head := PackedVector2Array([c + d * s * 0.46, b - d * s * 0.04 + n * s * 0.2, b - d * s * 0.04 - n * s * 0.2])
 				draw_colored_polygon(_grow(head, b, 3.0), ink)
 				draw_colored_polygon(head, Color("bfe6ff") * color)
+			"pin":
+				# Bow pin sight: a ring with a glowing green bead and a short post under it.
+				draw_arc(c, s * 0.34, 0.0, TAU, 40, ink, s * 0.1)
+				draw_arc(c, s * 0.34, 0.0, TAU, 40, Color("e9f7ff") * color, s * 0.05)
+				draw_line(c + Vector2(0, s * 0.1), c + Vector2(0, s * 0.3), ink, s * 0.08)
+				draw_line(c + Vector2(0, s * 0.1), c + Vector2(0, s * 0.3), Color("e9f7ff") * color, s * 0.035)
+				draw_circle(c, s * 0.1, ink)
+				draw_circle(c, s * 0.075, Color("6dff7a") * color)
+				draw_circle(c - Vector2(s * 0.025, s * 0.025), s * 0.025, Color(1, 1, 1, 0.85))
+			"cross":
+				# Pistol crosshair: four ticks around a small gap and a red centre dot.
+				for k in 4:
+					var d := Vector2.from_angle(PI * 0.5 * k)
+					draw_line(c + d * s * 0.14, c + d * s * 0.42, ink, s * 0.1)
+					draw_line(c + d * s * 0.14, c + d * s * 0.42, Color.WHITE * color, s * 0.045)
+				draw_circle(c, s * 0.065, ink)
+				draw_circle(c, s * 0.045, Color("ff4a3d") * color)
 			"mag":
 				var r := Rect2(c.x - s * 0.16, c.y - s * 0.34, s * 0.32, s * 0.6)
 				draw_rect(r.grow(3), ink)
@@ -281,6 +303,11 @@ func _ready() -> void:
 	_reload.offset_bottom = -210
 	_reload.visible = false
 	add_child(_reload)
+	# Reticle (bow pin / pistol crosshair), placed by the weapon each frame.
+	_reticle = Glyph.new("pin", 64)
+	_reticle.visible = false
+	add_child(_reticle)
+	_wind_max = wind_max(logic)
 	refresh()
 
 
@@ -302,20 +329,51 @@ func set_bottles(n: int) -> void:
 	_bottle_n.text = str(n)
 
 
-## Wind arrow: hidden when calm (a near-zero roll teaches nothing); otherwise its length and
-## opacity grow with the strength.
+## Wind arrow: hidden when calm (anything that would read "0.0"); otherwise it points the way
+## the wind blows, its length and opacity grow with the strength, and the number says how strong.
 func set_wind(w: float) -> void:
-	_wind_root.visible = absf(w) >= WIND_MIN
-	_wind_glyph.angle = 0.0 if w >= 0.0 else PI
-	var k := clampf(absf(w) / 1.5, 0.0, 1.0)
+	var v := wind_view(w, _wind_max)
+	_wind_root.visible = bool(v["visible"])
+	_wind_glyph.angle = float(v["angle"])
+	var k := float(v["length"])
 	_wind_glyph.pivot_offset = _wind_glyph.size * 0.5
-	_wind_glyph.scale = Vector2(0.55 + 0.45 * k, 1.0)
-	_wind_glyph.modulate.a = 0.55 + 0.45 * k
+	_wind_glyph.scale = Vector2(k, 1.0)
+	_wind_glyph.modulate.a = 0.5 + 0.5 * k
 	_wind_glyph.queue_redraw()
-	_wind_label.text = "%.1f" % absf(w)
+	_wind_label.text = String(v["text"])
 
 
-const WIND_MIN := 0.05
+## Pure: how the wind indicator shows wind `w` (m/s^2, + = to the right) when the strongest wind
+## in the game is `w_max`: {visible, angle (0 right, PI left), length 0.35..1, text}.
+static func wind_view(w: float, w_max: float) -> Dictionary:
+	var text := "%.1f" % absf(w)
+	var k := clampf(absf(w) / maxf(w_max, 0.01), 0.0, 1.0)
+	return {"visible": text != "0.0", "angle": 0.0 if w >= 0.0 else PI,
+		"length": 0.35 + 0.65 * k, "text": text}
+
+
+## The strongest wind any level can roll (the top of the difficulty row times the bow's wind).
+static func wind_max(l: BottleLogic) -> float:
+	var top := 0.0
+	for x in ((l.cfg.get("difficulty", {}) as Dictionary).get("wind", []) as Array):
+		top = maxf(top, float(x))
+	return maxf(top * float(l.wcfg.get("wind", 1.0)), 0.1)
+
+
+## Shows the reticle (`kind` "pin" or "cross") centred on screen point `p`.
+func set_reticle(p: Vector2, kind: String) -> void:
+	if _reticle == null:
+		return
+	if _reticle.kind != kind:
+		_reticle.kind = kind
+		_reticle.queue_redraw()
+	_reticle.position = p - _reticle.size * 0.5
+	_reticle.visible = true
+
+
+func hide_reticle() -> void:
+	if _reticle:
+		_reticle.visible = false
 
 
 func show_reload(on: bool) -> void:

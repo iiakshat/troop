@@ -167,7 +167,7 @@ func _ready() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _mode:
-		if _state == "aim":
+		if _state == "aim" or (_mode.input_while_busy and _state in ["intro", "flying", "impact"]):
 			_mode.handle_input(event)
 		return
 	if _state != "aim":
