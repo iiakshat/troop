@@ -21,6 +21,21 @@ Last updated: 2026-11-12
 
 ## Status
 
+- **2026-11-12, v2 "Siren Squad" (integrated on `worktree-wf_3f6888da-ab3-9` from the CORE, VIEW+COMBAT, ECON, UX, FINALE, BRAND and SDK worktrees; spec `2026-11-12-siren-squad-v2-design.md`):**
+  - Brand: Siren Squad name and package, axnex intro, logo and light-bar loading screen, siren sounds, launcher icons (adaptive and monochrome).
+  - Tap-to-fire hero (tap heat, tap vs swipe, heat arc, hand flick). No mid-level slow-down; rank joins, the boss bar and the new-item card are pre-warmed. Lower camera, a squad about one lane wide, and the smudge fix.
+  - Armory: 11 weapon tracks (4 tiers × 5 steps, our own names, Gemini tier art). Shield and bomb are powers with a 5 h free recharge (save v4 migration). Squad Power = the HUD's live firepower at level start.
+  - One hint language: gesture hands, the new-item card, best-lane chevrons, and a menu hand that always carries the item icon and before ▸ after.
+  - Bottle Shot: every bottle visible in every weapon mode, a stylised bow and pistol, and a wind indicator that hides at 0.
+  - Spec §12: enemies fire back from L11 (and gunmen everywhere), district squad caps from 300 to 100K with exact counts and 12.3K / 1.25M display, live firepower in the HUD, and a thrown bomb at any moment (throw clip, sparking fuse, arc, blast on landing).
+  - SDKs: real AdMob and Firebase with Google's test IDs, the age screen, and the child path (no Firebase, child-directed G-rated non-personalised ads).
+  - Calibration: all 50 levels for the no-ad pace (tapping, no powers), every level within 10 points of its win target, need-upgrade levels from district 2, and coin_ref for Bottle Shot coins.
+  - 276 tests pass. Headless `strike=1` autoplay on the pace's saves wins L1/5/10/11/21/31/41/50 with 3 stars and no script errors. `perf=1`: L13 max level frame 21.6 ms and L50 40.4 ms after 2 s.
+- **Known open items (v2):**
+  - The owner has not yet tried any of it on a phone: tap feel, the bomb throw, return fire, the Armory, the boot screens, the age screen, or a test ad.
+  - `tests/smoke_lobby.gd` still fails "Play shows the selected level" (predates v1.1).
+  - No release (signed) preset yet.
+  - The owner's AdMob and Firebase setup is still to do (`docs/owner_ads_setup.md`), as is the ipindia.gov.in name check for "Siren Squad".
 - **2026-11-09, v1.1 (owner play-test round, integrated on `worktree-wf_2d68997e-b87-5` from the GAMEPLAY, ECON-UI, FINALE and CHAR worktrees):**
   - Red gates clear within 2.5 s of committed fire; 0% is exactly no change; a closing gang pulses and a red ring marks what killed the squad.
   - Obstacles hit by position: the formation (`Squad.slot_offset`, at most 1.25 m either side) decides which figures die, capped at the obstacle's number; every obstacle shows its cost. The view feeds the squad's real x (`LevelSim.set_squad_x`); autoplay stays at lane centres.
@@ -39,8 +54,8 @@ Last updated: 2026-11-12
   - Mission stats: kills per enemy kind, bottles, gold bottles, wins, 3 stars, bombs and shields used; city coins, builds and upgrades are recorded by Game itself.
   - Placeholder ad popup at every placement in normal play; autoplay and headless skip it.
 - **2026-11-09, merge-verify:** SIM-FINISH (all 50 levels calibrated, stored winning routes), VIEW (crowds and effects for every new rank/enemy, boss bar, district themes, `rank_joined`, `revive()`), WIRE (flow) and AUDIO (real recordings for every spec id, Lyria loops) are merged. 121 tests pass. Autoplay without `lanes=` drives the level's stored `route`; `chain=N` plays L1 onward unattended. Revive shield is 4 s (outlasts one molotov throw). The Gang HQ sign is an icon.
-- **Known open items:** off the win curve after v1.1 calibration: L12 71% vs 59%, L22 59% vs 48%, L23 30% vs 46%, L30 54% vs 28% (needs a generator change, not a scale change). The owner has not yet hand-tried the pistol, bow, stars and sniper controls on a phone, seen the throw clip in a level, or listened to the new sounds. `tests/smoke_lobby.gd` fails one check ("Play shows the selected level"), which predates v1.1.
-- **Not done:** real ads and analytics SDKs, store listing, real-device performance check on low-end phones, package ID, name check.
+- **Known open items (v1.1, kept for history):** the v1.1 off-curve levels (L12, L22, L23, L30) are back within 10 points after the v2 calibration. The owner has not yet hand-tried the pistol, bow, stars and sniper controls on a phone.
+- **Not done:** store listing, a real-device performance check on low-end phones, the trademark name check, real ad unit IDs (test IDs for now), and a release signing preset.
 - **2026-11-08, v0.3:** Vulkan Mobile look, Gemini-painted facades, toon crowds, Bottle Shot with refractive glass, station redesign, recorded gunshots.
 - **APKs are built locally** (owner's choice, 2026-11-08): GitHub Actions is refused for the whole account ("locked due to a billing issue"), so `build_apk.bat` builds on the laptop. The CI workflow stays in the repo for when billing is fixed.
 
