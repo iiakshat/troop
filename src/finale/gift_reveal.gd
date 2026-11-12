@@ -335,9 +335,9 @@ func _paint() -> void:
 	if opened:
 		glow = (1.0 + 0.4 * (1.0 - _u(2))) * out
 	var gc := bc.lerp(_weapon_rest(), _u(3)) if opened else bc
-	for i in 6:
-		var k := 1.0 - i / 6.0
-		_view.draw_circle(gc, bs * (0.55 + 0.75 * k), Color(1.0, 0.82, 0.35, 0.05 * glow))
+	for i in 12:
+		var k := 1.0 - i / 12.0
+		_view.draw_circle(gc, bs * (0.45 + 0.85 * k), Color(1.0, 0.82, 0.35, 0.028 * glow))
 	if opened:
 		_paint_rays(gc, bs, out)
 	_paint_box(bc, bs)
@@ -358,7 +358,7 @@ func _paint_rays(c: Vector2, bs: float, out: float) -> void:
 	var n := 12
 	var spin := t * 1.6
 	var ray_len := bs * 1.9 * _ease_out_back(clampf(_u(2) * 0.6 + _u(3) * 0.6, 0.0, 1.0), 1.2)
-	var a := 0.32 * out
+	var a := 0.27 * out
 	for i in n:
 		var ang := spin + TAU * i / n
 		var half := 0.11
@@ -396,10 +396,12 @@ func _paint_box(bc: Vector2, bs: float) -> void:
 	# Open: the lid flies up and away, the body bounces and drops out of sight.
 	var u := clampf((t - float(_ends[1])) / maxf(float(_d["open_s"]) + float(_d["spin_s"]) * 0.7, 0.01), 0.0, 1.0)
 	var lid_h := bs * LID_CUT
-	var lid_pos := bc + Vector2(bs * 0.35 * u, -bs * (0.5 - LID_CUT * 0.5) - bs * 1.6 * u + bs * 1.2 * u * u)
-	var lid_a := 1.0 - smoothstep(0.55, 1.0, u)
+	# The lid is thrown: fast up and to the side, tumbling, falling back as it fades.
+	var tau := t - float(_ends[1])
+	var lid_pos := bc + Vector2(bs * 1.6 * tau, -bs * (0.5 - LID_CUT * 0.5) - bs * 6.0 * tau + bs * 7.0 * tau * tau)
+	var lid_a := 1.0 - smoothstep(0.22, 0.42, tau)
 	if lid_a > 0.0:
-		_view.draw_set_transform(lid_pos, u * 1.6, Vector2.ONE * (1.0 + 0.15 * u))
+		_view.draw_set_transform(lid_pos, tau * 5.5, Vector2.ONE * (1.0 + 0.7 * tau))
 		_view.draw_texture_rect_region(tex, Rect2(Vector2(-bs * 0.5, -lid_h * 0.5), Vector2(bs, lid_h)),
 			Rect2(0, 0, tsz.x, cut), Color(1, 1, 1, lid_a))
 	var body_h := bs - lid_h

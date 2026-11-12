@@ -96,6 +96,7 @@ var _blur := 0.1
 var _state := "intro"         # intro | gift | aim | flying | impact | tally | finished
 var _gift: GiftReveal = null  # v2.1 §4.3: a guest weapon is handed over as a gift (state "gift")
 var _gift_cfg: Dictionary = {}
+var _fog_env: Environment = null  # the camera's thinned-fog environment while a far set is shot
 var _wait := 0.0
 var _intro_t := 0.0
 var _intro_from := Transform3D()
@@ -176,6 +177,7 @@ func _ready() -> void:
 		add_child(_gift)
 		if _mode:
 			_mode.visible = false
+	_thin_fog(true)
 	_aim_lens()
 	# Burst in: the squad kicks the door; the camera rushes from the street into the stash.
 	_intro_from = world.camera.transform
@@ -359,6 +361,7 @@ func _process(delta: float) -> void:
 				_state = "finished"
 				world.set_camera_override(null)
 				world.set_lens(-1.0)
+				_thin_fog(false)
 				hud.queue_free()
 				if _mode:
 					_mode.finish()
@@ -404,6 +407,33 @@ func shot_over() -> void:
 		_cam_mode = "aim"
 		_wait = 1.0
 		Sfx.play("win")
+
+
+## The sniper's set stands on a roof 105-130 m away: in a daylight district the street's fog
+## washes it out (a guest sniper, v2.1 §4.3). While the finale runs, the camera sees the same
+## environment with its fog thinned by the weapon's fog_mult; the world's own is never touched.
+func _thin_fog(on: bool) -> void:
+	var cam := world.camera if world else null
+	if cam == null:
+		return
+	if not on:
+		if _fog_env != null and cam.environment == _fog_env:
+			cam.environment = null
+		_fog_env = null
+		return
+	var k := float(logic.wcfg.get("fog_mult", 1.0))
+	var base: Environment = cam.get_world_3d().environment if cam.get_world_3d() else null
+	if k >= 1.0 or base == null:
+		return
+	# Always from the world's own environment (an older finale's override may still be set).
+	_fog_env = base.duplicate() as Environment
+	_fog_env.fog_density = base.fog_density * maxf(k, 0.0)
+	cam.environment = _fog_env
+
+
+func _exit_tree() -> void:
+	if not warm:
+		_thin_fog(false)
 
 
 func _begin_aim() -> void:
@@ -792,6 +822,8 @@ func _build_stage() -> void:
 			top = maxf(top, float(h))
 		bar.position = Vector3(hero_pos.x, _floor_y + top + 1.45, _wall_z + 0.25)
 		add_child(bar)
+		if theme == "rooftop":
+			_backboard(extent * 2.0 + 1.4, top + 1.45 + 0.35, false)
 	else:
 		var width := extent * 2.0 + (1.0 if motion == "static" else 0.7) * _bscale
 		if theme == "factory" and motion != "static":
@@ -814,6 +846,23 @@ func _build_stage() -> void:
 			var board := World._box(Vector3(width + 0.5, bh, 0.06), Color("1d1a2e"))
 			board.position = Vector3(0, _floor_y + low - 0.3 + bh * 0.5, _wall_z + 0.05)
 			_rack.add_child(board)
+		elif theme == "rooftop":
+			var top2 := 0.0
+			for h in heights:
+				top2 = maxf(top2, float(h))
+			_backboard(width + 0.5, top2 + 1.25 * _bscale / BOTTLE_SCALE + 0.3, true)
+
+
+## Rooftop (sniper): a dark board behind the set up to `top` (above the stand's floor), so a set
+## taller than the lounge wall never stands against a bright daylight sky (a guest sniper in
+## districts 2-4, v2.1 §4.3; at night it melts into the wall). On the rack when it slides along.
+func _backboard(width: float, top: float, on_rack: bool) -> void:
+	var board := World._box(Vector3(width, top, 0.06), Color("241c33"))
+	board.position = Vector3(0.0 if on_rack else hero_pos.x, _floor_y + top * 0.5, _wall_z + 0.05)
+	if on_rack:
+		_rack.add_child(board)
+	else:
+		add_child(board)
 
 
 ## No stash sign may stand between an eye (the weapon's and the aim camera's) and any bottle,

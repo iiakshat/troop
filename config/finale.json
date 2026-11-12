@@ -55,11 +55,11 @@
       "per_row": 4, "spacing": 0.85, "row_h": 0.9, "y0": 1.4, "amp_scale": 0.9
     },
     "sniper": {
-      "_note": "Rooftop to rooftop. Touch to raise the scope, drag to aim, release to fire. Sway (breathing) + tremor; for steady_s after scoping in the sway drops to steady_k, then grows to worse_k. Zeroed at `zero` metres. cycle_s = bolt action. bullet_cam = time scale of the slow-motion bullet camera on a hit.",
+      "_note": "Rooftop to rooftop. Touch to raise the scope, drag to aim, release to fire. Sway (breathing) + tremor; for steady_s after scoping in the sway drops to steady_k, then grows to worse_k. Zeroed at `zero` metres. cycle_s = bolt action. bullet_cam = time scale of the slow-motion bullet camera on a hit. fog_mult = the street fog's density while the far roof is shot (a daylight district's fog washes the set out; v2.1 guest snipers).",
       "distance": 105.0, "speed": 300.0, "gravity": 9.8, "zero": 100.0, "hit_radius": 0.19, "aspect": 1.6,
       "eye_y": 1.6, "elevation": 14.0, "fov": 46.0, "scope_fov": 2.8, "sens": 0.012,
       "sway_deg": 0.28, "tremor_deg": 0.05, "steady_s": 1.6, "steady_k": 0.15, "worse_k": 2.4, "worse_s": 3.0,
-      "cycle_s": 0.95, "bullet_cam": 0.22,
+      "cycle_s": 0.95, "bullet_cam": 0.22, "fog_mult": 0.35,
       "per_row": 4, "spacing": 0.9, "row_h": 0.9, "y0": 1.2, "amp_scale": 1.0
     }
   }
