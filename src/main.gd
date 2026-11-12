@@ -14,6 +14,7 @@ extends Node
 ##   frames=N screenshot=path shots=100,200 out=prefix  report=1 (print the result)
 ##   chain=N (autoplay: after a win go result -> map -> next level, until level N)
 ##   revive=1 (offer the revive under autoplay too; revive=auto also takes it after 1 s)
+##   powers=0 (autoplay never uses the shield or bomb: incoming fire lands, for screenshots)
 ##   reset=1 (fresh save)  coins=N (and unlock every level)  save=path (play on a copy of that
 ##   JSON save, never written)  lobby=1 (menu even for a new player)  ads=1 (show the ad
 ##   popup even under autoplay)
@@ -411,7 +412,7 @@ func _start_level(n: int, boosters: Dictionary = {}) -> void:
 				lanes.append(int(s))
 		else:
 			lanes = (level["route"] as Array).duplicate()
-		_pilot = Autopilot.new(lanes, true)
+		_pilot = Autopilot.new(lanes, String(_args.get("powers", "1")) != "0")
 		view.input_enabled = false
 		hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		hud.power_pressed.disconnect(hud.power_pressed.get_connections()[0]["callable"])

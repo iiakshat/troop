@@ -139,11 +139,19 @@ func test_return_fire_shows_tracers_and_followers_fall() -> void:
 		var rf := evs.filter(func(e): return e["type"] == "return_fire" and int(e["lost"]) > 0)
 		if not rf.is_empty() and not fired:
 			shown_before = view._allies.size()
-			fx._proj.clear()
+			fx.clear()
 		view._handle_events(evs)
 		if not rf.is_empty() and not fired:
 			fired = true
-			check(_proj_kinds(fx).has("tracer"), "tracers fly at the squad")
+			# Spec v2.1 §1.1: orange-red tracers in their own pool; the hit figures fall when
+			# the tracers land (about a second later), not before.
+			check(fx.enemy_projectiles() > 0, "tracers fly at the squad")
+			eq(view._allies.size(), shown_before, "nobody falls before the shots land")
+			for f in 70:
+				view._update_visuals(1.0 / 60.0)
+				fx._process(1.0 / 60.0)
+				if view._allies.size() < shown_before:
+					break
 			check(view._allies.size() < shown_before, "hit followers fall (%d -> %d)" % [shown_before, view._allies.size()])
 			check(view._dying.size() > 0, "they topple")
 			eq(view.sim.squad.total(), before - int(rf[0]["lost"]), "one troop per hit")

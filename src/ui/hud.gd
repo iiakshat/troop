@@ -10,6 +10,8 @@ signal pause_pressed
 var _progress: ProgressBar
 var _troops: HBoxContainer
 var _troops_pop := 0.0
+var _troops_n := -1        # the count shown (a drop pulses the pill red)
+var _troops_hurt := 0.0    # spec v2.1 §1.1: 1 on a loss, fading
 var _power: HBoxContainer
 var _power_shown := -1.0
 var _power_text := ""
@@ -162,6 +164,9 @@ func set_progress(p: float) -> void:
 func set_troops(n: int) -> void:
 	UiKit.pill_set(_troops, NumFormat.fmt(n))
 	_troops_pop = 1.0
+	if _troops_n >= 0 and n < _troops_n:
+		_troops_hurt = 1.0   # spec v2.1 §1.1: a loss pulses the pill red
+	_troops_n = n
 	_cap_bar.value = n
 	# Full squad: the bar turns gold.
 	(_cap_bar.get_theme_stylebox("fill") as StyleBoxFlat).bg_color = UiKit.GOLD if n >= _cap_bar.max_value else Color("8fd0ff")
@@ -257,6 +262,11 @@ func _process(delta: float) -> void:
 		_troops_pop = maxf(_troops_pop - delta * 4.0, 0.0)
 		_troops.pivot_offset = _troops.size * 0.5
 		_troops.scale = Vector2.ONE * (1.0 + 0.3 * _troops_pop)
+	if _troops_hurt > 0.0 or _troops.modulate != Color.WHITE:
+		_troops_hurt = maxf(_troops_hurt - delta * 2.5, 0.0)
+		_troops.modulate = Color.WHITE.lerp(Color(1.0, 0.3, 0.28), _troops_hurt)
+		_troops.pivot_offset = _troops.size * 0.5
+		_troops.rotation = 0.06 * sin(_troops_hurt * 40.0) * _troops_hurt
 	if _power_pop > 0.0:
 		_power_pop = maxf(_power_pop - delta * 5.0, 0.0)
 		_power.pivot_offset = _power.size * 0.5

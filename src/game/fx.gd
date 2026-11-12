@@ -14,15 +14,34 @@ const BULLET_SCALE := {
 	"bullet": Vector3(0.75, 0.75, 1), "bullet_big": Vector3(1.3, 1.3, 1.6), "tracer": Vector3(0.6, 0.6, 0.8),
 	"pellet": Vector3(0.6, 0.6, 0.45), "sniper_round": Vector3(0.7, 0.7, 4.0), "rocket": Vector3(2.4, 2.4, 1.1),
 }
+## Spec v2.1 §1.1: incoming fire has its own pool, so the squad's MAX_PROJ never hides it and it
+## never takes the squad's projectiles. Orange-red tracers, about the size of a squad bullet,
+## slow enough that each one is on screen for about a second.
+const MAX_ENEMY_PROJ := 128
+const ENEMY_TRACER_SPEED := 50.0   # m/s: a gang 50 m up the street hits in about 1 s
+const ENEMY_TRACER_MIN_S := 0.45
+const ENEMY_TRACER_MAX_S := 1.0
+const ENEMY_SCALE := {
+	"etracer": Vector3(1.0, 1.0, 1.7), "etracer_big": Vector3(2.0, 2.0, 2.2), "esniper": Vector3(1.0, 1.0, 5.0),
+}
+const ENEMY_TRACER_COLOR := Color(1.0, 0.3, 0.1)   # clearly not the squad's pale yellow-white
+const ENEMY_CORE_COLOR := Color(1.0, 0.78, 0.35)
 
 var font: Font
 
 var _proj: Array = []      # {pos, vel, t, kind, spin}
+var _eproj: Array = []     # incoming fire (own pool): {pos, vel, t, kind, spin, grav, to?, dx?}
 var _parts: Array = []     # {pos, vel, t, life, col, size, grav}
 var _knife_mm: MultiMesh
 var _bullet_mm: MultiMesh
-var _lob_mm: MultiMesh     # firebomb bottles and grenades (lit, tumbling)
+var _etracer_mm: MultiMesh # enemy tracers and sniper rounds (orange-red)
+var _gren_mm: MultiMesh    # grenades and the boss's barrage shells (lit, tumbling)
+var _lob_mm: MultiMesh     # firebomb bottles (lit, tumbling)
 var _bomb_mm: MultiMesh    # the hero's thrown bombs (round, with a sparking fuse)
+var _n := PackedInt32Array([0, 0, 0, 0, 0, 0])   # per frame: knives, bullets, lobs, bombs, enemy tracers, grenades
+## The squad's x (LevelView sets it every frame): incoming fire aimed at the squad follows it
+## across the lanes, so a tracer always ends on the figure it hits.
+var track_x := 0.0
 var _fires: Array = []     # {pos, t, life}: burning patches on the road
 var _part_mm: MultiMesh
 var _labels: Array[Label3D] = []
@@ -46,6 +65,11 @@ func _ready() -> void:
 	bm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	bm.albedo_color = Color(1, 1, 1, 0.6)
 	_bullet_mm = _mm(_bullet_mesh(), MAX_PROJ, false, bm)
+	# Incoming fire: opaque and unshaded, so it reads on the asphalt and on bright facades alike.
+	var em := _unshaded_vertex_mat() as StandardMaterial3D
+	em.vertex_color_is_srgb = true   # the authored orange-red, not a washed-out linear one
+	_etracer_mm = _mm(_enemy_tracer_mesh(), MAX_ENEMY_PROJ, false, em)
+	_gren_mm = _mm(_grenade_mesh(), MAX_LOB, false, _lit_vertex_mat())
 	_lob_mm = _mm(_bottle_mesh(), MAX_LOB, false, _lit_vertex_mat())
 	# The bomb is drawn flat and near-black like the HUD's bomb icon, with a pale rim.
 	var bomb_mat := _unshaded_vertex_mat() as StandardMaterial3D
@@ -69,6 +93,8 @@ func prewarm(at: Vector3) -> void:
 		shoot(k, at, at + Vector3(0, 0, -0.5), 1.0)
 	lob(at, at + Vector3(0, 0, -0.5), 0.3, 0.2)
 	bomb(at, at + Vector3(0, 0, -0.5), 0.3, 0.2)
+	enemy_shoot(at, at + Vector3(0, 0, 0.5), false)
+	enemy_lob("grenade", at, at + Vector3(0, 0, 0.5), 0.3, 0.2)
 	blast(at, 1.0, 0.0)
 	burst(at, Color.WHITE, 2, 0.1, 0.2, 0.1, 0.0, 0.0)
 	for i in 12:
@@ -77,6 +103,7 @@ func prewarm(at: Vector3) -> void:
 
 func clear() -> void:
 	_proj.clear()
+	_eproj.clear()
 	held_bomb_on = false
 	time_scale = 1.0
 	_parts.clear()
@@ -134,6 +161,58 @@ func land_bomb(id := 0) -> void:
 			i += 1
 
 
+## Spec v2.1 §1.1: an enemy shot from `from` to `to` in its own pool. With `track`, `to` is
+## held relative to the squad (track_x), so the tracer ends on the figure it was aimed at even
+## while the squad changes lane. `t` < 0: the tracer's own flight (enemy_flight). Returns the
+## flight time (0 when the pool is full).
+func enemy_shoot(from: Vector3, to: Vector3, track := true, kind := "etracer", t := -1.0) -> float:
+	if _eproj.size() >= MAX_ENEMY_PROJ:
+		return 0.0
+	if t < 0.0:
+		t = enemy_flight(from.distance_to(to))
+	t = maxf(t, 0.05)
+	var p := {"pos": from, "vel": (to - from) / t, "t": t, "kind": kind, "spin": 0.0, "grav": 0.0}
+	if track:
+		p["to"] = to
+		p["dx"] = to.x - track_x
+	_eproj.append(p)
+	return t
+
+
+## How long an enemy tracer flies `dist` metres (about 1 s from 50 m).
+static func enemy_flight(dist: float) -> float:
+	return clampf(dist / ENEMY_TRACER_SPEED, ENEMY_TRACER_MIN_S, ENEMY_TRACER_MAX_S)
+
+
+## A lobbed enemy projectile in the incoming pool: "lob" (a molotov's bottle), "grenade" or
+## "shell" (the boss's barrage). Lands on `to` after `t` s, `height` m over the higher end; the
+## view shows the impact when the sim's attack_land comes.
+func enemy_lob(kind: String, from: Vector3, to: Vector3, t: float, height := 5.0) -> void:
+	if _eproj.size() >= MAX_ENEMY_PROJ:
+		return
+	t = maxf(t, 0.2)
+	var peak := maxf(from.y, to.y) + height
+	var g := 2.0 * ((peak - from.y) + (peak - to.y) + 2.0 * sqrt((peak - from.y) * (peak - to.y))) / (t * t)
+	var vy := (to.y - from.y) / t + 0.5 * g * t
+	_eproj.append({"pos": from, "vel": Vector3((to.x - from.x) / t, vy, (to.z - from.z) / t), "t": t,
+		"kind": kind, "spin": randf() * TAU, "grav": g})
+
+
+## Every incoming shot, grenade, bottle and shell leaves the air (a revive, the finish).
+func clear_enemy() -> void:
+	_eproj.clear()
+
+
+## Incoming projectiles in flight (their own pool).
+func enemy_projectiles() -> int:
+	return _eproj.size()
+
+
+## The squad's projectiles in flight (capped at MAX_PROJ).
+func squad_projectiles() -> int:
+	return _proj.size()
+
+
 ## The bomb's blast: a fireball that fills `radius` metres (what it hits is what looks hit),
 ## a shock ring at that radius, smoke and debris. `far` (0..1, by distance from the camera)
 ## thickens the particles so a blast 50 m down the street still reads.
@@ -154,10 +233,17 @@ func blast(at: Vector3, radius: float, far := 0.0) -> void:
 			"t": 0.0, "life": 0.45, "col": Color("ffb347"), "size": 0.3 * k, "grav": 0.0})
 
 
-## A gun's muzzle flash: a quick bright pop (enemy return fire).
+## A gun's muzzle flash: a quick bright pop.
 func muzzle(at: Vector3) -> void:
 	burst(at, Color(1.0, 0.95, 0.6), 3, 1.2, 0.26, 0.07, 0.0, 0.0)
 	burst(at, Color(1.0, 0.6, 0.2), 2, 2.0, 0.14, 0.1, 0.0, 0.0)
+
+
+## Spec v2.1 §1.1: an enemy gun's flash, big enough to see a gang 50 m up the street open fire:
+## a white-hot core and orange petals. `k` scales it (the view grows it with distance).
+func muzzle_big(at: Vector3, k := 1.0) -> void:
+	burst(at, Color(1.0, 0.97, 0.78), 2, 0.5, 0.7 * k, 0.1, 0.0, 0.0)
+	burst(at, Color(1.0, 0.5, 0.1), 5, 3.2 * k, 0.38 * k, 0.13, 0.0, 0.0)
 
 
 # ---------------------------------------------------------------- particles
@@ -252,20 +338,39 @@ func _process(delta: float) -> void:
 
 
 func _tick_proj(delta: float) -> void:
-	var kn := 0
-	var bn := 0
-	var ln := 0
-	var mn := 0
+	_n.fill(0)
+	_tick_list(_proj, delta)
+	_tick_list(_eproj, delta)
+	if held_bomb_on and _n[3] < MAX_BOMBS:
+		_bomb_fuse(held_bomb, Basis(), BOMB_HAND_SCALE, false)
+		_bomb_mm.set_instance_transform(_n[3], Transform3D(Basis().scaled(Vector3.ONE * BOMB_HAND_SCALE), held_bomb))
+		_n[3] += 1
+	_knife_mm.visible_instance_count = _n[0]
+	_bullet_mm.visible_instance_count = _n[1]
+	_lob_mm.visible_instance_count = _n[2]
+	_bomb_mm.visible_instance_count = _n[3]
+	_etracer_mm.visible_instance_count = _n[4]
+	_gren_mm.visible_instance_count = _n[5]
+
+
+## Moves and draws one projectile list (the squad's or the incoming pool), counting into _n.
+func _tick_list(list: Array, delta: float) -> void:
 	var i := 0
-	while i < _proj.size():
-		var p: Dictionary = _proj[i]
+	while i < list.size():
+		var p: Dictionary = list[i]
 		var kind: String = p["kind"]
-		p["t"] = float(p["t"]) - delta
+		var left := float(p["t"])
+		p["t"] = left - delta
 		if float(p["t"]) <= 0.0:
 			if kind == "rocket":
 				explosion(p["pos"], 0.35)
-			_proj.remove_at(i)
+			list.remove_at(i)
 			continue
+		if p.has("dx") and left > 0.0:
+			# Aimed at the squad: the end point rides with it across the lanes.
+			var to: Vector3 = p["to"]
+			to.x = track_x + float(p["dx"])
+			p["vel"] = (to - (p["pos"] as Vector3)) / left
 		var vel: Vector3 = p["vel"]
 		if float(p["grav"]) != 0.0:
 			vel.y -= float(p["grav"]) * delta
@@ -276,9 +381,21 @@ func _tick_proj(delta: float) -> void:
 			p["spin"] = float(p["spin"]) + delta * 12.0
 			if randf() < 0.7:
 				burst(p["pos"], Color(1.0, 0.5 + randf() * 0.3, 0.1), 2, 0.8, 0.55, 0.45, 1.0, -2.0)
-			if ln < MAX_LOB:
-				_lob_mm.set_instance_transform(ln, Transform3D(Basis(Vector3.RIGHT, float(p["spin"])).scaled(Vector3.ONE * 1.8), p["pos"]))
-				ln += 1
+			if _n[2] < MAX_LOB:
+				_lob_mm.set_instance_transform(_n[2], Transform3D(Basis(Vector3.RIGHT, float(p["spin"])).scaled(Vector3.ONE * 1.8), p["pos"]))
+				_n[2] += 1
+		elif kind == "grenade" or kind == "shell":
+			# Grenades tumble with a blinking red cap; the boss's shells are bigger, with smoke.
+			var shell := kind == "shell"
+			p["spin"] = float(p["spin"]) + delta * (6.0 if shell else 14.0)
+			if randf() < (0.6 if shell else 0.35):
+				burst(p["pos"], Color(0.35, 0.33, 0.33) if shell else Color(0.6, 0.6, 0.6), 1, 0.4, 0.42 if shell else 0.22, 0.5, 0.3, -1.0)
+			if shell and randf() < 0.5:
+				burst(p["pos"], Color(1.0, 0.55, 0.1), 1, 0.6, 0.3, 0.2, 0.0, 0.0)
+			if _n[5] < MAX_LOB:
+				var gs := 2.4 if shell else 1.6
+				_gren_mm.set_instance_transform(_n[5], Transform3D(Basis(Vector3.RIGHT, float(p["spin"])).scaled(Vector3.ONE * gs), p["pos"]))
+				_n[5] += 1
 		elif kind == "bomb":
 			# A slow tumble; it grows from hand size as it flies so it still reads far away.
 			p["spin"] = float(p["spin"]) + delta * 5.0
@@ -286,32 +403,29 @@ func _tick_proj(delta: float) -> void:
 			var sc := lerpf(BOMB_HAND_SCALE, BOMB_FLY_SCALE, minf(u * 2.5, 1.0))
 			var rot := Basis(Vector3.RIGHT, float(p["spin"]))
 			_bomb_fuse(p["pos"], rot, sc, true)
-			if mn < MAX_BOMBS:
-				_bomb_mm.set_instance_transform(mn, Transform3D(rot.scaled(Vector3.ONE * sc), p["pos"]))
-				mn += 1
+			if _n[3] < MAX_BOMBS:
+				_bomb_mm.set_instance_transform(_n[3], Transform3D(rot.scaled(Vector3.ONE * sc), p["pos"]))
+				_n[3] += 1
 		elif kind == "knife":
 			p["spin"] = float(p["spin"]) + delta * 28.0
 			if _trail.a > 0.0 and randf() < 0.6:
 				burst(p["pos"], _trail, 1, 0.4, 0.1, 0.25, 0.0, 0.0)
 			basis = basis * Basis(Vector3.RIGHT, float(p["spin"]))
-			_knife_mm.set_instance_transform(kn, Transform3D(basis, p["pos"]))
-			kn += 1
+			_knife_mm.set_instance_transform(_n[0], Transform3D(basis, p["pos"]))
+			_n[0] += 1
+		elif ENEMY_SCALE.has(kind):
+			if _n[4] < MAX_ENEMY_PROJ:
+				_etracer_mm.set_instance_transform(_n[4], Transform3D(basis.scaled_local(ENEMY_SCALE[kind]), p["pos"]))
+				_n[4] += 1
 		else:
 			if kind == "rocket" and randf() < 0.3:
 				# Light smoke: many launchers at once must not wall off the street.
 				burst(p["pos"], Color(0.75, 0.75, 0.78), 1, 0.5, 0.18, 0.35, 0.6, -1.0)
-			var sc: Vector3 = BULLET_SCALE.get(kind, Vector3(0.8, 0.8, 0.8))
-			_bullet_mm.set_instance_transform(bn, Transform3D(basis.scaled_local(sc), p["pos"]))
-			bn += 1
+			if _n[1] < MAX_PROJ:
+				var sc: Vector3 = BULLET_SCALE.get(kind, Vector3(0.8, 0.8, 0.8))
+				_bullet_mm.set_instance_transform(_n[1], Transform3D(basis.scaled_local(sc), p["pos"]))
+				_n[1] += 1
 		i += 1
-	if held_bomb_on and mn < MAX_BOMBS:
-		_bomb_fuse(held_bomb, Basis(), BOMB_HAND_SCALE, false)
-		_bomb_mm.set_instance_transform(mn, Transform3D(Basis().scaled(Vector3.ONE * BOMB_HAND_SCALE), held_bomb))
-		mn += 1
-	_knife_mm.visible_instance_count = kn
-	_bullet_mm.visible_instance_count = bn
-	_lob_mm.visible_instance_count = ln
-	_bomb_mm.visible_instance_count = mn
 
 
 ## The lit fuse: orange-yellow sparks from its tip (and a thin smoke trail in flight).
@@ -477,6 +591,26 @@ func _bullet_mesh() -> Mesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	_cube(st, Vector3.ZERO, Vector3(0.15, 0.15, 1.1), Color(1.0, 0.9, 0.4))
+	return st.commit()
+
+
+## Spec v2.1 §1.1: an incoming tracer, orange-red with a hot head (the end that leads).
+func _enemy_tracer_mesh() -> Mesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_cube(st, Vector3(0, 0, 0.12), Vector3(0.15, 0.15, 0.9), ENEMY_TRACER_COLOR)
+	_cube(st, Vector3(0, 0, -0.42), Vector3(0.19, 0.19, 0.26), ENEMY_CORE_COLOR)
+	return st.commit()
+
+
+## A grenade (and, bigger, the boss's barrage shell): olive body, dark band, red cap.
+func _grenade_mesh() -> Mesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_cube(st, Vector3.ZERO, Vector3(0.3, 0.36, 0.3), Color(0.3, 0.36, 0.18))
+	_cube(st, Vector3.ZERO, Vector3(0.33, 0.08, 0.33), Color(0.12, 0.13, 0.1))
+	_cube(st, Vector3(0, 0.24, 0), Vector3(0.14, 0.12, 0.14), Color(0.95, 0.15, 0.1))
+	st.generate_normals()
 	return st.commit()
 
 

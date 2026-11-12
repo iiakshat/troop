@@ -35,6 +35,44 @@ const CHAR_H := 1.85            # baked character height (config/characters.json
 const BOSS_SCALE := 3.2         # bosses are drawn this much bigger than a thug (imposing at the 40 m halt)
 const BOSS_FAR_SCALE := 1.6     # a far boss is drawn up to this much bigger again (boss_grow)
 const BOSS_RIM := 0.3           # extra rim light on the boss: his dark suit never melts into the stash
+## Spec v2.1 §1.3: the lieutenant is the boss's rig, smaller (BOSS_SCALE's convention), in a cream
+## suit and black shirt (the Kingpin wears black and red), under a smaller bar with a silver crown.
+const LT_SCALE := 2.4
+const LT_BAR := 0.72
+const LT_COLORS := {Color("151515"): Color("e9e1cd"), Color("b3282d"): Color("1c1c22")}
+const LT_CROWN := Color(0.78, 0.84, 0.95)
+## Spec v2.1 §1.1: incoming fire reads at a glance: at most this many tracers per event, and the
+## red -N over the squad sums what is lost within MINUS_WINDOW s (shown MINUS_HOLD s).
+const TRACERS_PER_EVENT := 8
+const MINUS_WINDOW := 0.3
+const MINUS_HOLD := 0.9
+const MINUS_RED := Color("ff3b3b")
+## Spec v2.1 §1.2-1.3: a telegraph marks its lane where the squad stands, in its kind's colour,
+## while its countdown sweeps towards the squad (on the street's clock, so it is honest).
+const ZONE_SIZE := Vector2(2.4, 4.8)
+const ZONE_Z := 1.3
+const THREAT_TINT := {"snipe": Color(1.0, 0.1, 0.1), "grenade": Color(1.0, 0.4, 0.06),
+	"firebomb": Color(1.0, 0.58, 0.05), "barrage": Color(1.0, 0.06, 0.18), "lt_barrage": Color(1.0, 0.16, 0.5)}
+const SHELLS := {"barrage": 5, "lt_barrage": 3}
+const ZONE_SHADER := """
+shader_type spatial;
+render_mode unshaded, cull_disabled, depth_draw_never, shadows_disabled;
+uniform vec4 tint : source_color = vec4(1.0, 0.2, 0.1, 1.0);
+uniform float fill = 0.0;    // share of the warning gone: the honest countdown
+uniform float pulse = 0.0;
+uniform float flash = 0.0;   // the landing
+uniform vec2 size = vec2(2.4, 4.8);
+void fragment() {
+	vec2 m = UV * size;
+	float e = min(min(m.x, size.x - m.x), min(m.y, size.y - m.y));
+	float border = 1.0 - smoothstep(0.12, 0.2, e);
+	float stripe = step(0.5, fract((m.x + m.y) * 1.1));
+	float swept = step(1.0 - fill, UV.y);
+	float inner = (0.1 + 0.22 * stripe) * (0.35 + 0.65 * swept);
+	ALBEDO = mix(tint.rgb, vec3(1.0), flash);
+	ALPHA = clamp(max(border * (0.65 + 0.35 * pulse), inner) + flash * 0.6, 0.0, 1.0) * tint.a;
+}
+"""
 const INK_W := 0.028            # crowd ink outline width (crowd_outline.gdshader default)
 const INK_W_PACKED := 0.012     # a full squad's followers: thinner ink, no grey-purple smudge
 const DEPTH_SPREAD := 1.3       # a full squad's rows open up this much in depth (view only; smudge fix)
@@ -61,7 +99,7 @@ var hold := false              # a first-run tutorial (Tutorial) freezes the str
 var perf_on := false           # perf=1: main.gd logs these markers next to each frame time
 var perf_marks: Array[String] = []
 const PERF_EVENTS := ["rank_join", "row_pass", "horde_spawn", "bomb", "barrel_boom", "obstacle_hit",
-	"obstacle_broken", "finish", "revive", "lost", "melee_start"]
+	"obstacle_broken", "finish", "revive", "lost", "melee_start", "telegraph", "attack_land", "boss_shot"]
 var slow := false              # unused since spec v2 §3 (time never slows); kept for Tutorial
 
 var _crowds: Dictionary = {}
@@ -133,10 +171,18 @@ var _riding: Array = []        # passed obstacle nodes riding the road off scree
 var _falling: Array = []       # {kind, pos, t, spin}: troops dropping into a pothole
 var _death_style := ""         # "fall" while a pothole takes troops
 var _death_at := Vector3.ZERO
-var _aims: Array = []          # {horde, t, dur}: sniper lasers being drawn
 var _lasers: Array[MeshInstance3D] = []
 var _laser_mat: StandardMaterial3D
-var _marks: Array = []         # per lane {node, mat, t, dur}: firebomb landing rings
+var _threats: Array = []       # pending telegraphs: {kind, lane, src, from, start, land, points}
+var _zones: Array = []         # per lane {node, mat, fill, flash}: the telegraph's lane mark
+var _impacts: Array = []       # incoming shots in the air: {at, lost, blocked, points (x by the squad)}
+var _pending_lost := 0         # troops the sim took whose shots have not landed on screen yet
+var _minus_label: Label3D      # the red -N over the squad
+var _minus_n := 0
+var _minus_t0 := -10.0         # when the current -N window opened (_anim_t)
+var _minus_last := -10.0       # the last loss added to it
+var _minus_pop := 0.0
+var _hit_sfx_t := 0.0          # the squad's hurt sound plays at most this often
 var _shown_count: Dictionary = {}  # ally kind -> figures drawn (updated on squad changes)
 var _boss_music := false
 var _key_light: OmniLight3D = null
@@ -186,6 +232,8 @@ func _ready() -> void:
 		# Stronger rim light keeps figures off the road, more so at dusk and night.
 		(c.material_override as ShaderMaterial).set_shader_parameter("rim_strength",
 			(0.4 if k in ALLY_KINDS else 0.3) + (0.2 if district >= 4 else 0.0) + (BOSS_RIM if k == "boss" else 0.0))
+	if JSON.stringify(_level.get("events", [])).contains("lieutenant"):
+		_lieutenant_crowd()   # at load, so his recoloured mesh never costs a frame mid-level
 	_build_lasers()
 	if district >= 4:
 		# Dusk and night: a soft key light rides with the squad so it never sinks into the road.
@@ -202,6 +250,14 @@ func _ready() -> void:
 	_squad_label.outline_render_priority = 7
 	_squad_label.modulate = Color("8fd0ff")
 	add_child(_squad_label)
+	_minus_label = GateRowView._label(font, 110, 0.011)
+	_minus_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_minus_label.no_depth_test = true
+	_minus_label.render_priority = 9
+	_minus_label.outline_render_priority = 8
+	_minus_label.modulate = MINUS_RED
+	_minus_label.visible = false
+	add_child(_minus_label)
 	_build_shield()
 	_build_heat_ring()
 	_prewarm()
@@ -522,7 +578,7 @@ func _handle_events(events: Array) -> void:
 			"row_pass":
 				_on_row_pass(e)
 			"horde_spawn":
-				_on_horde_spawn(e["horde"])
+				_on_horde_spawn(e["horde"], bool(e.get("lieutenant", false)))
 			"kill":
 				Sfx.play("die", -4.0)
 			"horde_cleared":
@@ -575,10 +631,14 @@ func _handle_events(events: Array) -> void:
 			"finish_spawn":
 				_spawn_finish(float(e["at"]))
 			"finish":
+				_land_impacts(true)
+				_clear_threats()
 				_begin_strike()
 			"lost":
 				_state = "done"
 				_end_t = 0.0
+				_land_impacts(true)   # the last shots land with the loss
+				_clear_threats()
 				Sfx.play("lose")
 				Game.vibrate(200)
 				_mark_cause(e)
@@ -606,23 +666,31 @@ func _handle_events(events: Array) -> void:
 				_on_pothole(e)
 			"barricade_hit":
 				_on_barricade_hit(e)
-			"firebomb_throw":
-				_on_firebomb_throw(e)
-			"firebomb_hit":
-				_on_firebomb_hit(e)
-			"snipe_aim":
-				_on_snipe_aim(e)
-			"snipe":
-				_on_snipe(e)
+			"telegraph":
+				_on_telegraph(e)
+			"attack_land":
+				_on_attack_land(e)
+			"boss_shot":
+				_on_boss_shot(e)
 			"boss_hit":
 				_on_boss_hit(e)
 			"rank_join":
 				_on_rank_join(e)
 			"revive":
 				_on_revive(e)
-	if sim.squad.total() != _last_total:
-		_last_total = sim.squad.total()
-		squad_changed.emit(_last_total)
+	_emit_total()
+
+
+## The squad's count as the player sees it: the sim's, plus what shots still in the air took.
+func shown_total() -> int:
+	return maxi(sim.squad.total() + _pending_lost, 0)
+
+
+func _emit_total() -> void:
+	var n := shown_total()
+	if n != _last_total:
+		_last_total = n
+		squad_changed.emit(n)
 		_label_pop = 1.0
 
 
@@ -682,8 +750,14 @@ func _on_row_pass(e: Dictionary) -> void:
 	_sync_allies(src)
 
 
-func _on_horde_spawn(h: Dictionary) -> void:
+func _on_horde_spawn(h: Dictionary, lieutenant := false) -> void:
 	var kind := String(h["enemy"])
+	# Spec v2.1 §1.3: a lieutenant (the horde or its spawn event says so) is the boss's rig in
+	# his own colours, drawn smaller, with a smaller bar.
+	var lt := lieutenant or bool(h.get("lieutenant", false)) or kind == "lieutenant"
+	if lt:
+		kind = "lieutenant"
+		_lieutenant_crowd()
 	var n := int(h["count"])
 	# The sim stands a gang in at most world.gang_figures figures of `per` people each
 	# (LevelSim._spawn_horde); one figure row is one of its rows, so rows sit row_gap apart.
@@ -706,14 +780,14 @@ func _on_horde_spawn(h: Dictionary) -> void:
 	var sub := Node3D.new()
 	add_child(sub)
 	var hv := {"h": h, "kind": kind, "offs": offs, "per": per, "label": label, "sub": sub, "shoot_flash": 0.0,
-		"hit_flash": 0.0, "shown": -1}
+		"hit_flash": 0.0, "shown": -1, "lt": lt, "bossy": lt or bool(h.get("boss", false))}
 	_hordes[h["id"]] = hv
-	if h.get("boss", false):
+	if hv["bossy"]:
 		_build_boss_bar(hv)
 		_boss_music = true
 		Sfx.play_music("boss")
-		_sfx("boss_roar", "blast", 0.0, 0.6)
-		world.shake(0.8)
+		_sfx("boss_roar", "blast", 0.0, 0.85 if lt else 0.6)
+		world.shake(0.5 if lt else 0.8)
 	var label_text := String(h.get("label", ""))
 	if label_text != "" and not _shown_banner.has(label_text):
 		_shown_banner[label_text] = true
@@ -736,6 +810,7 @@ func _on_melee(e: Dictionary) -> void:
 	elif lost > 0:
 		Sfx.play("hurt", -2.0)
 		Game.vibrate(60)
+		_add_loss(lost)
 	_sync_allies(Vector3(_squad_x, 0, -1.0))
 
 
@@ -768,39 +843,35 @@ func _on_barrel_boom(e: Dictionary) -> void:
 	Game.vibrate(150)
 
 
+## A loss the sim announced as `hurt` (a gang's gun on the old path): its tracers fly first and
+## the loss lands with them, like return fire.
 func _on_hurt(e: Dictionary) -> void:
+	var hv: Dictionary = _hordes.get(int(e.get("source", -1)), {})
+	if e["cause"] in ["gunman", "boss", "grenadier", "lieutenant"] and not hv.is_empty():
+		_gun_tracers(int(e["source"]), false, int(e["n"]))
+		return
 	Sfx.play("hurt", -3.0)
-	if e["cause"] in ["gunman", "boss", "grenadier"]:
-		_gun_tracers(int(e["source"]), false)
 	world.shake(0.25)
+	_add_loss(int(e["n"]))
 	_sync_allies(Vector3(_squad_x, 0, 0))
 
 
-func _gun_tracers(horde_id: int, blocked: bool) -> void:
+## A gang's (or the boss's) gun on the old path: muzzle flashes and up to 8 tracers from its
+## front figures (the incoming pool); `lost` lands with them.
+func _gun_tracers(horde_id: int, blocked: bool, lost := 0) -> void:
 	var hv: Dictionary = _hordes.get(horde_id, {})
 	if hv.is_empty():
 		return
 	hv["shoot_flash"] = 0.15
-	var grenades: bool = hv["kind"] == "grenadier"
-	if grenades:
-		_sfx("launcher", "boom", -6.0, 1.3)
+	Sfx.play("blast" if hv["bossy"] else "shot", -3.0, 0.85)
+	var froms: Array = []
+	if hv["bossy"]:
+		froms = [_boss_gun(hv)]
 	else:
-		Sfx.play("blast" if hv["kind"] == "boss" else "shot", -3.0, 0.85)
-	var n := mini((hv["offs"] as Array).size(), 4 if grenades else 8)
-	for i in n:
-		var from := _fig_pos(hv, hv["offs"][i]) + Vector3(0, 1.2, 0.5)
-		if hv["kind"] == "boss":
-			from = _fig_pos(hv, hv["offs"][i]) + Vector3(0.5, CHAR_H * BOSS_SCALE * 0.62, 0.8)
-		var to := Vector3(_squad_x + randf_range(-1.5, 1.5), 1.0, randf_range(0.0, 2.0))
-		if blocked:
-			to = Vector3(_squad_x, 1.4, -2.2) + Vector3(randf_range(-1.5, 1.5), randf_range(0, 1), 0)
-		if grenades:
-			# Grenade rounds burst on the squad (or on the shield).
-			fx.shoot("rocket", from, to - Vector3(0, 0.6, 0) if not blocked else to, 45.0)
-		else:
-			fx.shoot("tracer", from, to, 60.0)
-	if grenades and not blocked:
-		world.shake(0.5)
+		froms = _shooter_points(hv, mini((hv["offs"] as Array).size(), TRACERS_PER_EVENT), Vector3.ZERO)
+	for f in froms:
+		fx.muzzle_big(f, _flash_k(f))
+	_volley(froms, lost, blocked, "etracer_big" if hv["bossy"] else "etracer")
 
 
 ## Spec v2 §12.5, the throw: the hero winds up with the bomb in his right hand (the overhand
@@ -905,32 +976,171 @@ func _on_bomb(e: Dictionary) -> void:
 	Game.vibrate(150)
 
 
-## Spec v2 §12.2: a gang firing back. Muzzle flashes on its front shooters, tracers into the
-## squad (or onto the shield), and the followers it hit fall.
+## Spec v2.1 §1.1: a gang firing back. Big muzzle flashes on its front shooters (bigger still
+## for its opening volley), up to 8 orange-red tracers that take about a second to reach the
+## squad (or the shield), and the loss lands with them: the figures they hit fall, a red -N, the
+## troop pill pulses, a short buzz.
 func _on_return_fire(e: Dictionary) -> void:
 	var hv: Dictionary = _hordes.get(e["horde"], {})
-	if hv.is_empty():
-		return
-	var offs: Array = hv["offs"]
-	if offs.is_empty():
-		return
-	hv["shoot_flash"] = 0.12
-	var blocked := bool(e["blocked"])
-	var front := mini(offs.size(), maxi(int(hv["h"]["cols"]) * 2, 1))
-	for i in mini(int(e["shots"]), 5):
-		var from := _fig_pos(hv, offs[randi() % front]) + Vector3(0.22, 1.3, 0.55)
-		fx.muzzle(from)
-		var to := Vector3(_squad_x + randf_range(-1.2, 1.2), 1.0, randf_range(-0.2, 1.8))
-		if blocked:
-			to = Vector3(_squad_x + randf_range(-1.4, 1.4), 1.2 + randf(), -2.2)
-		fx.shoot("tracer", from, to, 75.0)
-	if _rf_sfx_t <= 0.0:
+	var opening := bool(e.get("opening", false))
+	var n := clampi(int(e.get("shots", 1)), 1, TRACERS_PER_EVENT)
+	var froms := _shooter_points(hv, n, Vector3(float(e.get("x", 0.0)), 1.35, float(e.get("z", -45.0))))
+	if not hv.is_empty():
+		hv["shoot_flash"] = 0.2 if opening else 0.12
+	for f in froms:
+		fx.muzzle_big(f, _flash_k(f) * (1.4 if opening else 1.0))
+	_volley(froms, int(e.get("lost", 0)), bool(e.get("blocked", false)), "etracer")
+	if _rf_sfx_t <= 0.0 or opening:
 		_rf_sfx_t = 0.09
-		Sfx.play("shot", -9.0, randf_range(0.8, 0.95))
+		Sfx.play("shot", -4.0 if opening else -8.0, randf_range(0.8, 0.95))
+
+
+## Spec v2.1 §1.3: the boss's (or lieutenant's) gun: a big flash at his gun hand and two heavy
+## tracers; the loss lands with them and shows its -N like any other.
+func _on_boss_shot(e: Dictionary) -> void:
+	var hv: Dictionary = _hordes.get(e["horde"], {})
+	var from := Vector3(0, 4.0, -40.0)
+	if not hv.is_empty():
+		hv["shoot_flash"] = 0.2
+		from = _boss_gun(hv)
+	fx.muzzle_big(from, _flash_k(from) * 1.6)
+	_volley([from, from + Vector3(0.25, -0.15, 0.1)], int(e.get("lost", 0)), bool(e.get("blocked", false)), "etracer_big")
+	Sfx.play("blast", -3.0, 0.85)
+
+
+## Where up to `n` of a gang's front figures hold their guns (`fallback` when it is gone).
+func _shooter_points(hv: Dictionary, n: int, fallback: Vector3) -> Array:
+	var out: Array = []
+	var offs: Array = hv.get("offs", [])
+	if offs.is_empty():
+		for i in n:
+			out.append(fallback + Vector3(randf_range(-1.5, 1.5), 0, randf_range(0, 1.5)))
+		return out
+	var front := mini(offs.size(), maxi(int(hv["h"].get("cols", 1)) * 2, 1))
+	for i in n:
+		out.append(_fig_pos(hv, offs[randi() % front]) + Vector3(0.22, 1.35, 0.55))
+	return out
+
+
+## The boss's (or lieutenant's) gun hand.
+func _boss_gun(hv: Dictionary) -> Vector3:
+	var front := _horde_front(hv)
+	var k := _boss_scale(hv) * boss_grow(front.z) * crowd_scale((hv["offs"] as Array).size())
+	return front + Vector3(0.5, CHAR_H * k * 0.62, 0.8)
+
+
+## Muzzle flashes grow with distance so a gang 50 m up the street visibly opens fire.
+static func _flash_k(at: Vector3) -> float:
+	return clampf(-at.z / 22.0, 1.0, 2.4)
+
+
+## Fires `froms.size()` incoming tracers at the squad (onto the shield when `blocked`). The
+## figures they aim at are the ones that fall: `lost` troops land when the first one arrives.
+func _volley(froms: Array, lost: int, blocked: bool, kind: String) -> void:
+	var targets := _volley_targets(froms.size(), blocked)
+	var first := INF
+	for i in froms.size():
+		var t := fx.enemy_shoot(froms[i], targets[i], true, kind)
+		if t > 0.0:
+			first = minf(first, t)
+	var rel: Array = []
+	for p in targets:
+		rel.append((p as Vector3) - Vector3(_squad_x, 0, 0))
+	_impacts.append({"at": _anim_t + (first if first < INF else 0.0), "lost": maxi(lost, 0), "blocked": blocked,
+		"points": rel})
+	_pending_lost += maxi(lost, 0)
+
+
+## Where a volley's tracers end: on the shield's face, or on followers near the front (the hero
+## only when he stands alone).
+func _volley_targets(n: int, blocked: bool) -> Array:
+	var out: Array = []
 	if blocked:
-		fx.burst(Vector3(_squad_x, 1.6, -2.2), Color("9fc6ff"), 4, 4.0, 0.15, 0.25)
-	elif int(e["lost"]) > 0:
-		_sync_allies(Vector3(_squad_x, 0, 0))
+		for i in n:
+			out.append(Vector3(_squad_x + randf_range(-1.4, 1.4), 1.2 + randf(), -2.2))
+		return out
+	var pool: Array = _allies.filter(func(a): return a["kind"] != "hero")
+	if pool.is_empty():
+		pool = _allies
+	pool.sort_custom(func(a, b): return (a["pos"] as Vector3).z < (b["pos"] as Vector3).z)
+	pool = pool.slice(0, maxi(pool.size() / 2, mini(pool.size(), n)))
+	for i in n:
+		if pool.is_empty():
+			out.append(Vector3(_squad_x + randf_range(-1.0, 1.0), 1.0, randf_range(0.0, 1.5)))
+		else:
+			out.append((pool[randi() % pool.size()]["pos"] as Vector3) + Vector3(0, 1.0, 0))
+	return out
+
+
+## Shots that reached the squad this frame (all of them when `all`: the loss, the finish).
+func _land_impacts(all := false) -> void:
+	var i := 0
+	while i < _impacts.size():
+		if all or float(_impacts[i]["at"]) <= _anim_t:
+			var im: Dictionary = _impacts[i]
+			_impacts.remove_at(i)
+			_land_impact(im)
+		else:
+			i += 1
+	_emit_total()
+
+
+func _land_impact(im: Dictionary) -> void:
+	_pending_lost = maxi(_pending_lost - int(im["lost"]), 0)
+	var pts: Array = []
+	for p in im["points"]:
+		pts.append((p as Vector3) + Vector3(_squad_x, 0, 0))
+	if im["blocked"]:
+		for p in pts.slice(0, 3):
+			fx.burst(p, Color("9fc6ff"), 5, 4.0, 0.16, 0.25)
+		if _hit_sfx_t <= 0.0:
+			_hit_sfx_t = 0.12
+			Sfx.play("blocked", -6.0)
+		return
+	var lost := int(im["lost"])
+	if lost <= 0:
+		for p in pts.slice(0, 3):
+			fx.burst(Vector3((p as Vector3).x, 0.1, (p as Vector3).z), Color(0.7, 0.66, 0.6), 4, 2.0, 0.18, 0.3, 1.0)
+		return
+	for p in pts:
+		fx.burst(p, Color(1.0, 0.25, 0.15), 4, 3.0, 0.16, 0.25, 1.5)
+	if _hit_sfx_t <= 0.0:
+		_hit_sfx_t = 0.12
+		Sfx.play("hurt", -5.0)
+	world.shake(clampf(0.12 + lost * 0.01, 0.12, 0.5))
+	_add_loss(lost)
+	_sync_allies(Vector3(_squad_x, 0, 0), pts)
+
+
+## Spec v2.1 §1.1: the red -N over the squad. Losses within MINUS_WINDOW s add up; a later one
+## starts a new number (with a short buzz, through the vibration setting).
+func _add_loss(n: int) -> void:
+	if n <= 0:
+		return
+	if _anim_t - _minus_t0 > MINUS_WINDOW:
+		_minus_t0 = _anim_t
+		_minus_n = 0
+		Game.vibrate(30)
+	_minus_n += n
+	_minus_last = _anim_t
+	_minus_pop = 1.0
+	_minus_label.text = "-" + NumFormat.fmt(_minus_n)
+	_minus_label.visible = true
+
+
+func _tick_minus(d: float) -> void:
+	if not _minus_label.visible:
+		return
+	var age := _anim_t - _minus_last
+	if age > MINUS_HOLD:
+		_minus_label.visible = false
+		return
+	_minus_pop = maxf(_minus_pop - d * 5.0, 0.0)
+	var a := clampf((MINUS_HOLD - age) / 0.3, 0.0, 1.0)
+	_minus_label.modulate = Color(MINUS_RED, a)
+	_minus_label.outline_modulate = Color(0.05, 0.05, 0.08, a)
+	_minus_label.position = Vector3(_squad_x, 3.7 + 0.9 * minf(age, MINUS_HOLD), -0.6)
+	_minus_label.scale = Vector3.ONE * (1.0 + 0.6 * _minus_pop)
 
 
 # ---------------------------------------------------------------- v1 threats and moments
@@ -996,71 +1206,139 @@ func _splinters(p: Vector3, k: float) -> void:
 	fx.burst(p + Vector3(0, 0.5, 0), Color(0.75, 0.7, 0.62), int(10 * k), 3.0, 0.45, 0.7, 1.0, 2.0)
 
 
-func _on_firebomb_throw(e: Dictionary) -> void:
-	var lane := int(e["lane"])
-	var land := Vector3(LANE_X[lane], 0.2, 0.4)
-	var from := Vector3(land.x, 1.9, -22.0)
-	var hv: Dictionary = _hordes.get(e["horde"], {})
+## Spec v2.1 §1.2-1.3: an attack is coming to `lane` (the sim's telegraph event). The lane
+## where the squad stands is marked in the kind's colour with a countdown to the landing; a
+## sniper paints it with his laser, a grenadier or molotov lobs his grenade or bottle onto it,
+## the boss (or lieutenant) raises his arm and his barrage shells arc onto it.
+func _on_telegraph(e: Dictionary) -> void:
+	var kind := String(e.get("kind", ""))
+	var lane := clampi(int(e.get("lane", 1)), 0, 2)
+	var src := int(e.get("src", e.get("horde", -1)))
+	var hv: Dictionary = _hordes.get(src, {})
+	var from := Vector3(float(e.get("x", LANE_X[lane])), 1.6, float(e.get("z", -45.0)))
 	if not hv.is_empty():
-		hv["shoot_flash"] = 0.15
-		var offs: Array = hv["offs"]
-		if not offs.is_empty():
-			from = _fig_pos(hv, offs[randi() % mini(offs.size(), 6)]) + Vector3(0, 1.9, 0.3)
-	fx.lob(from, land, float(e["t"]), 2.5)
-	if _log_events:
-		print("  lob ", from, " -> ", land, " t=", e["t"])
-	_mark_lane(lane, float(e["t"]))
-	Sfx.play("swoosh", -5.0, 0.7)
+		hv["shoot_flash"] = 0.3 if kind.ends_with("barrage") else 0.15
+		if hv["bossy"]:
+			from = _boss_gun(hv) + Vector3(0, CHAR_H * 0.4, 0)
+		elif not (hv["offs"] as Array).is_empty():
+			from = _fig_pos(hv, hv["offs"][randi() % mini((hv["offs"] as Array).size(), 6)]) + Vector3(0, 1.9, 0.3)
+	var dur := maxf(_land_time(e) - sim.time, 0.2)
+	var spot := Vector3(LANE_X[lane], 0.25, ZONE_Z - 0.6)
+	var th := {"kind": kind, "lane": lane, "src": src, "from": from, "start": sim.time, "land": sim.time + dur,
+		"points": [spot]}
+	match kind:
+		"snipe":
+			Sfx.play("tick", -6.0, 2.2)
+		"grenade":
+			fx.enemy_lob("grenade", from, spot, dur, 4.0)
+			_sfx("launcher", "swoosh", -7.0, 1.3)
+		"firebomb":
+			fx.enemy_lob("lob", from, spot, dur, 2.5)
+			Sfx.play("swoosh", -5.0, 0.7)
+		"barrage", "lt_barrage":
+			var pts: Array = []
+			for i in int(SHELLS.get(kind, 3)):
+				var p := Vector3(LANE_X[lane] + randf_range(-0.9, 0.9), 0.3, ZONE_Z + randf_range(-1.8, 1.8))
+				pts.append(p)
+				fx.enemy_lob("shell", from + Vector3(randf_range(-0.4, 0.4), 0, 0), p, dur, randf_range(6.0, 9.0))
+			th["points"] = pts
+			_sfx("launcher", "boom", -3.0, 0.7)
+			world.shake(0.3)
+	_threats.append(th)
 
 
-func _on_firebomb_hit(e: Dictionary) -> void:
-	var lane := int(e["lane"])
-	var at := Vector3(LANE_X[lane], 0.1, 0.4)
-	_unmark_lane(lane)
-	fx.fire(at)
-	_sfx("fire", "boom", -5.0, 1.6)
-	if e["blocked"]:
+## The sim's landing of a telegraphed attack: the impact on the marked lane (a sniper round, a
+## grenade blast, burning fuel, the barrage), then what it did: blocked by the shield, the loss
+## (red -N, the figures it hit fall) or nothing (the squad stepped out of the lane).
+func _on_attack_land(e: Dictionary) -> void:
+	var kind := String(e.get("kind", ""))
+	var lane := clampi(int(e.get("lane", 1)), 0, 2)
+	var th: Dictionary = {}
+	for t in _threats:
+		if t["lane"] == lane and t["kind"] == kind and (th.is_empty() or float(t["land"]) < float(th["land"])):
+			th = t
+	if th.is_empty():
+		th = {"kind": kind, "lane": lane, "src": -1, "from": Vector3(LANE_X[lane], 2.0, -45.0),
+			"points": [Vector3(LANE_X[lane], 0.25, ZONE_Z - 0.6)]}
+	else:
+		_threats.erase(th)
+	(_zones[lane] as Dictionary)["flash"] = 0.18
+	var pts: Array = th["points"]
+	var spot: Vector3 = pts[0]
+	match kind:
+		"snipe":
+			var hv: Dictionary = _hordes.get(th["src"], {})
+			var from: Vector3 = th["from"]
+			if not hv.is_empty() and not (hv["offs"] as Array).is_empty():
+				hv["shoot_flash"] = 0.15
+				from = _fig_pos(hv, hv["offs"][0]) + Vector3(0, 1.5, 0.3)
+			fx.muzzle_big(from, _flash_k(from))
+			fx.enemy_shoot(from, spot + Vector3(0, 0.9, 0), false, "esniper", 0.08)
+			fx.burst(spot + Vector3(0, 0.6, 0), Color(1.0, 0.85, 0.5), 8, 5.0, 0.14, 0.25, 2.0)
+			_sfx("shot_sniper", "shot_rifle", -3.0, 0.7)
+		"grenade":
+			fx.explosion(spot + Vector3(0, 0.5, 0), 0.9)
+			fx.ring(spot + Vector3(0, 0.2, 0), Color(1.0, 0.6, 0.2), 30, 9.0, 0.24)
+			Sfx.play("boom", -4.0, 1.3)
+			world.shake(0.45)
+		"firebomb":
+			fx.fire(Vector3(spot.x, 0.1, spot.z))
+			_sfx("fire", "boom", -5.0, 1.6)
+		"barrage", "lt_barrage":
+			for p in pts:
+				fx.explosion((p as Vector3) + Vector3(0, 0.4, 0), 0.85 if kind == "barrage" else 0.7)
+			fx.ring(Vector3(LANE_X[lane], 0.3, ZONE_Z), Color(1.0, 0.45, 0.2), 40, 11.0, 0.28)
+			Sfx.play("boom", 0.0, 0.8)
+			world.shake(1.0 if kind == "barrage" else 0.7)
+	var lost := int(e.get("lost", 0))
+	if bool(e.get("blocked", false)):
 		Sfx.play("blocked")
 		fx.burst(Vector3(_squad_x, 1.6, -2.2), Color("9fc6ff"), 16, 6.0, 0.2, 0.4)
-		return
-	var lost := int(e["lost"])
-	if lost > 0:
+	elif lost > 0:
 		Sfx.play("hurt", -3.0)
-		world.shake(0.45)
-		Game.vibrate(60)
-		fx.float_text("-" + NumFormat.fmt(lost), at + Vector3(0, 2.8, 0), Color("ff8a3d"), 0.9)
-		_sync_allies(Vector3(_squad_x, 0, 0))
+		_add_loss(lost)
+		var near: Array = []
+		for p in pts:
+			near.append(Vector3((p as Vector3).x, 0, (p as Vector3).z))
+		_sync_allies(Vector3(_squad_x, 0, 0), near)
 
 
-func _on_snipe_aim(e: Dictionary) -> void:
-	var hv: Dictionary = _hordes.get(e["horde"], {})
-	if hv.is_empty():
-		return
-	_aims.append({"horde": e["horde"], "t": 0.0, "dur": maxf(float(hv["h"].get("aim", 0.7)), 0.2)})
-	Sfx.play("tick", -8.0, 2.2)
+## When a telegraphed attack lands, in sim seconds. The interface's land_t is the sim's clock
+## at the landing; a small value (below the clock) is read as seconds from now.
+func _land_time(e: Dictionary) -> float:
+	var t := float(e.get("land_t", e.get("t", 1.0)))
+	return t if t >= sim.time - 0.05 else sim.time + t
 
 
-func _on_snipe(e: Dictionary) -> void:
-	for i in range(_aims.size() - 1, -1, -1):
-		if int(_aims[i]["horde"]) == int(e["horde"]):
-			_aims.remove_at(i)
-	var hv: Dictionary = _hordes.get(e["horde"], {})
-	if hv.is_empty():
-		return
-	hv["shoot_flash"] = 0.15
-	_sfx("shot_sniper", "shot_rifle", -3.0, 0.7)
-	var offs: Array = hv["offs"]
-	for i in mini(offs.size(), 3):
-		var from := _fig_pos(hv, offs[i]) + Vector3(0, 1.5, 0.3)
-		var to := Vector3(_squad_x, 1.6, -2.3) if e["blocked"] else Vector3(_squad_x, 1.1, 0.2)
-		fx.shoot("sniper_round", from, to, 160.0)
-	if e["blocked"]:
-		Sfx.play("blocked")
-		fx.burst(Vector3(_squad_x, 1.6, -2.2), Color("9fc6ff"), 10, 5.0, 0.18, 0.35)
-	elif int(e["lost"]) > 0:
-		Sfx.play("hurt", -3.0)
-		world.shake(0.3)
-		_sync_allies(Vector3(_squad_x, 0, 0))
+## Every pending telegraph and its marks go (a revive, the finish, a loss): nothing pending is
+## ever shown landing after them.
+func _clear_threats() -> void:
+	_threats.clear()
+	for z in _zones:
+		(z["node"] as Node3D).visible = false
+		z["fill"] = 0.0
+		z["flash"] = 0.0
+	for l in _lasers:
+		l.visible = false
+	fx.clear_enemy()
+
+
+## True while an attack is telegraphed onto `lane`.
+func lane_marked(lane: int) -> bool:
+	for t in _threats:
+		if int(t["lane"]) == lane:
+			return true
+	return false
+
+
+## The countdown shown on `lane`'s mark (0 at the telegraph, 1 at the landing).
+func lane_fill(lane: int) -> float:
+	return float(_zones[lane]["fill"])
+
+
+## Sniper laser beams on screen.
+func lasers_shown() -> int:
+	return _lasers.filter(func(l): return l.visible).size()
 
 
 func _on_boss_hit(e: Dictionary) -> void:
@@ -1068,10 +1346,10 @@ func _on_boss_hit(e: Dictionary) -> void:
 	var hp := int(e["hp"])
 	if not hv.is_empty():
 		hv["hit_flash"] = 0.75
-		var p := _horde_front(hv) + Vector3(randf_range(-0.7, 0.7), CHAR_H * BOSS_SCALE * randf_range(0.4, 0.75), 0.9)
+		var p := _horde_front(hv) + Vector3(randf_range(-0.7, 0.7), CHAR_H * _boss_scale(hv) * randf_range(0.4, 0.75), 0.9)
 		fx.burst(p, Color(1.0, 0.93, 0.55), 5, 6.0, 0.12, 0.25, 2.0)
 		if hp <= 0:
-			var c := _horde_front(hv) + Vector3(0, CHAR_H * BOSS_SCALE * 0.5, 0)
+			var c := _horde_front(hv) + Vector3(0, CHAR_H * _boss_scale(hv) * 0.5, 0)
 			fx.explosion(c, 2.2)
 			fx.confetti(c + Vector3(0, 2, 0), 70)
 			fx.burst(c, Color(1.0, 0.8, 0.3), 30, 9.0, 0.3, 0.7, 5.0)
@@ -1118,7 +1396,9 @@ func _on_revive(_e: Dictionary) -> void:
 	_end_t = 0.0
 	_acc = 0.0
 	_charging.clear()
-	_aims.clear()
+	_clear_threats()
+	_impacts.clear()    # the squad came back whole: shots from before the loss are moot
+	_pending_lost = 0
 	var p := Vector3(_squad_x, 0.4, 0.4)
 	fx.ring(p, Color("9fe0ff"), 48, 12.0, 0.26)
 	fx.burst(p + Vector3(0, 1.2, 0), Color.WHITE, 30, 8.0, 0.25, 0.5, 5.0)
@@ -1140,7 +1420,7 @@ func _build_lasers() -> void:
 	_laser_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_laser_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	_laser_mat.albedo_color = Color(1.0, 0.12, 0.1, 0.8)
-	var beam := _box_mesh(Vector3(0.07, 0.07, 1.0))
+	var beam := _box_mesh(Vector3(0.09, 0.09, 1.0))
 	for i in LASER_POOL:
 		var mi := MeshInstance3D.new()
 		mi.mesh = beam
@@ -1149,51 +1429,68 @@ func _build_lasers() -> void:
 		mi.visible = false
 		add_child(mi)
 		_lasers.append(mi)
-	# Firebomb landing marks: a glowing ring per lane while a bottle is in the air.
-	var ring := TorusMesh.new()
-	ring.inner_radius = 0.95
-	ring.outer_radius = 1.2
-	ring.rings = 24
-	ring.ring_segments = 6
+	# Spec v2.1 §1.2: one lane mark per lane where the squad stands (ZONE_SHADER).
+	var sh := Shader.new()
+	sh.code = ZONE_SHADER
+	var plane := PlaneMesh.new()
+	plane.size = ZONE_SIZE
 	for lane in 3:
 		var mi := MeshInstance3D.new()
-		mi.mesh = ring
-		var m := StandardMaterial3D.new()
-		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		m.albedo_color = Color(1.0, 0.45, 0.1, 0.0)
+		mi.mesh = plane
+		var m := ShaderMaterial.new()
+		m.shader = sh
+		m.set_shader_parameter("size", ZONE_SIZE)
 		mi.material_override = m
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		mi.position = Vector3(LANE_X[lane], 0.06, 0.4)
-		mi.scale = Vector3(1, 0.15, 1)
+		mi.position = Vector3(LANE_X[lane], 0.05, ZONE_Z)
 		mi.visible = false
 		add_child(mi)
-		_marks.append({"node": mi, "mat": m, "t": 0.0, "dur": 0.0})
+		_zones.append({"node": mi, "mat": m, "fill": 0.0, "flash": 0.0})
 
 
-func _mark_lane(lane: int, dur: float) -> void:
-	var mk: Dictionary = _marks[lane]
-	mk["t"] = 0.0
-	mk["dur"] = dur
-	(mk["node"] as Node3D).visible = true
-
-
-func _unmark_lane(lane: int) -> void:
-	(_marks[lane]["node"] as Node3D).visible = false
-
-
+## Draws the pending telegraphs: per lane the most urgent one's mark (its countdown on the sim's
+## clock, so it waits with a paused or held street), a short white flash where one landed, and
+## each aiming sniper's laser from his figures to the lane he aims at.
 func _update_telegraphs(d: float) -> void:
-	# Sniper lasers: red beams from the aiming snipers to the squad until the shot.
-	var used := 0
-	var to := Vector3(_squad_x, 1.2, 0.2)
-	var i := 0
-	while i < _aims.size():
-		var a: Dictionary = _aims[i]
-		a["t"] = float(a["t"]) + d
-		var hv: Dictionary = _hordes.get(a["horde"], {})
-		if hv.is_empty() or float(a["t"]) > float(a["dur"]) + 0.4:
-			_aims.remove_at(i)
+	# A dead sniper takes no shot; anything the sim never landed goes after a moment.
+	for i in range(_threats.size() - 1, -1, -1):
+		var th: Dictionary = _threats[i]
+		var src: Dictionary = _hordes.get(th["src"], {})
+		var gone := src.is_empty() or int(src["h"]["count"]) <= 0
+		if sim.time > float(th["land"]) + 0.3 or (th["kind"] == "snipe" and gone):
+			_threats.remove_at(i)
+	for lane in 3:
+		var z: Dictionary = _zones[lane]
+		var node: MeshInstance3D = z["node"]
+		var mat: ShaderMaterial = z["mat"]
+		var best: Dictionary = {}
+		for th in _threats:
+			if int(th["lane"]) == lane and (best.is_empty() or float(th["land"]) < float(best["land"])):
+				best = th
+		z["flash"] = maxf(float(z["flash"]) - d, 0.0)
+		if best.is_empty():
+			z["fill"] = 0.0
+			node.visible = float(z["flash"]) > 0.0
+			mat.set_shader_parameter("flash", 1.0)
 			continue
+		var span := maxf(float(best["land"]) - float(best["start"]), 0.05)
+		var fill := clampf((sim.time - float(best["start"])) / span, 0.0, 1.0)
+		z["fill"] = fill
+		node.visible = true
+		mat.set_shader_parameter("tint", THREAT_TINT.get(best["kind"], Color(1.0, 0.2, 0.1)))
+		mat.set_shader_parameter("fill", fill)
+		mat.set_shader_parameter("pulse", 0.5 + 0.5 * sin(_anim_t * (10.0 + 22.0 * fill)))
+		mat.set_shader_parameter("flash", 0.0)
+	# Sniper lasers: from up to 3 of his figures to the lane he aims at, faster as the shot nears.
+	var used := 0
+	var fastest := 0.0
+	for th in _threats:
+		if th["kind"] != "snipe":
+			continue
+		var hv: Dictionary = _hordes.get(th["src"], {})
+		if hv.is_empty():
+			continue
+		var to: Vector3 = (th["points"][0] as Vector3) + Vector3(0, 0.9, 0)
 		var offs: Array = hv["offs"]
 		for j in mini(offs.size(), 3):
 			if used >= _lasers.size():
@@ -1207,26 +1504,33 @@ func _update_telegraphs(d: float) -> void:
 			mi.transform = Transform3D(Basis.looking_at(dir / length, Vector3.UP).scaled_local(Vector3(1, 1, length)), (from + to) * 0.5)
 			mi.visible = true
 			used += 1
-		i += 1
+		var span := maxf(float(th["land"]) - float(th["start"]), 0.05)
+		fastest = maxf(fastest, clampf((sim.time - float(th["start"])) / span, 0.0, 1.0))
 	for k in range(used, _lasers.size()):
 		_lasers[k].visible = false
 	if used > 0:
-		_laser_mat.albedo_color = Color(1.0, 0.12, 0.1, 0.5 + 0.4 * absf(sin(_anim_t * 30.0)))
-	for mk in _marks:
-		var node: MeshInstance3D = mk["node"]
-		if not node.visible:
-			continue
-		mk["t"] = float(mk["t"]) + d
-		var k := clampf(float(mk["t"]) / maxf(float(mk["dur"]), 0.01), 0.0, 1.0)
-		if float(mk["t"]) > float(mk["dur"]) + 0.5:
-			node.visible = false
-			continue
-		(mk["mat"] as StandardMaterial3D).albedo_color = Color(1.0, 0.45, 0.1, 0.35 + 0.5 * k * absf(sin(_anim_t * 14.0)))
-		var s := 1.3 - 0.3 * k
-		node.scale = Vector3(s, 0.15, s)
+		_laser_mat.albedo_color = Color(1.0, 0.12, 0.1, 0.55 + 0.4 * absf(sin(_anim_t * (14.0 + 30.0 * fastest))))
 
 
 # ---------------------------------------------------------------- boss bar
+
+## How much bigger than a thug's figure a boss (BOSS_SCALE) or lieutenant (LT_SCALE) is drawn.
+func _boss_scale(hv: Dictionary) -> float:
+	return LT_SCALE if hv.get("lt", false) else BOSS_SCALE
+
+
+## Spec v2.1 §1.3: the lieutenant's crowd, the boss's bake recoloured (LT_COLORS). Built once.
+func _lieutenant_crowd() -> void:
+	if _crowds.has("lieutenant"):
+		return
+	var c := Crowd.new().setup("boss", int(ENEMY_CAP["boss"]) + 8, "thug")
+	c.recolor(LT_COLORS)
+	c.name = "Crowd_lieutenant"
+	add_child(c)
+	_crowds["lieutenant"] = c
+	(c.material_override as ShaderMaterial).set_shader_parameter("rim_strength",
+		0.3 + (0.2 if district >= 4 else 0.0) + BOSS_RIM)
+
 
 func _build_boss_bar(hv: Dictionary) -> void:
 	var bar := Node3D.new()
@@ -1249,6 +1553,8 @@ func _build_boss_bar(hv: Dictionary) -> void:
 	crown.no_depth_test = true
 	crown.render_priority = 14
 	crown.position = Vector3(-2.1, 0.05, 0.02)
+	if hv.get("lt", false):
+		crown.modulate = LT_CROWN   # the lieutenant: a silver crown on a smaller bar
 	bar.add_child(crown)
 	hv["bar"] = bar
 	hv["bar_fill"] = fill
@@ -1261,7 +1567,7 @@ func _update_boss_bar(hv: Dictionary, d: float) -> void:
 	var h: Dictionary = hv["h"]
 	var bar: Node3D = hv["bar"]
 	var front := _horde_front(hv)
-	var k := BOSS_SCALE * boss_grow(front.z) * crowd_scale((hv["offs"] as Array).size())
+	var k := _boss_scale(hv) * boss_grow(front.z) * crowd_scale((hv["offs"] as Array).size())
 	# Always above the scaled model's head, never inside it.
 	# Faces the camera and grows with distance, so it reads the same far up the street;
 	# its bottom edge stays above the scaled model's head.
@@ -1284,7 +1590,7 @@ func _update_boss_bar(hv: Dictionary, d: float) -> void:
 	var fl := float(hv.get("hit_flash", 0.0))
 	hv["hit_flash"] = maxf(fl - d * 14.0, 0.0)
 	(fill.material_override as StandardMaterial3D).albedo_color = Color("e0484f").lerp(Color.WHITE, fl * 0.8)
-	bar.scale = Vector3.ONE * size * (1.0 + 0.08 * fl)
+	bar.scale = Vector3.ONE * size * (LT_BAR if hv.get("lt", false) else 1.0) * (1.0 + 0.08 * fl)
 
 
 func _quad(size: Vector2, color: Color, priority: int) -> MeshInstance3D:
@@ -1326,7 +1632,9 @@ func _desired_allies() -> Dictionary:
 	return out
 
 
-func _sync_allies(source: Vector3) -> void:
+## Shown figures follow the squad. Losses take the back of the blob first, or with `near` (where
+## incoming shots landed) the figures nearest those points: the ones the tracers hit fall.
+func _sync_allies(source: Vector3, near: Array = []) -> void:
 	var want := _desired_allies()
 	for kind in ALLY_KINDS:
 		var have: Array = _allies.filter(func(a): return a["kind"] == kind)
@@ -1336,9 +1644,12 @@ func _sync_allies(source: Vector3) -> void:
 				var jitter := Vector3(randf_range(-1.2, 1.2), 0, randf_range(-0.5, 0.5))
 				_allies.append({"kind": kind, "pos": source + jitter, "slot": 0, "phase": randf(), "flash": 0.6,
 					"fire_t": randf() * 0.5})
+		elif diff < 0 and not near.is_empty():
+			have.sort_custom(func(a, b): return _near_d(a["pos"], near) < _near_d(b["pos"], near))
 		elif diff < 0:
 			# Remove from the back of the blob first.
 			have.sort_custom(func(a, b): return (a["pos"] as Vector3).z > (b["pos"] as Vector3).z)
+		if diff < 0:
 			for i in -diff:
 				var a: Dictionary = have[i]
 				_allies.erase(a)
@@ -1349,6 +1660,14 @@ func _sync_allies(source: Vector3) -> void:
 					fx.puff(a["pos"])
 		_shown_count[kind] = int(want[kind])
 	_assign_slots()
+
+
+## Ground distance (squared) from `p` to the nearest of `pts`.
+static func _near_d(p: Vector3, pts: Array) -> float:
+	var best := INF
+	for q in pts:
+		best = minf(best, Vector2(p.x - (q as Vector3).x, p.z - (q as Vector3).z).length_squared())
+	return best
 
 
 ## Slots: hero in front, the heavy hitters next, constables behind. Stable (a figure keeps
@@ -1484,7 +1803,7 @@ func _slot_pos(slot: int, n: int) -> Vector3:
 ## about its width either side, with a margin for the label itself).
 func _covers_boss(cam: Camera3D, at: Vector3, bv: Dictionary) -> bool:
 	var feet := _horde_front(bv)
-	var k := BOSS_SCALE * boss_grow(feet.z) * crowd_scale((bv["offs"] as Array).size())
+	var k := _boss_scale(bv) * boss_grow(feet.z) * crowd_scale((bv["offs"] as Array).size())
 	var f2 := cam.unproject_position(feet)
 	var h2 := cam.unproject_position(feet + Vector3(0, CHAR_H * k, 0))
 	var w := absf(cam.unproject_position(feet + Vector3(CHAR_H * k * 0.3, 0, 0)).x - f2.x)
@@ -1541,6 +1860,11 @@ func _update_visuals(d: float) -> void:
 	_anim_t += d
 	_hero_knife_t += d
 	_rf_sfx_t = maxf(_rf_sfx_t - d, 0.0)
+	_hit_sfx_t = maxf(_hit_sfx_t - d, 0.0)
+	fx.track_x = _squad_x
+	if not _impacts.is_empty():
+		_land_impacts()
+	_tick_minus(d)
 	if _bomb_throw_t >= 0.0:
 		_bomb_throw_t += d
 		if _state != "play":
@@ -1644,7 +1968,7 @@ func _update_visuals(d: float) -> void:
 		var h: Dictionary = hv["h"]
 		var want := int(ceil(int(h["count"]) / float(hv["per"])))
 		var offs: Array = hv["offs"]
-		var esc := ENEMY_SCALE if hv["kind"] != "boss" else BOSS_SCALE * boss_grow(float(h["z"]))
+		var esc := _boss_scale(hv) * boss_grow(float(h["z"])) if hv["bossy"] else ENEMY_SCALE
 		while offs.size() > want:
 			var o: Vector3 = offs.pop_front()
 			var p := _fig_pos(hv, o)
@@ -1654,7 +1978,7 @@ func _update_visuals(d: float) -> void:
 		var crowd: Crowd = _crowds[hv["kind"]]
 		var clip := "shoot" if h["stopped"] else "run"
 		var speed := 1.0 if h["stopped"] else RUN_SPEED * clampf(float(h["vrel"]) / 10.0, 0.8, 1.6)
-		if hv["kind"] == "boss" and not h["melee"]:
+		if hv["bossy"] and not h["melee"]:
 			# A boss walks in at his real pace during the standoff: a slow, heavy stride whose
 			# footfalls thump the camera and kick up dust.
 			speed = clampf(float(h["vrel"]) / 3.0, 0.4, RUN_SPEED)
@@ -1843,7 +2167,7 @@ func _update_visuals(d: float) -> void:
 
 	# Squad label and shield.
 	_label_pop = maxf(_label_pop - d * 4.0, 0.0)
-	_squad_label.text = NumFormat.fmt(sim.squad.total())
+	_squad_label.text = NumFormat.fmt(shown_total())
 	_squad_label.position = Vector3(_squad_x, 3.9, -0.8)
 	if _key_light:
 		_key_light.position = Vector3(_squad_x, 4.5, 2.5)
@@ -2218,6 +2542,19 @@ func _prewarm() -> void:
 	_warm.append(gv)
 	if fx.has_method("prewarm"):
 		fx.prewarm(_warm_at)
+	# Spec v2.1: a telegraph's lane mark (its own shader) and a sniper's laser compile now, not
+	# on the first sniper or grenade.
+	var zone := MeshInstance3D.new()
+	zone.mesh = (_zones[0]["node"] as MeshInstance3D).mesh
+	zone.material_override = _zones[0]["mat"]
+	zone.position = _warm_at + Vector3(0, 0.1, -2.0)
+	add_child(zone)
+	var beam := MeshInstance3D.new()
+	beam.mesh = _lasers[0].mesh
+	beam.material_override = _laser_mat
+	beam.position = _warm_at + Vector3(1.0, 0.5, -2.0)
+	add_child(beam)
+	_warm.append_array([zone, beam])
 	# The boss bar (see-through backing, crown sprite, big number): first drawn when the boss
 	# walked in, a 54 ms frame on L10 with a cold shader cache.
 	var boss_lab := Label3D.new()
