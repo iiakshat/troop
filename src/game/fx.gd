@@ -395,7 +395,7 @@ func _tick_list(list: Array, delta: float, grow: bool) -> void:
 			if randf() < 0.5:
 				burst(p["pos"], Color(1.0, 0.55, 0.1) if shell else Color(1.0, 0.2, 0.12), 1, 0.6, 0.3 * far, 0.2, 0.0, 0.0)
 			if _n[5] < MAX_LOB:
-				var gs := (2.4 if shell else 2.0) * far
+				var gs := 2.4 * minf(far, 1.4) if shell else 2.0 * far
 				_gren_mm.set_instance_transform(_n[5], Transform3D(Basis(Vector3.RIGHT, float(p["spin"])).scaled(Vector3.ONE * gs), p["pos"]))
 				_n[5] += 1
 		elif kind == "bomb":
