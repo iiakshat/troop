@@ -11,11 +11,11 @@ extends FinaleWeapon
 const MUZZLE := Vector3(0, -0.026, -0.385)
 const PORT := Vector3(0.0145, -0.018, -0.25)
 const GRIP := Vector3(0, -0.1, -0.2)
-const HOLD := Vector3(0.088, -0.128, -0.3)   # the gun's sight line in camera space: low right,
-                                              # below every bottle the narrow lens can show
-const TOE_IN := 0.12                         # radians the muzzle turns in towards the crosshair
-const TILT := 0.05                           # radians the muzzle lifts towards it
-const CANT := -0.1                           # radians of roll (the top leans in a touch)
+const HOLD := Vector3(0.14, -0.15, -0.36)   # the gun's sight line in camera space: low right, below
+                                            # every bottle and right of the ammo row
+const TOE_IN := 0.12                        # radians the muzzle turns in towards the crosshair
+const TILT := 0.05                          # radians the muzzle lifts towards it
+const CANT := -0.1                          # radians of roll (the top leans in a touch)
 
 var _gun: Node3D
 var _slide: Node3D

@@ -435,20 +435,30 @@ static func bow_string(bow_node: Node3D, nock: Vector3) -> void:
 
 
 ## Arrow along -Z, origin at the nock (tail); the tip is ARROW_LEN ahead. Reads as an arrow at
-## a glance: a steel broadhead wider than the shaft, a gold ferrule, a thick wooden shaft with
-## crest bands, three big vanes (two red, one white) and an orange nock.
+## a glance: a wide flat steel broadhead on a dark spine, a gold ferrule, a thick wooden
+## shaft with crest bands, three big vanes (two red, one white) and an orange nock.
 const ARROW_LEN := 0.72
+const HEAD_LEN := 0.1
 
 
 static func arrow() -> Node3D:
 	var root := Node3D.new()
-	var wood := paint(Color("d9b77a"), 0.0, 0.5, 0.3)
-	tube(root, 0.0058, ARROW_LEN - 0.08, Vector3(0, 0, -(ARROW_LEN - 0.08) * 0.5 - 0.01), wood, -1.0, 10)
+	var wood := paint(Color("b98450"), 0.0, 0.6, 0.18)
+	tube(root, 0.0068, ARROW_LEN - HEAD_LEN, Vector3(0, 0, -(ARROW_LEN - HEAD_LEN) * 0.5), wood, -1.0, 10)
 	for k in 2:  # crest bands
-		tube(root, 0.0062, 0.008, Vector3(0, 0, -0.15 - k * 0.014), paint(Color("e8414b") if k == 0 else Color("1c2230"), 0.0, 0.5), -1.0, 10)
-	tube(root, 0.0072, 0.014, Vector3(0, 0, -ARROW_LEN + 0.076), paint(Color("e7b54c"), 0.9, 0.25), -1.0, 10)  # ferrule
-	# Broadhead: a four-sided steel point with a bright edge.
-	tube(root, 0.0001, 0.07, Vector3(0, 0, -ARROW_LEN + 0.035), paint(Color("dfe6ee"), 0.95, 0.15, 0.6, 0.6), 0.019, 4)
+		tube(root, 0.0073, 0.01, Vector3(0, 0, -0.15 - k * 0.016), paint(Color("e8414b") if k == 0 else Color("1c2230"), 0.0, 0.5), -1.0, 10)
+	tube(root, 0.0082, 0.018, Vector3(0, 0, -ARROW_LEN + HEAD_LEN + 0.004), paint(Color("e7b54c"), 0.9, 0.25), -1.0, 10)  # ferrule
+	# Broadhead: a flat diamond blade lying level, so from the archer's eye (above and behind it)
+	# it reads as a wide arrowhead pointing at the pin; a dark spine gives it depth from the side.
+	var steel := paint(Color("e4ebf2"), 0.5, 0.3, 0.6, 0.6)
+	steel.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var blade := MeshInstance3D.new()
+	blade.mesh = _blade_mesh()
+	blade.material_override = steel
+	blade.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	blade.position = Vector3(0, 0, -ARROW_LEN + HEAD_LEN)
+	root.add_child(blade)
+	tube(root, 0.0001, HEAD_LEN * 0.95, Vector3(0, 0, -ARROW_LEN + HEAD_LEN * 0.475), paint(Color("3a4250"), 0.8, 0.3), 0.0042, 6)  # spine
 	var vane_red := mat(Color("e8414b"), 0.0, 0.55)
 	vane_red.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var vane_white := mat(Color("f4f1e8"), 0.0, 0.55)
@@ -461,8 +471,27 @@ static func arrow() -> Node3D:
 		v.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		v.rotation.z = a - PI * 0.5
 		root.add_child(v)
-	tube(root, 0.0068, 0.016, Vector3(0, 0, -0.006), paint(Color("ff8a2a"), 0.0, 0.4, 0.4), -1.0, 10)  # nock
+	tube(root, 0.0076, 0.016, Vector3(0, 0, -0.006), paint(Color("ff8a2a"), 0.0, 0.4, 0.4), -1.0, 10)  # nock
 	return root
+
+
+static var _blade: ArrayMesh
+
+
+## One broadhead blade: a flat diamond in the local XZ plane, base at z = 0, point at -HEAD_LEN.
+static func _blade_mesh() -> ArrayMesh:
+	if _blade:
+		return _blade
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var w := 0.024
+	var pts := [Vector3(0, 0, 0.004), Vector3(w, 0, -0.34 * HEAD_LEN), Vector3(0, 0, -HEAD_LEN), Vector3(-w, 0, -0.34 * HEAD_LEN)]
+	for tri in [[0, 1, 2], [0, 2, 3]]:
+		for i in tri:
+			st.set_normal(Vector3.UP)
+			st.add_vertex(pts[i])
+	_blade = st.commit()
+	return _blade
 
 
 static var _vane: ArrayMesh

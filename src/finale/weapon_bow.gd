@@ -2,16 +2,16 @@ class_name WeaponBow
 extends FinaleWeapon
 ## Bow (district 3, the docks). First person with a still camera framing the whole set: touch
 ## and hold to draw (the string comes back over draw_s; power = how far), drag to move the green
-## pin over a bottle, release to loose. The bow sits low left and swings to point at the pin, so
-## it never covers a bottle. The pin is set for a full draw with no wind at the base distance:
-## a weak draw drops short, wind (shown top left, different every arrow) pushes it sideways.
-## Held at full draw past steady_s the pin starts to shake. Arrows leave the bow, fly a real
+## pin over a bottle, release to loose. The bow stands at the left edge, low, and swings to point
+## at the pin, so neither it nor the nocked arrow ever covers a bottle. The pin is set for a
+## full draw with no wind at the base distance: a weak draw drops short, wind (shown top left,
+## different every arrow) pushes it sideways. Held at full draw past steady_s the pin shakes. Arrows leave the bow, fly a real
 ## gravity arc and stick where they land. A finger held down while an arrow is still out starts
 ## the next draw as soon as the bow is ready, so no press (and no arrow) is ever lost.
 
-const BOW_AT := Vector3(-0.085, -0.17, -0.42)   # the grip in camera space (low left)
-const BOW_SCALE := 0.4                           # the whole bow, so it stays in the corner
-const CANT := 0.95                               # radians the bow leans left (upper limb out)
+const BOW_AT := Vector3(-0.077, -0.108, -0.42)  # the grip in camera space (left edge, low)
+const BOW_SCALE := 0.4                           # the whole bow, so riser and arrow fit the narrow lens
+const CANT := 0.28                               # radians the bow leans left (upper limb out)
 const DRAW_MAX := 0.42                           # metres (bow scale) the nock comes back at full draw
 const FLY_SCALE := 1.4                           # a flying arrow is drawn larger to read at range
 const BLEND_M := 4.0                             # metres over which a loosed arrow joins the aim line
