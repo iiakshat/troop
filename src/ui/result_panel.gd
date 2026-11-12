@@ -220,7 +220,7 @@ func show_loss(level: int, cause: String, progress := -1.0, peak := 0) -> void:
 	_station = station
 	UiKit.set_alert(station, _station_alert())
 	if tip_card != null and bool(tip.get("affordable", false)):
-		_hand_on(tip_card, Vector2(0.6, 0.6))
+		_hand_on(tip_card, Vector2(0.9, 0.6))  # on the price, beside icon and before ▸ after
 	var retry := UiKit.icon_button("retry", "green", 140)
 	retry.custom_minimum_size.x = 220
 	retry.pressed.connect(func(): retry_pressed.emit())
@@ -262,33 +262,10 @@ func _upgrade_tip(tip: Dictionary) -> Control:
 	return card
 
 
-## A hand bobbing on a control, freed with it. `at` = where the hand's top-left sits, as a
-## fraction of the control's size (default: fingertip on a button's upper half).
+## The pointing hand tapping on a control (spec v2 §11), freed with it. `at` = where the
+## fingertip sits, as a fraction of the control's size (default: a button's upper middle).
 func _hand_on(b: Control, at := Vector2.ZERO) -> void:
-	var hand := RetentionPanel.icon_safe("hand", 96)
-	hand.size = Vector2(96, 96)
-	hand.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hand.z_index = 5
-	var p0 := Vector2(-4, -44)
-	if at != Vector2.ZERO:
-		# A full-size layer (a container stretches it anyway) with a spot at that fraction of
-		# its size carries the hand, so it follows the control's real layout.
-		var pin := Control.new()
-		pin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		UiKit.full_rect(pin)
-		b.add_child(pin)
-		var spot := Control.new()
-		spot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		pin.add_child(spot)
-		pin.resized.connect(func(): spot.position = pin.size * at)
-		spot.add_child(hand)
-		p0 = -Vector2(0.92, 0.80) * 96.0  # the icon's fingertip (Tutorial.TIP) on the pin
-	else:
-		b.add_child(hand)
-	hand.position = p0
-	var tw := hand.create_tween().set_loops()
-	tw.tween_property(hand, "position", p0 + Vector2(-16, -16), 0.35).set_trans(Tween.TRANS_SINE)
-	tw.tween_property(hand, "position", p0, 0.35).set_trans(Tween.TRANS_SINE)
+	PointerHand.on(b, at if at != Vector2.ZERO else Vector2(0.55, 0.35), 96.0)
 
 
 ## Road bar: how far the squad got, flag at the finish, percent above the marker.

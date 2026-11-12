@@ -48,9 +48,9 @@ var map_h := 0.0                ## map height at BASE_W
 var _k := 1.0                   # screen px per base px
 var _content: Control
 var _layers := {}
-var _hand: TextureRect = null   # first-build pointer, then the best-next-purchase pointer
+var _hand: Control = null       # first-build pointer, then the best-next-purchase pointer (fingertip at its origin)
 var _hand_at := ""
-var _hand_tw: Tween = null
+var _hand_tag: Control = null   # beside the hand: coin income per hour before ▸ after
 var _bands: Array = []          # [{d, rect, pads: [], lock}]
 var _banners := {}              # district -> {box, num, icon, label, stars}
 var _nodes := {}                # level -> {btn, c, r, stars, lock, crown}
@@ -381,14 +381,17 @@ func _build_buildings() -> void:
 		}
 		_bld_order.append(id)
 	# First-build pointer (one time, no words): a hand tapping the cheapest ruin the new
-	# player can afford, until the first building is started. After that the same hand bobs
-	# over the best next purchase (Game.best_purchase) when it is a building.
-	_hand = UiKit.icon("hand", 120)
-	_hand.size = Vector2(120, 120)
+	# player can afford, until the first building is started. After that the same hand taps
+	# the best next purchase (Game.best_purchase) when it is a building. Spec v2 §11: it taps
+	# on the price tag, with the income per hour before ▸ after above it.
+	_hand = Control.new()
 	_hand.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_hand.z_index = 0
 	_hand.visible = false
 	_layers["overlay"].add_child(_hand)
+	var art := PointerHand.make(116)
+	art.set_tip(Vector2.ZERO)
+	_hand.add_child(art)
+	art.tap_loop()
 
 
 func _point_hand(cheapest: String) -> void:
@@ -398,21 +401,22 @@ func _point_hand(cheapest: String) -> void:
 	if show and _hand_at != cheapest:
 		_hand_at = cheapest
 		var tag: Control = _bld[cheapest]["tag"]
-		# Fingertip (the icon's lower right) on the price tag.
-		var tip: Vector2 = _bld[cheapest]["pos"] + tag.position + tag.size * 0.5
-		_hand.position = tip - Vector2(108, 108)
-		if _hand_tw:
-			_hand_tw.kill()
-		_hand_tw = _hand.create_tween().set_loops()
-		var p := _hand.position
-		_hand_tw.tween_property(_hand, "position", p - Vector2(22, 22), 0.35).set_trans(Tween.TRANS_SINE)
-		_hand_tw.tween_property(_hand, "position", p, 0.35).set_trans(Tween.TRANS_SINE)
+		# Fingertip on the price tag.
+		_hand.position = _bld[cheapest]["pos"] + tag.position + tag.size * 0.5
+		if _hand_tag:
+			_hand_tag.queue_free()
+		var t := Game.now()
+		var lv := City.level(Game.save, cheapest, t)
+		var eco: Dictionary = Game.economy
+		_hand_tag = PointerHand.tag("coin", UiKit.fmt_coins(int(City.income_at(cheapest, lv, eco))),
+			UiKit.fmt_coins(int(City.income_at(cheapest, lv + 1, eco))), 34)
+		var bt := _hand_tag
+		bt.resized.connect(func(): bt.position = Vector2(-bt.size.x * 0.5, -bt.size.y - 46.0))
+		_hand.add_child(_hand_tag)
+		_hand.move_child(_hand_tag, 0)
 	_hand.visible = show
 	if not show:
 		_hand_at = ""
-		if _hand_tw:
-			_hand_tw.kill()
-			_hand_tw = null
 
 
 func _build_nodes() -> void:

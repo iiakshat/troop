@@ -126,17 +126,8 @@ func _ready() -> void:
 	_btn.pressed.connect(_build)
 	col.add_child(_btn)
 	if Game.first_build_pending():
-		# First build: the pointing hand moves onto the Build button.
-		var hand := UiKit.icon("hand", 110)
-		hand.size = Vector2(110, 110)
-		hand.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		hand.z_index = 1
-		hand.position = Vector2(290, -50)  # fingertip (lower right) on the button
-		_btn.add_child(hand)
-		var tw := hand.create_tween().set_loops()
-		tw.tween_property(hand, "position", Vector2(310, -30), 0.35).set_trans(Tween.TRANS_SINE)
-		tw.tween_property(hand, "position", Vector2(290, -50), 0.35).set_trans(Tween.TRANS_SINE)
-		_first_hand = hand
+		# First build: the pointing hand taps on the Build button (spec v2 §11).
+		_first_hand = PointerHand.on(_btn, Vector2(0.72, 0.55), 110.0)
 	_ad = UiKit.button("", "yellow", 46, Vector2(460, 128))
 	_ad.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_ad.pressed.connect(_speed_up)
