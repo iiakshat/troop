@@ -231,8 +231,8 @@ func _drop(parts: Array) -> void:
 	game.save_path = _keep[1]
 
 
-## L11 (pistol): the finale built at load rests through the level, is the one that plays, and
-## the level lets go of it.
+## L11 (pistol): the finale built at load rests through the level (a loss and a revive too),
+## is the one that plays, and the level lets go of it.
 func test_level_plays_the_finale_it_built_at_load() -> void:
 	var parts := _view(11)
 	var view: LevelView = parts[0]
@@ -248,6 +248,12 @@ func test_level_plays_the_finale_it_built_at_load() -> void:
 		view._process(1.0 / 60.0)
 	check(is_instance_valid(warm) and not warm.is_queued_for_deletion(), "it outlives the warm frames")
 	check(not warm.visible, "and rests hidden")
+	# Lost, then revived (the rewarded ad): the same finale still rests, untouched.
+	view.sim.state = "lost"
+	view._state = "done"
+	check(view.revive(view.sim.revive_troops()), "revived")
+	view._process(1.0 / 60.0)
+	check(BottleShot.reusable(warm, 11) and not warm.visible, "the finale still rests after a revive")
 	view._begin_strike()
 	check(view.finale == warm, "the squad bursts into the finale built at load")
 	check(view._finale_warm == null, "the level lets go of it")
