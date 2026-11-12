@@ -554,19 +554,51 @@ func _apply_camera() -> void:
 
 ## Telephoto lens framing this level's bottles (plus their motion) edge to edge.
 func _aim_lens() -> void:
-	var extent := 0.0
-	for b in logic.layout["bottles"]:
-		extent = maxf(extent, absf(float(b["x"])))
-	extent += float(logic.layout.get("amp", 0.0)) + 0.55
-	var d := _aim_view().origin.distance_to(Vector3(hero_pos.x, 1.8, _wall_z))
-	_aim_fov = clampf(rad_to_deg(2.0 * atan(extent / d)), 22.0, AIM_FOV)
-	_aim_focus = d + 0.4
+	_aim_fov = aim_fov_at(logic, hero_pos, _wall_z)
+	_aim_focus = _aim_view().origin.distance_to(Vector3(hero_pos.x, 1.8, _wall_z)) + 0.4
 
 
 func _aim_view() -> Transform3D:
-	var eye := hero_pos + NORMAL_VIEW
-	var look := Vector3(hero_pos.x, 1.75, _wall_z)
+	return aim_view_at(hero_pos, _wall_z)
+
+
+## The knife and star aim view for a hero at `hero` and the back wall at `wall_z`.
+static func aim_view_at(hero: Vector3, wall_z: float) -> Transform3D:
+	var eye := hero + NORMAL_VIEW
+	var look := Vector3(hero.x, 1.75, wall_z)
 	return Transform3D(Basis.looking_at(look - eye, Vector3.UP), eye)
+
+
+## The knife and star lens: frames the set (plus its motion) edge to edge, but never so tight
+## that a bottle at either end of its motion leaves the frame (a wide boss set opens it up).
+static func aim_fov_at(l: BottleLogic, hero: Vector3, wall_z: float) -> float:
+	var extent := 0.0
+	for b in l.layout["bottles"]:
+		extent = maxf(extent, absf(float(b["x"])))
+	var amp := float(l.layout.get("amp", 0.0))
+	extent += amp + 0.55
+	var view := aim_view_at(hero, wall_z)
+	var d := view.origin.distance_to(Vector3(hero.x, 1.8, wall_z))
+	var fov := clampf(rad_to_deg(2.0 * atan(extent / d)), 22.0, AIM_FOV)
+	var inv := view.affine_inverse()
+	var reach := amp + 0.16 * l.size + 0.03   # the motion plus half a bottle and a hair
+	for b in l.layout["bottles"]:
+		for side in [-1.0, 1.0]:
+			var q := inv * Vector3(hero.x + float(b["x"]) + side * reach, float(b["y"]), wall_z + 0.25)
+			fov = maxf(fov, rad_to_deg(2.0 * atan(absf(q.x) / maxf(-q.z, 0.1))))
+	return fov
+
+
+## The camera when aiming starts, in hero space (hero at the origin, the stand's floor at y = 0,
+## -Z ahead), and its horizontal field of view: [Transform3D, fov]. Knives and stars use the
+## telephoto aim view; pistol, bow and sniper (unscoped) look from the eye at the set's middle.
+static func aim_camera(l: BottleLogic) -> Array:
+	if l.weapon == "knife" or l.weapon == "stars":
+		var wall_z := -l.distance - 0.25
+		return [aim_view_at(Vector3.ZERO, wall_z), aim_fov_at(l, Vector3.ZERO, wall_z)]
+	var r := FinaleWeapon.rest_aim(l)
+	return [Transform3D(Basis.from_euler(Vector3(r.y, r.x, 0.0)), FinaleWeapon.eye_point(l.wcfg)),
+		float(l.wcfg.get("fov", 34.0))]
 
 
 ## Beside and a little behind the knife, looking ahead of it so the knife sits big in the
@@ -665,6 +697,13 @@ func _move_bottles() -> void:
 # ---------------------------------------------------------------- build
 
 func _build_wall() -> void:
+	_build_stage()
+	_build_bottles()
+
+
+## The stash set and the rack (shelves, or the bar the bottles swing from). Needs no world, so
+## the tests build it to check no part of it hides a bottle.
+func _build_stage() -> void:
 	var motion := String(logic.layout.get("motion", "static"))
 	FinaleStash.build(self, theme)
 	_rack = Node3D.new()
@@ -686,8 +725,11 @@ func _build_wall() -> void:
 		var width := extent * 2.0 + (1.0 if motion == "static" else 0.7) * _bscale
 		if theme == "factory" and motion != "static":
 			width = extent * 2.0 + 1.4
-		for h in heights:
-			var shelf := FinaleStash.shelf(theme, width)
+		var tops: Array = heights.keys()
+		tops.sort()
+		for k in tops.size():
+			var h := float(tops[k])
+			var shelf := FinaleStash.shelf(theme, width, 0.5, h - float(tops[k - 1]) if k > 0 else 0.0)
 			shelf.position = Vector3(0, _floor_y + float(h), _wall_z + 0.22)
 			_rack.add_child(shelf)
 		if theme == "carnival":
@@ -701,6 +743,26 @@ func _build_wall() -> void:
 			var board := World._box(Vector3(width + 0.5, bh, 0.06), Color("1d1a2e"))
 			board.position = Vector3(0, _floor_y + low - 0.3 + bh * 0.5, _wall_z + 0.05)
 			_rack.add_child(board)
+
+
+## No stash sign may stand between an eye (the weapon's and the aim camera's) and any bottle,
+## over one whole cycle of the set's motion. Works before the bottles exist (the tests).
+func _clear_sightlines() -> void:
+	var period := TAU / maxf(float(logic.layout.get("speed", 1.0)), 0.1)
+	var targets: Array = []
+	for i in logic.count():
+		for k in 16:
+			var t := period * k / 16.0
+			targets.append(_bottle_center(i, t) if i < _bottles.size() else _bottle_world(i, t) + Vector3(0, _half_h(), 0))
+	var moved := 0
+	for eye in [FinaleWeapon.eye_point(logic.wcfg), (aim_camera(logic)[0] as Transform3D).origin]:
+		moved += FinaleStash.clear_sightlines(self, to_world(eye), targets, logic.hit_radius())
+	if moved > 0:
+		push_warning("Bottle Shot %s: %d stash sign(s) lifted out of the line of sight" % [theme, moved])
+
+
+func _build_bottles() -> void:
+	var motion := String(logic.layout.get("motion", "static"))
 	var level_seed := int(logic.layout.get("seed", 0))
 	for i in logic.count():
 		var gold := logic.is_gold(i)
@@ -745,15 +807,7 @@ func _build_wall() -> void:
 		WeaponModels.box(plate, Vector3(0.06, 0.4, 0.06), Vector3(0, -h * 0.5 - 0.2, -0.05), WeaponModels.mat(Color("3a3f46"), 0.8, 0.4))
 		_plates.append(plate)
 	_move_bottles()
-	# No stash sign may stand between the eye and any bottle (over its whole motion).
-	var targets: Array = []
-	for i in logic.count():
-		for k in 9:
-			targets.append(_bottle_center(i, k * 0.5))
-	var eye := to_world(Vector3(0.0, float(logic.wcfg.get("eye_y", 1.6)), -0.35))
-	var moved := FinaleStash.clear_sightlines(self, eye, targets, float(logic.wcfg.get("hit_radius", 0.15)) * logic.size)
-	if moved > 0:
-		push_warning("Bottle Shot %s: %d stash sign(s) lifted out of the line of sight" % [theme, moved])
+	_clear_sightlines()
 	_reticle = MeshInstance3D.new()
 	var tm := TorusMesh.new()
 	tm.inner_radius = 0.13

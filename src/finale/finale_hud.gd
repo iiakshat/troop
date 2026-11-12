@@ -360,6 +360,16 @@ static func wind_max(l: BottleLogic) -> float:
 	return maxf(top * float(l.wcfg.get("wind", 1.0)), 0.1)
 
 
+## The part of a `vp` screen (canvas pixels, 720 wide) the HUD leaves clear for the bottles:
+## below the top band (bottle count, wind, multiplier, combo) and above the ammo row.
+static func safe_rect(vp: Vector2) -> Rect2:
+	return Rect2(0.0, SAFE_TOP, vp.x, vp.y - SAFE_TOP - SAFE_BOTTOM)
+
+
+const SAFE_TOP := 225.0
+const SAFE_BOTTOM := 150.0
+
+
 ## Shows the reticle (`kind` "pin" or "cross") centred on screen point `p`.
 func set_reticle(p: Vector2, kind: String) -> void:
 	if _reticle == null:

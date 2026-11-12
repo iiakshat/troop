@@ -339,3 +339,114 @@ func test_bow_view_holds_still_with_bottles_in_frame() -> void:
 					inside += 1
 			check(inside >= mini(3, b.count()), "level %d on %s: %d bottles in view" % [lv, vp, inside])
 			eq(inside, b.count(), "level %d on %s: the whole set is in view" % [lv, vp])
+
+
+# ---------------------------------------------------------------- spec 12.1: every bottle visible
+
+const PHONES := [Vector2(720, 1280), Vector2(720, 1600)]
+
+
+## Finale times over one whole cycle of the level's motion (just 0 for a set that stands still).
+func _cycle(b: BottleLogic) -> Array:
+	if String(b.layout.get("motion", "static")) == "static":
+		return [0.0]
+	var period := TAU / maxf(float(b.layout.get("speed", 1.0)), 0.1)
+	var out: Array = []
+	for k in 16:
+		out.append(period * k / 16.0)
+	return out
+
+
+## In every weapon mode the whole set is on screen when aiming starts and while aiming, clear of
+## the HUD's top and bottom bands: L1-50, a 9:16 and a 9:20 phone, the set's whole motion. The
+## pistol's view follows the aim, so it is also checked aimed at each bottle in turn; the sniper
+## counts unscoped (tiny is fine, off screen is not).
+func test_every_weapon_shows_the_whole_set() -> void:
+	for vp in PHONES:
+		var safe := FinaleHud.safe_rect(vp)
+		for lv in range(1, 51):
+			var b := BottleLogic.new(cfg, lv)
+			var view: Array = BottleShot.aim_camera(b)
+			var cam: Transform3D = view[0]
+			var fov := float(view[1])
+			var bad := ""
+			for t in _cycle(b):
+				var cams: Array = [cam]
+				if b.weapon == "pistol":
+					for i in b.count():
+						var p := b.position(i, t)
+						cams.append(Transform3D(Basis.looking_at(Vector3(p.x, p.y, -b.distance) - cam.origin, Vector3.UP), cam.origin))
+				for c in cams:
+					for r in FinaleWeapon.bottle_rects(b, c, fov, vp, t):
+						if not safe.encloses(r) and bad == "":
+							bad = "level %d %s on %s at t=%.2f: bottle %s leaves %s" % [lv, b.weapon, vp, t, r, safe]
+			check(bad == "", bad if bad != "" else "ok")
+
+
+## The sniper's rifle (unscoped, at rest) never covers a bottle.
+func test_sniper_rifle_never_covers_the_set() -> void:
+	for vp in PHONES:
+		for lv in range(41, 51):
+			var b := BottleLogic.new(cfg, lv)
+			var view: Array = BottleShot.aim_camera(b)
+			var rifle := WeaponModels.rifle()
+			var parts := WeaponModels.screen_rects(rifle, Transform3D(Basis(), WeaponSniper.RIFLE_AT), float(view[1]), vp)
+			var bad := ""
+			for t in _cycle(b):
+				for q in FinaleWeapon.bottle_rects(b, view[0], float(view[1]), vp, t):
+					for r in parts:
+						if (r as Rect2).intersects(q as Rect2) and bad == "":
+							bad = "level %d on %s: rifle part %s covers bottle %s" % [lv, vp, r, q]
+			check(bad == "", bad if bad != "" else "ok")
+			rifle.free()
+
+
+## Solid boxes of every mesh under `n` (in `xf` space), split into the moving rack and the rest.
+func _solid_boxes(n: Node, xf: Transform3D, rack: Node, in_rack: bool, fixed: Array, moving: Array) -> void:
+	for c in n.get_children():
+		if not (c is Node3D):
+			continue
+		var cx: Transform3D = xf * (c as Node3D).transform
+		var r := in_rack or c == rack
+		if c is MeshInstance3D and (c as MeshInstance3D).mesh and not ((c as MeshInstance3D).material_override is ShaderMaterial):
+			var box: AABB = cx * (c as MeshInstance3D).mesh.get_aabb()
+			(moving if r else fixed).append(box)
+		_solid_boxes(c, cx, rack, r, fixed, moving)
+
+
+## No shelf, crate, board, bar or stash prop stands between the eye and a bottle: the lines to
+## its middle, its shoulder and both sides stay clear over the set's whole motion (L1-50).
+func test_stash_never_hides_a_bottle() -> void:
+	for lv in range(1, 51):
+		var s := BottleShot.new().setup(null, null, null, lv, 40, Vector3.ZERO, 0.0)
+		var b := s.logic
+		s._build_stage()
+		var up := Vector3(0, s._floor_y, 0)
+		var view: Array = BottleShot.aim_camera(b)
+		var eye: Vector3 = (view[0] as Transform3D).origin + up
+		s._clear_sightlines()   # what the finale does once the bottles stand
+		var fixed: Array = []
+		var moving: Array = []
+		_solid_boxes(s, Transform3D(), s._rack, false, fixed, moving)
+		check(moving.size() > 0 or String(b.layout.get("motion", "")) == "swing", "level %d: the rack has shelves" % lv)
+		var x0 := float(b.layout["bottles"][0]["x"])
+		var bad := ""
+		for t in _cycle(b):
+			var shift := Vector3.ZERO
+			var motion := String(b.layout.get("motion", "static"))
+			if motion == "slide" or motion == "drive":
+				shift.x = b.position(0, t).x - x0
+			for i in b.count():
+				var p := b.position(i, t)
+				var c := Vector3(p.x, p.y, -b.distance) + up
+				for off in [Vector3.ZERO, Vector3(0, 0.24 * b.size, 0), Vector3(0.07 * b.size, 0, 0), Vector3(-0.07 * b.size, 0, 0)]:
+					var q: Vector3 = c + off
+					for box in fixed:
+						if bad == "" and FinaleStash.segment_hits_box(eye, q, (box as AABB).position, (box as AABB).end):
+							bad = "level %d (%s) t=%.2f: a stash box %s hides bottle %d at %s" % [lv, s.theme, t, box, i, q]
+					for box in moving:
+						var m := (box as AABB)
+						if bad == "" and FinaleStash.segment_hits_box(eye, q, m.position + shift, m.end + shift):
+							bad = "level %d (%s) t=%.2f: a shelf box %s hides bottle %d at %s" % [lv, s.theme, t, m, i, q]
+		check(bad == "", bad if bad != "" else "ok")
+		s.free()
