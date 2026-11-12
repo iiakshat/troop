@@ -70,7 +70,7 @@ func _ready() -> void:
 	pills.alignment = BoxContainer.ALIGNMENT_CENTER
 	pills.add_theme_constant_override("separation", 18)
 	col.add_child(pills)
-	_power = UiKit.pill("power", str(Game.squad_power()), Color.WHITE)
+	_power = UiKit.pill("power", Economy.fmt_power(Game.squad_power()), Color.WHITE)
 	pills.add_child(_power)
 	_coins = UiKit.pill("coin", str(int(Game.save["coins"])))
 	pills.add_child(_coins)
@@ -391,9 +391,11 @@ func refresh() -> void:
 		(c["art"] as Control).modulate = Color(0.25, 0.25, 0.3, 0.9) if locked else Color.WHITE
 		var buy: Button = c["buy"]
 		var cost: int = Game.weapon_cost(id)
-		var gain: int = 0 if maxed or locked else Game.weapon_power_gain(id)
-		(c["gain"] as Label).text = "+%d" % gain
-		(c["gain_row"] as Control).modulate.a = 1.0 if gain > 0 else 0.0
+		# Lightning gain = level-start firepower (spec v2 section 12.4): a rank that joins during the
+		# level shows its step in the stat bars only.
+		var gain: float = 0.0 if maxed or locked else Game.weapon_power_gain(id)
+		(c["gain"] as Label).text = "+" + Economy.fmt_power(gain)
+		(c["gain_row"] as Control).modulate.a = 1.0 if gain >= 0.05 else 0.0
 		if maxed:
 			buy.disabled = true
 			UiKit.button_row(buy, ["star_icon"], "", 34)
@@ -411,7 +413,7 @@ func refresh() -> void:
 func buy(id: String) -> void:
 	if not _cards.has(id):
 		return
-	var before: int = Game.squad_power()
+	var before: float = Game.squad_power()
 	var r: Dictionary = Game.buy_weapon(id)
 	if not bool(r.get("ok", false)):
 		Sfx.play("error")
@@ -420,13 +422,13 @@ func buy(id: String) -> void:
 	Sfx.play("upgrade")
 	Game.vibrate(40 if not bool(r["evolved"]) else 90)
 	refresh()
-	var after: int = Game.squad_power()
+	var after: float = Game.squad_power()
 	if bool(r["evolved"]):
 		_evolve(id)
 	else:
 		UiKit.pop(_cards[id]["card"], 0.9)
-	if after > before:
-		UiKit.pill_count(_power, before, after, 0.6)
+	if after >= before + 0.05:
+		UiKit.pill_count(_power, before, after, 0.6, Economy.fmt_power)
 		UiKit.bump(_power, 1.3)
 		_float_gain(id, after - before)
 
@@ -477,13 +479,13 @@ func _evolve(id: String) -> void:
 		t3.chain().tween_callback(ray.queue_free)
 
 
-func _float_gain(id: String, n: int) -> void:
+func _float_gain(id: String, n: float) -> void:
 	var card: Control = _cards[id]["card"]
 	var float_row := HBoxContainer.new()
 	float_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	float_row.z_index = 31
 	float_row.add_child(RetentionPanel.icon_safe("power", 52))
-	float_row.add_child(UiKit.label("+%d" % n, 50, UiKit.YELLOW, 12))
+	float_row.add_child(UiKit.label("+" + Economy.fmt_power(n), 50, UiKit.YELLOW, 12))
 	add_child(float_row)
 	var r := card.get_global_rect()
 	float_row.global_position = r.position + Vector2(r.size.x * 0.4, 0)

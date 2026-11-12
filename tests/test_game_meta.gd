@@ -134,7 +134,7 @@ func test_daily_shield_reward_is_stored() -> void:
 func test_buy_weapon_through_game() -> void:
 	var g := _game()
 	g.save["coins"] = 100000
-	var p0: int = g.squad_power()
+	var p0: float = g.squad_power()
 	var r: Dictionary = g.buy_weapon("knives")
 	check(bool(r["ok"]), "bought")
 	eq(g.weapon_level("knives"), Vector2i(1, 1), "step 1")
@@ -287,7 +287,7 @@ func test_rank_card_due_once_and_improvements() -> void:
 	g.mark_rank_seen("inspector")
 	eq(g.rank_card_due(8), "", "a rank already met in a level needs no card")
 	g.save["coins"] = 100000
-	var p0: int = g.squad_power()
+	var p0: float = g.squad_power()
 	check(g.buy_room("training") and g.buy_room("training"), "two training levels")
 	check(g.squad_power() > p0, "Squad Power grew")
 	eq(g.take_improvements(), [{"room": "training", "before": 0, "after": 2}], "one line per room, first before to last after")

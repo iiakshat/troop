@@ -33,7 +33,7 @@ var _chrome: Control
 var _coins: HBoxContainer
 var _coin_icon: Control
 var _power: HBoxContainer
-var _shown_power := -1
+var _shown_power := -1.0
 var _hand: TextureRect
 var _hand_tw: Tween
 var _play: Button
@@ -345,11 +345,11 @@ func refresh() -> void:
 ## Squad Power pill: counts up with a bump when it grew (an upgrade was just bought).
 func _refresh_power() -> void:
 	var p := Game.squad_power()
-	if _shown_power >= 0 and p > _shown_power:
-		UiKit.pill_count(_power, _shown_power, p, 0.6)
+	if _shown_power >= 0.0 and p >= _shown_power + 0.05:
+		UiKit.pill_count(_power, _shown_power, p, 0.6, Economy.fmt_power)
 		UiKit.bump(_power, 1.2)
 	else:
-		UiKit.pill_set(_power, str(p))
+		UiKit.pill_set(_power, Economy.fmt_power(p))
 	_shown_power = p
 
 

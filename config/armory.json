@@ -19,8 +19,8 @@
    "unlock_level": 1,
    "steps_per_tier": 5,
    "cost": {
-    "base": 40,
-    "growth": 1.17
+    "base": 45,
+    "growth": 1.21
    },
    "step": {
     "dmg_mult": 0.05,
@@ -67,8 +67,8 @@
    "unlock_level": 1,
    "steps_per_tier": 5,
    "cost": {
-    "base": 50,
-    "growth": 1.17
+    "base": 60,
+    "growth": 1.21
    },
    "step": {
     "dmg_mult": 0.05,
@@ -115,8 +115,8 @@
    "unlock_level": 4,
    "steps_per_tier": 5,
    "cost": {
-    "base": 70,
-    "growth": 1.17
+    "base": 100,
+    "growth": 1.21
    },
    "step": {
     "dmg_mult": 0.05,
@@ -163,8 +163,8 @@
    "unlock_level": 7,
    "steps_per_tier": 5,
    "cost": {
-    "base": 90,
-    "growth": 1.17
+    "base": 125,
+    "growth": 1.21
    },
    "step": {
     "dmg_mult": 0.05,
@@ -211,8 +211,8 @@
    "unlock_level": 13,
    "steps_per_tier": 5,
    "cost": {
-    "base": 140,
-    "growth": 1.17
+    "base": 260,
+    "growth": 1.21
    },
    "step": {
     "dmg_mult": 0.05,
@@ -259,8 +259,8 @@
    "unlock_level": 21,
    "steps_per_tier": 5,
    "cost": {
-    "base": 200,
-    "growth": 1.17
+    "base": 380,
+    "growth": 1.21
    },
    "step": {
     "dmg_mult": 0.05,
@@ -307,8 +307,8 @@
    "unlock_level": 31,
    "steps_per_tier": 5,
    "cost": {
-    "base": 280,
-    "growth": 1.17
+    "base": 520,
+    "growth": 1.21
    },
    "step": {
     "dmg_mult": 0.05,

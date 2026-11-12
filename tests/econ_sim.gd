@@ -15,7 +15,7 @@ func _initialize() -> void:
 	print("L   boot(buys)  win  extra city  coins aff/all cheap  left  power/rec  inc/h buys bought")
 	var per_d := {}
 	for r in rows:
-		print("%-3d %5d(%d)    %4d %5d %4d %6d   %d/%-2d %5d %5d  %4d/%-4d %5d  %d   %s" % [
+		print("%-3d %5d(%d)    %4d %5d %4d %6d   %d/%-2d %5d %5d  %6.2f/%-6.2f %5d  %d   %s" % [
 			r["level"], r["boot"], r["boot_buys"], r["income"], r["extra"], r["city"], r["coins"], r["affordable_progress"],
 			r["affordable"], r["cheapest"], r["left"], r["power"], r["rec"], r["income_h"], r["buys"],
 			" ".join(PackedStringArray(r["bought"]))])

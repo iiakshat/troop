@@ -83,7 +83,7 @@ static func show_upgrades(parent: Node, list: Array) -> PanelContainer:
 	head.add_theme_constant_override("separation", 8)
 	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	head.add_child(RetentionPanel.icon_safe("power", 56))
-	head.add_child(UiKit.label(str(Game.squad_power()), 44, UiKit.YELLOW, 9))
+	head.add_child(UiKit.label(Economy.fmt_power(Game.squad_power()), 44, UiKit.YELLOW, 9))
 	col.add_child(head)
 	for e in list.slice(0, 3):
 		var room := String(e["room"])

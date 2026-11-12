@@ -24,10 +24,10 @@ extends Node
 ## Police station: room_level(room)  room_cost(room) (-1 maxed or locked)  room_state(room)
 ##   -> {lv, max, cost, locked (district to liberate, 0 = open), maxed, can_buy}
 ##   buy_room(room) -> bool  upgrades()  coin_bonus()
-## Squad Power (v1.1, v2 adds the Armory): squad_power()  recommended_power(level)
-##   room_power_gain(room)  weapon_power_gain(id)
-##   best_purchase(t) -> {kind: room|weapon|building, id, cost, gain} or {} (the map's hand)
-##   best_upgrade_after_loss() -> {kind: room|weapon, id, room, cost, gain, affordable} or {}
+## Squad Power (v2 section 12.4: the HUD's firepower unit, a float; Economy.fmt_power shows it):
+##   squad_power()  recommended_power(level)  room_power_gain(room)  weapon_power_gain(id)
+##   best_purchase(t) -> {kind: room|weapon|building, id, cost, gain, value} or {} (the map's hand)
+##   best_upgrade_after_loss() -> {kind: room|weapon, id, room, cost, gain, value, affordable} or {}
 ##   (the loss screen)
 ##   take_improvements() -> [{room, before, after}] bought since the last level start
 ## New Rank card: rank_card_due(level) -> ally id or ""  mark_rank_card(unit)
@@ -428,20 +428,20 @@ func coin_bonus() -> float:
 var _improved: Array = []                # [{room, before, after}] since the last level start
 
 
-func squad_power() -> int:
+func squad_power() -> float:
 	return Economy.save_power(save, units, economy)
 
 
-func recommended_power(level: int) -> int:
+func recommended_power(level: int) -> float:
 	return Economy.recommended_power(level, economy)
 
 
-func room_power_gain(room: String) -> int:
+func room_power_gain(room: String) -> float:
 	return Economy.room_power_gain(save["station"], room, units, economy)
 
 
 ## Squad Power the next step of weapon track `id` adds (0 for Bottle Shot tracks or maxed).
-func weapon_power_gain(id: String) -> int:
+func weapon_power_gain(id: String) -> float:
 	return Economy.weapon_power_gain(save, id, units, economy)
 
 

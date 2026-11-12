@@ -38,12 +38,11 @@
   },
 
   "power": {
-    "_note": "Squad Power (lobby top bar, level nodes) = dps x (hero knife dmg x throws/s + starting constables x constable dmg x rate + weapon dps) + cap x squad cap + coin_pct x evidence coin bonus in percent. Weapon dps (Armory, config/armory.json) = sum over owners of ref_troops[owner] x the unit's dmg x rate x (dmg_mult x rate_mult - 1), plus the starting constables' pistol gain: the dps a step adds to a typical squad (the hero's ref weighs his tapping). recommended = [[level, power], ...], linear between anchors, fitted with tests/econ_sim.gd to what a player who spends their coins has at that level. More than 15% below it, the current or next node shows a warning tint (never under the first-build pointer).",
-    "dps": 10.0,
-    "cap": 0.2,
-    "coin_pct": 1.0,
-    "ref_troops": { "hero": 6, "constable": 20, "sergeant": 4, "inspector": 3, "swat": 3, "sniper": 2, "commando": 2 },
-    "recommended": [[1, 60], [3, 60], [5, 100], [7, 150], [10, 380], [15, 780], [20, 1050], [25, 1500], [30, 1900], [40, 2450], [50, 3000]]
+    "_note": "Squad Power (spec v2 section 12.4; lobby top bar, level nodes, Armory and Station pills, lightning icon) = the HUD's firepower unit: nominal damage per second against an unarmoured target of the squad a level starts with = the hero at full tap rate (dmg x rate) + the starting constables (station training) x constable dmg x rate, each times its Armory dmg_mult x rate_mult (config/armory.json). The squad cap and the coin bonus are not firepower and add nothing. The pointer (best purchase, loss tip) weighs a room or weapon step by the firepower it adds to the squad a level builds: the starting squad plus ref_troops of each unlocked rank, plus cap_value per troop of extra squad cap and coin_value per percent of coin bonus (never shown). recommended = [[level, power], ...], linear between anchors, fitted with tests/econ_sim.gd to what a player who spends their coins has at that level. More than 15% below it, the current or next node shows a warning tint (never under the first-build pointer).",
+    "ref_troops": { "constable": 20, "sergeant": 4, "inspector": 3, "swat": 3, "sniper": 2, "commando": 2 },
+    "cap_value": 0.05,
+    "coin_value": 0.3,
+    "recommended": [[1, 3], [3, 3.1], [5, 3.1], [7, 3.1], [9, 9.1], [11, 9.3], [13, 12.4], [15, 15.1], [17, 21.2], [20, 25.3], [22, 28.6], [25, 28.6], [28, 29.6], [30, 34.5], [33, 45.5], [35, 52.7], [38, 52.7], [40, 52.7], [43, 63.2], [45, 63.2], [48, 64], [50, 64.8]]
   },
 
   "city": {
