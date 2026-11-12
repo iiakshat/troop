@@ -60,23 +60,24 @@ func test_moving_bottles_are_hit_where_they_are_on_arrival() -> void:
 
 func test_combo_and_reward_multiplier() -> void:
 	var b := BottleLogic.new(cfg, 1)
-	var base := float(cfg["clear_bonus"]) + 10 * float(cfg["per_troop"])
-	var per := float(cfg["bonus_per_bottle"])
 	var step := float(cfg["combo_step"])
-	eq(b.coins(10), int(round(base)), "no bottles: clear bonus + troops x per_troop")
+	var full := Economy.full_coin_troops()
+	# Spec v2.1 section 3.1: the coins are Economy.level_coins (tests/test_economy.gd checks it).
+	eq(b.coins(10), Economy.level_coins(1, 10, full, 0, false, 0.0, 1.0), "no bottles: the plain payout")
 	b.throw(_aim(b, 0), 0.0)
 	eq(b.combo(), 1.0, "first hit: combo x1")
 	b.throw(_aim(b, 1), 0.0)
 	eq(b.combo(), 1.0 + step, "second in a row raises the combo")
-	eq(b.multiplier(), 1.0 + per + per * (1.0 + step), "bottles x combo")
+	eq(b.multiplier(), Economy.bottle_factor(2, false), "two bottles: the payout's bottle factor")
 	b.throw(Vector2(9, 9), 0.0)
 	eq(b.combo(), 1.0, "a miss resets the combo")
 	eq(b.streak, 0, "streak gone")
 	var m := b.multiplier()
 	b.throw(_aim(b, b.count() - 1), 0.0)  # gold
 	check(b.is_gold(b.count() - 1), "last bottle is gold")
-	eq(b.multiplier(), m * float(cfg["gold_mult"]), "gold doubles")
-	eq(b.coins(10, 0.1), int(round(base * b.multiplier() * 1.1)), "station +10%")
+	eq(b.multiplier(), Economy.bottle_factor(2, true), "the gold bottle adds its share")
+	check(b.multiplier() > m, "gold raises the multiplier")
+	eq(b.coins(10, 0.1), Economy.level_coins(1, 10, full, 2, true, 0.0, 1.1), "station +10%")
 	eq(b.best_streak, 2, "best streak kept")
 
 

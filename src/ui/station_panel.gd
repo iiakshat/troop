@@ -6,7 +6,9 @@ extends Control
 ## weapon card at the bottom opens it) and the garage's charges became the shield / bomb
 ## powers (5 h recharge).
 ## A level that needs a district liberated first shows district_lock + that district's number
-## on the button instead of the price. Frees itself on close and emits `closed`.
+## on the button instead of the price; one that needs a level reached first (v2.1: training
+## from L4/6/8) shows the lock, the level pin and that level. Frees itself on close and emits
+## `closed`.
 ## v1.1 (why upgrade): a Squad Power pill next to the coins, the in-game thing each room
 ## changes as a small icon before its numbers, the Squad Power the next level adds (+N), a
 ## one-second looping mini-preview on the room icon (a knife flying, a coin rising...), and a
@@ -328,6 +330,11 @@ func refresh() -> void:
 			buy.disabled = true
 			# Boss crown + the boss level to beat (10/20/30...), as on the map's boss nodes.
 			UiKit.button_row(buy, ["boss_crown"], str(locked * Economy.district_levels(Game.economy)), 40)
+		elif int(state.get("level_lock", 0)) > 0:
+			buy.disabled = true
+			# Spec v2.1 section 3.3: training opens by level; the lock and the level pin + number,
+			# as on a locked Armory card.
+			UiKit.button_row(buy, ["lock", "map_pin"], str(int(state["level_lock"])), 40)
 		else:
 			buy.disabled = int(Game.save["coins"]) < cost
 			UiKit.button_row(buy, ["coin"], UiKit.fmt_coins(cost), 40)

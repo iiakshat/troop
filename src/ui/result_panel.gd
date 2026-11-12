@@ -10,7 +10,8 @@ extends Control
 ## you (icon + 1-3 word tip), the peak squad, and Home / Station / Retry. The revive offer
 ## is RevivePanel, shown by main.gd before this screen.
 ##   show_win(level, r, has_next)   r = {coins (paid, e.g. Game.win_level's coins), stars,
-##                                       broken, gold, mult (finale multiplier)}
+##                                       broken, gold, mult (finale multiplier), tap_pct}
+##   The "×" is bottle_mult(r) = Economy.bottle_factor (the payout's bottle term, at most 1.7).
 ##   show_loss(level, cause, progress := -1.0 (0..1, hidden when < 0), peak := 0)
 
 signal next_pressed
@@ -86,8 +87,8 @@ func show_win(level: int, r: Dictionary, has_next: bool) -> void:
 	for i in total:
 		var gold := i >= int(r.get("broken", 0))
 		bottles.add_child(UiKit.icon("broken_bottle", 56, UiKit.YELLOW if gold else Color("7dffb0")))
-	if r.has("mult"):
-		bottles.add_child(UiKit.label("×%s" % _fmt(float(r["mult"])), 56, UiKit.YELLOW, 14))
+	if r.has("mult") or r.has("broken"):
+		bottles.add_child(UiKit.label("×%s" % _fmt(bottle_mult(r)), 56, UiKit.YELLOW, 14))
 	# Coins counting up, and the x2 ad.
 	var coins_row := HBoxContainer.new()
 	coins_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -387,6 +388,14 @@ func _burst(at: Vector2, n: int) -> void:
 
 static func _fmt(x: float) -> String:
 	return str(int(x)) if absf(x - round(x)) < 0.01 else "%.1f" % x
+
+
+## The bottles' share of the payout (spec v2.1 section 3.1): Economy.bottle_factor of the
+## bottles and the gold one broken (at most x1.7), the multiplier the coins were paid with.
+static func bottle_mult(r: Dictionary) -> float:
+	if r.has("broken") or r.has("gold"):
+		return Economy.bottle_factor(int(r.get("broken", 0)), int(r.get("gold", 0)) > 0)
+	return float(r.get("mult", 1.0))
 
 
 func _card(height := 800.0) -> VBoxContainer:

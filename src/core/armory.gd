@@ -112,6 +112,27 @@ static func unlock_level(id: String, armory_cfg: Dictionary = {}) -> int:
 	return int(track(id, armory_cfg).get("unlock_level", 1))
 
 
+## Spec v2.1 §3.2: the level from which a weapon may evolve into tier `tier` (armory.json
+## tier_unlock {"2": 9, "3": 15, "4": 31}; tiers not listed open from L1).
+static func tier_unlock_level(tier: int, armory_cfg: Dictionary = {}) -> int:
+	return int(cfg(armory_cfg).get("tier_unlock", {}).get(str(tier), 1))
+
+
+static func tier_unlocked(tier: int, level: int, armory_cfg: Dictionary = {}) -> bool:
+	return level >= tier_unlock_level(tier, armory_cfg)
+
+
+## The level the next buy of a track waits for (it would evolve into a tier the player's
+## furthest level has not opened yet), or 0 when it is open (or maxed). The bar fills before it.
+static func next_tier_lock(save: Dictionary, id: String, armory_cfg: Dictionary = {}) -> int:
+	if track(id, armory_cfg).is_empty() or is_maxed(save, id, armory_cfg):
+		return 0
+	var tier := at_index(id, index(save, id, armory_cfg) + 1, armory_cfg).x
+	if tier_unlocked(tier, int(save.get("unlocked", 1)), armory_cfg):
+		return 0
+	return tier_unlock_level(tier, armory_cfg)
+
+
 # ---------------------------------------------------------------- prices
 
 ## Price of the buy made from (tier, step); -1 for an unknown track or a maxed one.
@@ -149,11 +170,14 @@ static func spent_at(id: String, i: int, armory_cfg: Dictionary = {}) -> int:
 
 
 ## Buys the next step (or evolution) of a track: spends the coins.
-## {ok, evolved, tier, step, cost}; ok false (nothing changes) when locked, maxed or too poor.
+## {ok, evolved, tier, step, cost}; ok false (nothing changes) when locked, maxed, too poor or
+## when it would evolve into a tier the player's level has not opened (next_tier_lock).
 static func buy(save: Dictionary, id: String, armory_cfg: Dictionary = {}) -> Dictionary:
 	var l := level(save, id, armory_cfg)
 	var out := {"ok": false, "evolved": false, "tier": l.x, "step": l.y, "cost": -1}
 	if track(id, armory_cfg).is_empty() or is_locked(id, int(save.get("unlocked", 1)), armory_cfg):
+		return out
+	if next_tier_lock(save, id, armory_cfg) > 0:
 		return out
 	var c := next_cost(save, id, armory_cfg)
 	out["cost"] = c

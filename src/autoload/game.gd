@@ -9,7 +9,8 @@ extends Node
 ## Coins and levels
 ##   add_coins(n)  spend(n) -> bool  complete_level(n)
 ##   level_started(level, boosters := {})      call when a level begins (analytics, ad rules)
-##   level_reward(level, finale_coins) -> int  what a win pays right now (curve, boss, replay)
+##   level_reward(level, finale_coins) -> int  what a win pays right now: Bottle Shot's coins
+##       (Economy.level_coins: curve, boss, bottles, taps, station) x the replay rate on a replay
 ##   win_level(level, finale_coins, stars, stats := {}, info := {}) -> Dictionary
 ##       the one call at a win: adds the coins, keeps best stars, unlocks the next level,
 ##       records stats (win, stars3 + the given counters). Returns {coins, first_clear, stars,
@@ -22,7 +23,8 @@ extends Node
 ##   star_chest_progress() -> {have, need, from, ready}  open_star_chest() -> reward
 ## Districts: current_district()  district_liberated(d)  districts_liberated()
 ## Police station: room_level(room)  room_cost(room) (-1 maxed or locked)  room_state(room)
-##   -> {lv, max, cost, locked (district to liberate, 0 = open), maxed, can_buy}
+##   -> {lv, max, cost, locked (district to liberate, 0 = open), level_lock (level to reach,
+##   0 = open), maxed, can_buy}
 ##   buy_room(room) -> bool  upgrades()  coin_bonus()
 ## Squad Power (v2 section 12.4: the HUD's firepower unit, a float; Economy.fmt_power shows it):
 ##   squad_power()  recommended_power(level)  room_power_gain(room)  weapon_power_gain(id)
@@ -35,8 +37,9 @@ extends Node
 ##   use_booster(id) -> bool  use_boosters({id: n}) -> what was really spent (head start only;
 ##   shield and bomb come into every level by themselves)
 ##   booster_ad_available(id) -> bool  grant_booster_ad(id) -> bool (after a rewarded ad)
-##   level_upgrades(chosen) -> dict for LevelSim (station effects, armory weapons, the power
-##   charges the player has, chosen boosters); remembers the charges brought in
+##   level_upgrades(chosen, level := 0) -> dict for LevelSim (station effects as that level gets
+##   them, armory weapons, the power charges the player has, chosen boosters); remembers the
+##   charges brought in
 ## Powers (v2): power_state(id, t) -> {free, free_max, stored, available, seconds_left}
 ##   power_available(id, t)  use_power(id, t) -> bool  can_refill_power(id, t)
 ##   refill_power(id, t) -> bool (after a rewarded ad)  settle_powers(remaining, t) (level end;
@@ -139,11 +142,21 @@ func _process(delta: float) -> void:
 		refresh_day()
 
 
+var _back_at := 0   # when the app last came back from the background (this run only)
+
+
 func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_RESUMED:
+		_back_at = now()
 	if what == NOTIFICATION_APPLICATION_RESUMED or what == NOTIFICATION_APPLICATION_FOCUS_IN:
 		if save:
 			refresh_day()
 			alerts_changed.emit()
+	elif what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_WM_CLOSE_REQUEST:
+		# Spec v2.1 section 3.4: the welcome-back "away" time starts here.
+		if save:
+			save["left_at"] = now()
+			write_save()
 
 
 func now() -> int:
@@ -400,17 +413,22 @@ func room_level(room: String) -> int:
 
 
 func room_cost(room: String) -> int:
+	if Economy.room_lock_level(save, room, economy) > 0:
+		return -1
 	return SaveData.room_cost(economy, save["station"], room, districts_liberated())
 
 
+## locked = the district to liberate first (0 = none); level_lock = the level to reach first
+## (spec v2.1 section 3.3: training 1-3 from L4/6/8; 0 = none).
 func room_state(room: String) -> Dictionary:
 	var lv := room_level(room)
 	var mx := Economy.room_max(room, economy)
 	var cost := Economy.station_cost(room, lv + 1, economy)
 	var locked := SaveData.room_lock(economy, save["station"], room, districts_liberated())
+	var level_lock := Economy.room_lock_level(save, room, economy)
 	return {
-		"lv": lv, "max": mx, "cost": cost, "locked": locked, "maxed": lv >= mx,
-		"can_buy": lv < mx and locked == 0 and cost >= 0 and int(save["coins"]) >= cost,
+		"lv": lv, "max": mx, "cost": cost, "locked": locked, "level_lock": level_lock, "maxed": lv >= mx,
+		"can_buy": lv < mx and locked == 0 and level_lock == 0 and cost >= 0 and int(save["coins"]) >= cost,
 	}
 
 
@@ -571,8 +589,12 @@ func grant_booster_ad(id: String) -> bool:
 ## headstart is passed as a count and as headstart_troops (count x boosters.headstart.troops).
 ## v2: every shield / bomb charge the player has (free + stored) comes along; settle_powers()
 ## spends the ones used. Chosen shield / bomb (debug runs only) add free extra charges.
-func level_upgrades(chosen: Dictionary = {}) -> Dictionary:
+## `level` > 0: the station as that level gets it (Economy.level_station: training joins from its
+## level gate, so L1-L3 keep the hero alone).
+func level_upgrades(chosen: Dictionary = {}, level := 0) -> Dictionary:
 	var up := upgrades()
+	if level > 0:
+		up.merge(SaveData.effects(economy, Economy.level_station(save["station"], level, economy)), true)
 	var b: Dictionary = economy.get("boosters", {})
 	_powers_brought = {}
 	_powers_t = now()
@@ -702,12 +724,18 @@ func city_collect(mult := 1, t := -1) -> int:
 	return got
 
 
-## Coins for the welcome-back popup, or 0 when it should not show.
+## Coins for the welcome-back popup, or 0 when it should not show. Spec v2.1 section 3.4: "away"
+## counts from when the app last went to the background (save.left_at, kept across a restart),
+## not from the last collection, so resuming after the map sat open does not offer it again.
+## A save that never went to the background falls back to the last collection.
 func welcome_back(t := -1) -> int:
 	var tt := _t(t)
 	var wb: Dictionary = economy["city"].get("welcome_back", {})
 	var pending := City.pending_income(save, tt, economy)
-	var away := tt - int(save["city_collected_at"])
+	var left := int(save.get("left_at", 0)) if save.get("left_at") is int or save.get("left_at") is float else 0
+	# Back in the foreground since then: the absence ended when the app came back.
+	var until := _back_at if left > 0 and _back_at >= left and _back_at <= tt else tt
+	var away := until - (left if left > 0 else int(save["city_collected_at"]))
 	if pending >= int(wb.get("min_coins", 1)) and away >= int(wb.get("min_away_seconds", 0)):
 		return pending
 	return 0
@@ -905,7 +933,7 @@ func alerts(t := -1) -> Dictionary:
 	var armory := false
 	for id in Armory.ids():
 		var c := Armory.next_cost(save, String(id))
-		if c >= 0 and int(save["coins"]) >= c and not weapon_locked(String(id)):
+		if c >= 0 and int(save["coins"]) >= c and not weapon_locked(String(id)) and Armory.next_tier_lock(save, String(id)) == 0:
 			armory = true
 			break
 	var city := City.pending_income(save, tt, economy) >= int(economy["city"].get("welcome_back", {}).get("min_coins", 1))

@@ -13,6 +13,12 @@
   "finale_stars",
   "finale_sniper"
  ],
+ "_tier_unlock": "Spec v2.1 section 3.2: the furthest level a player must have reached before a weapon may evolve into that tier (tier 2 from L9, tier 3 from L15, tier 4 from L31). The bar of the tier below still fills; the evolving buy shows a lock and the level (Armory.next_tier_lock).",
+ "tier_unlock": {
+  "2": 9,
+  "3": 15,
+  "4": 31
+ },
  "tracks": {
   "knives": {
    "owner": "hero",

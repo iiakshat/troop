@@ -364,7 +364,7 @@ func _start_level(n: int, boosters: Dictionary = {}) -> void:
 	_last_win = {}
 	_flow_busy = false
 	var level := Config.level(n)
-	view = LevelView.new().setup(level, Game.level_upgrades(boosters), world, fx, UiKit.FONT)
+	view = LevelView.new().setup(level, Game.level_upgrades(boosters, n), world, fx, UiKit.FONT)
 	view.perf_on = _perf != null
 	_perf_level_t = 0.0
 	_perf_finale_t = 0.0
@@ -481,7 +481,7 @@ func _on_finished(r: Dictionary) -> void:
 		var stars := view.sim.stars()
 		_last_win = Game.win_level(current_level, int(r.get("coins", 0)), stars, _run_stats(r), _run_info(r))
 		var shown := {"coins": int(_last_win["coins"]), "stars": stars, "broken": r.get("broken", 0),
-			"gold": r.get("gold", 0), "star_chest_ready": _last_win["star_chest_ready"]}
+			"gold": r.get("gold", 0), "tap_pct": r.get("tap_pct", 0), "star_chest_ready": _last_win["star_chest_ready"]}
 		if r.has("mult"):
 			shown["mult"] = r["mult"]
 		result.show_win(current_level, shown, current_level < Config.LEVEL_COUNT)

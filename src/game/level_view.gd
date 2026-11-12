@@ -2357,9 +2357,10 @@ func _begin_strike() -> void:
 	_hq.visible = false   # the squad bursts in: the finale is played inside the stash
 	# Coins count the squad as district-1 troops (LevelSim.coin_troops), so a 100K squad in
 	# district 5 pays like a full squad in district 1 and the economy's curve holds.
-	# Spec v2 §2: tapping adds finale coins (LevelSim.tap_coin_bonus_pct, the level's mean heat).
-	var bonus := Game.coin_bonus() + sim.tap_coin_bonus_pct() / 100.0
-	finale = BottleShot.new().setup(world, fx, font, level_id, sim.coin_troops(), hero, bonus)
+	# Spec v2.1 §3.1: the coins are Economy.level_coins; tapping adds its tap term (the level's
+	# mean heat, up to +10%) and the evidence room multiplies.
+	finale = BottleShot.new().setup(world, fx, font, level_id, sim.coin_troops(), hero, Game.coin_bonus())
+	finale.logic.heat = sim.mean_heat()
 	finale.on_throw = func(): _hero_throw_t = 0.0
 	finale.done.connect(_on_finale_done)
 	add_child(finale)
@@ -2373,5 +2374,5 @@ func _on_finale_done(r: Dictionary) -> void:
 	world.shake(1.0)
 	Sfx.play("boom")
 	r.merge({"won": true, "troops": sim.squad.total(), "kills": sim.kills, "level": level_id,
-		"tap_pct": sim.tap_coin_bonus_pct()})
+		"tap_pct": Economy.heat_pct(sim.mean_heat())})
 	finished.emit(r)

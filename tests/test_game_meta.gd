@@ -71,6 +71,7 @@ func test_star_chest() -> void:
 func test_station_gated_by_district() -> void:
 	var g := _game()
 	g.save["coins"] = 100000
+	g.save["unlocked"] = 9   # v2.1: training 1-3 open from L4/6/8
 	check(g.buy_room("training"), "lv 1")
 	check(g.buy_room("training"), "lv 2")
 	check(g.buy_room("training"), "lv 3 (v1.1: open in district 1)")
@@ -186,7 +187,7 @@ func test_city_through_game() -> void:
 	check(city_events[0] >= 1, "city_changed")
 	eq(int(g.save["stats"]["build"]), 1, "build counted")
 	var inc := City.income_at("cafe", 1, g.economy)
-	var t := T0 + 30 + 3600
+	var t := T0 + City.build_time("cafe", 1, g.economy) + 3600
 	eq(g.city_pending(t), floori(inc), "an hour of income after the build")
 	eq(g.welcome_back(t), floori(inc) if floori(inc) >= 20 else 0, "welcome back threshold")
 	var got: int = g.city_collect(2, t)
@@ -307,6 +308,7 @@ func test_rank_card_due_once_and_improvements() -> void:
 	g.mark_rank_seen("inspector")
 	eq(g.rank_card_due(8), "", "a rank already met in a level needs no card")
 	g.save["coins"] = 100000
+	g.save["unlocked"] = 9   # v2.1: training 1-3 open from L4/6/8
 	var p0: float = g.squad_power()
 	check(g.buy_room("training") and g.buy_room("training"), "two training levels")
 	check(g.squad_power() > p0, "Squad Power grew")

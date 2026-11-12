@@ -1,27 +1,46 @@
 extends RefCounted
-## Economy simulation (v1.1 item 5): a typical player plays levels 1-50 once each, in sessions,
-## and spends coins the way the map's pointer suggests. Uses the game's own rules (Economy,
-## City, SaveData, config/economy.json, config/finale.json), so changing a price or a reward
-## and re-running shows the new curve. The player model (troops left at the finale, bottles
-## broken, stars, session rhythm) is below in DEFAULTS; it is an assumption, not game data.
-##   tests/econ_sim.gd prints the table; tests/test_economy.gd checks the curve holds.
+## Economy simulation (v1.1 item 5, rebased in spec v2.1 section 3.5): a player plays levels 1-50
+## once each, in sessions, and spends coins the way the map's pointer suggests. Uses the game's
+## own rules (Economy.level_coins, City, SaveData, Armory gates, config/economy.json,
+## config/finale.json), so changing a price or a reward and re-running shows the new curve. The
+## player (session rhythm, the finish Bottle Shot is handed, bottles, taps, stars, ads) is below
+## in DEFAULTS and PROFILES; it is an assumption, fitted to the investigation's measurements
+## (_local/inv/verify_ECON of the v2 worktree), not game data.
+##   tests/econ_sim.gd prints the tables and writes _local/pace.json + _local/pace_ads.json;
+##   tests/test_economy.gd checks the curve holds.
 ##
 ## One row per level won: coins before buying, what was affordable, what got bought, power.
 
+## The no-ad pace (spec v2.1 section 2 "power" profile; tune.gd calibrates the levels on it): a
+## player who picks good gates and taps, without ads.
 const DEFAULTS := {
 	"level_seconds": 180,         # one level incl. result screen and map
 	"levels_per_session": 5,
 	"sessions_per_day": 3,
 	"session_gap_hours": 4.0,     # between sessions of one day
 	"night_gap_hours": 12.0,      # last session of a day -> first of the next
-	"troops_base": 70.0,          # troops left at the finale: base + per_level x L (capped)
-	"troops_per_level": 1.5,
-	"normal_bottles": 2.0,        # normal bottles broken per finale (expected)
-	"gold_chance": 0.4,           # chance the gold bottle breaks
-	"stars_per_level": 2.3,
+	# Bottle Shot as the payout function sees it (Economy.level_coins):
+	"troops_share": 0.85,         # the finish / the stored route's (greedy pilot measured 0.75-1.0)
+	"bottles_missed": 1,          # normal bottles broken = the level's difficulty count - this
+	"gold_chance": 0.6,           # chance the gold bottle breaks
+	"heat": 0.9,                  # mean tap heat (the greedy pilot at 2 taps/s: 0.96)
+	"x2_share": 0.0,              # share of wins doubled by the x2 rewarded ad
+	"stars_per_level": 2.0,       # Harder (spec v2.1 section 2): 40-70% kept, mostly 2 stars
 	"mission_coins": 125.0,       # average mission reward (unscaled), 3 a day
 	"missions_per_day": 3,
 	"buy_cosmetics": true,        # buys a cosmetic when nothing else is affordable
+}
+
+## Variants on DEFAULTS. ads: the pace with the x2 ad on half the wins (spec v2 section 6;
+## _local/pace_ads.json). engaged: the owner-like player of the investigation (4-level sessions
+## every 3 h, every bottle, the gold most times, tapping all level, no ads): its power must stay
+## within 1.6x the recommended power (test_engaged_power_ceiling).
+const PROFILES := {
+	"pace": {},
+	"ads": {"x2_share": 0.5},
+	"engaged": {"level_seconds": 150, "levels_per_session": 4, "sessions_per_day": 4,
+		"session_gap_hours": 3.0, "night_gap_hours": 9.0, "troops_share": 0.95, "bottles_missed": 0,
+		"gold_chance": 0.7, "heat": 0.96, "stars_per_level": 2.1},
 }
 
 const T0 := 1_800_000_000
@@ -64,28 +83,17 @@ static func run(eco: Dictionary, finale: Dictionary, units: Dictionary, opts: Di
 		# The squad this player brings into level L (spec v2 calibration rule 2: the no-ad pace).
 		# A brand-new player goes straight into level 1 with nothing (the day-1 coins above are
 		# spent on the map after it, so they first count at level 2).
-		row["pace"] = pace_upgrades(save if L > 1 else SaveData.default_save(), eco)
+		row["pace"] = pace_upgrades(save if L > 1 else SaveData.default_save(), eco, L)
 		row["power_cost"] = power_total + int(spent["power"]) if L > 1 else 0
 		row["play_before"] = play_total
 		t += int(o["level_seconds"])
-		# The win.
-		var fx: Dictionary = SaveData.effects(eco, save["station"])
-		var cap := LevelSim.squad_cap_for(units, 1, int(fx["capacity"]))  # troops as district-1 equivalents
-		var troops := mini(int(round(float(o["troops_base"]) + float(o["troops_per_level"]) * L)), cap)
-		var base := float(finale["clear_bonus"]) + troops * float(finale["per_troop"])
-		# v1.1 combo: the bottles break in a row, so the n-th adds bonus_per_bottle x combo(n).
-		var hits := float(o["normal_bottles"])
-		var combo_sum := 0.0
-		for n in range(1, int(ceil(hits)) + 1):
-			var c := minf(1.0 + float(finale.get("combo_step", 0.0)) * (n - 1), float(finale.get("combo_max", 1.0)))
-			combo_sum += c * minf(hits - (n - 1), 1.0)
-		var mult := 1.0 + combo_sum * float(finale["bonus_per_bottle"])
-		mult *= 1.0 + (float(finale["gold_mult"]) - 1.0) * float(o["gold_chance"])
-		var finale_coins := int(round(base * mult * (1.0 + float(fx["coins"]))))
+		# The win, through the one payout function (spec v2.1 section 3.1).
+		var finale_coins := win_coins(L, save, eco, finale, o)
 		var win := Economy.level_reward(L, finale_coins, false, eco)
 		row["income"] = win
 		row["replay"] = Economy.level_reward(L, finale_coins, true, eco)
-		save["coins"] = int(save["coins"]) + win
+		row["ad"] = int(round(win * float(o["x2_share"])))   # the x2 ad pays the win again
+		save["coins"] = int(save["coins"]) + win + int(row["ad"])
 		var lib_before := City.districts_liberated(save, eco)
 		save["stars"][str(L)] = 2
 		save["unlocked"] = mini(L + 1, Config.LEVEL_COUNT)
@@ -154,10 +162,28 @@ static func _spend(save: Dictionary, t: int, eco: Dictionary, units: Dictionary,
 	return bought
 
 
-## The upgrades LevelSim gets from this save (Game.upgrades(): station effects + Armory
-## multipliers), plus `armory` = {track: steps bought} for reading.
-static func pace_upgrades(save: Dictionary, eco: Dictionary) -> Dictionary:
-	var up := SaveData.effects(eco, save["station"])
+## Bottle Shot's expected coins for this player at level L (Economy.level_coins): the finish
+## as a share of the stored route's, the difficulty row's bottles less the missed ones (the
+## payout counts up to max_hits), the gold bottle at gold_chance, the taps, the evidence room.
+static func win_coins(L: int, save: Dictionary, eco: Dictionary, finale: Dictionary, o: Dictionary) -> int:
+	var fx: Dictionary = SaveData.effects(eco, save["station"])
+	var counts: Array = finale.get("difficulty", {}).get("count", [3])
+	var step := (L - 1) % Economy.district_levels(eco)
+	var hits := maxi(int(counts[mini(step, counts.size() - 1)]) - int(o["bottles_missed"]), 0)
+	var troops := int(round(float(o["troops_share"]) * 1000.0))
+	var st := 1.0 + float(fx["coins"])
+	var heat := float(o["heat"])
+	var gold := float(o["gold_chance"])
+	var with_gold := Economy.level_coins(L, troops, 1000, hits, true, heat, st, eco)
+	var without := Economy.level_coins(L, troops, 1000, hits, false, heat, st, eco)
+	return int(round(gold * with_gold + (1.0 - gold) * without))
+
+
+## The upgrades LevelSim gets from this save when playing level L (Game.level_upgrades(_, L):
+## the station as that level gets it + Armory multipliers), plus `armory` = {track: steps
+## bought} for reading. L = 0: everything owned.
+static func pace_upgrades(save: Dictionary, eco: Dictionary, L := 0) -> Dictionary:
+	var up := SaveData.effects(eco, Economy.level_station(save["station"], L, eco) if L > 0 else save["station"])
 	up["weapons"] = Armory.sim_upgrades(save)["weapons"]
 	var steps := {}
 	for id in Armory.ids():
@@ -241,6 +267,34 @@ static func _spin_value(eco: Dictionary) -> float:
 		elif r.has("chest"):
 			v += float(s["weight"]) * _chest_coins(eco, String(r["chest"]))
 	return v / maxf(total, 1.0)
+
+
+## Every level of district 1 (one training level there is a big step), then about every 2-3.
+const REC_ANCHORS := [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 20, 22, 25, 28, 30, 33, 35, 38, 40, 43, 45, 48, 50]
+
+
+## economy.json power.recommended fitted to these rows: at each anchor level the Squad Power the
+## player brings into it (the row before's power after buying; `start` at L1), lowered where the
+## straight line from the previous anchor would pass above a level in between, so every level's
+## power meets the recommended one. [[level, power], ...], two decimals, rounded down.
+static func fit_recommended(rows: Array, start: float) -> Array:
+	var entering := {1: start}
+	for r in rows:
+		entering[int(r["level"]) + 1] = float(r["power"])
+	var out := []
+	var prev_l := -1
+	var prev_v := 0.0
+	for a in REC_ANCHORS:
+		var v: float = entering[a]
+		if prev_l > 0:
+			for L in range(prev_l + 1, a):
+				var f := float(L - prev_l) / float(a - prev_l)
+				v = minf(v, prev_v + (float(entering[L]) - prev_v) / f)
+		v = floorf(v * 100.0) / 100.0
+		out.append([a, v])
+		prev_l = a
+		prev_v = v
+	return out
 
 
 ## Share of wins after which the coins bought 1-3 progress items (rooms, weapons, buildings; the
