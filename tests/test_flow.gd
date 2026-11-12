@@ -73,3 +73,69 @@ func test_sfx_ids_and_calls() -> void:
 	sfx.duck_music(true)
 	sfx.duck_music(false)
 	check(true, "Sfx duck calls ran")
+
+
+## BRAND: the boot screens (axnex intro -> Siren Squad logo -> loading -> the flow).
+## Driven by advance()/tap() so no frames or tweens are needed.
+func _boot_seq(first_launch: bool, flow: Callable) -> BootSequence:
+	var seq := BootSequence.new(first_launch, flow)
+	seq.write_seen = false  # tests never write the save
+	return seq
+
+
+func test_boot_shows_intro_then_logo_on_first_launch() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	var game: Node = tree.root.get_node_or_null("Game")
+	var keep: Dictionary = game.save.duplicate(true)
+	game.save["seen_hints"] = []
+	check(BootSequence.is_first_launch(), "a save without the intro hint is a first launch")
+	var started := [0]
+	var seq := _boot_seq(true, func(): started[0] += 1)
+	eq(seq.stage, "intro", "the axnex intro comes first")
+	seq.tap()
+	eq(seq.stage, "intro", "a tap does not skip the intro on the first launch")
+	seq.advance(BootIntro.DURATION * 0.5)
+	eq(seq.stage, "intro", "the intro runs its full length")
+	seq.advance(BootIntro.DURATION * 0.5 + 0.02)
+	eq(seq.stage, "logo", "the Siren Squad logo follows the intro")
+	check((game.save["seen_hints"] as Array).has("intro"), "a finished intro is remembered")
+	check(not BootSequence.is_first_launch(), "the next launch is not a first launch")
+	seq.advance(TitleLogo.DURATION + 0.02)
+	eq(seq.stage, "loading", "the loading screen follows the logo")
+	eq(started[0], 0, "the game flow waits for the loading bar")
+	for i in 120:
+		seq.advance(1.0 / 30.0)
+	eq(started[0], 1, "the game flow starts once, when the bar is full")
+	eq(seq.stage, "done", "the boot screens fade out and finish")
+	seq.free()
+	game.save = keep
+
+
+func test_intro_skippable_after_first_launch() -> void:
+	var started := [0]
+	var seq := _boot_seq(false, func(): started[0] += 1)
+	eq(seq.stage, "intro", "later launches still open on the intro")
+	seq.advance(0.1)
+	seq.tap()
+	eq(seq.stage, "logo", "a tap skips the intro after the first launch")
+	seq.tap()
+	eq(seq.stage, "loading", "a tap also hurries the logo after the first launch")
+	seq.tap()
+	eq(seq.stage, "loading", "the loading bar cannot be skipped")
+	seq.free()
+
+
+## The rename to Siren Squad keeps the save where it was (%APPDATA%/Godot/app_userdata/Troop).
+func test_user_dir_unchanged() -> void:
+	var dir := OS.get_user_data_dir().replace("\\", "/")
+	check(dir.ends_with("/Troop"), "user dir still ends with /Troop (got %s)" % dir)
+	check(dir.ends_with("app_userdata/Troop"), "user dir is still Godot/app_userdata/Troop (got %s)" % dir)
+	eq(String(ProjectSettings.get_setting("application/config/name")), "Siren Squad", "app name")
+
+
+## BRAND: the backup-joins siren chirp is throttled to once per 3 s.
+func test_siren_chirp_throttled() -> void:
+	var sfx_script = preload("res://src/autoload/sfx.gd")
+	check(float(sfx_script.MIN_GAP.get("siren_chirp", 0.0)) >= 3.0, "siren_chirp at most once per 3 s")
+	check(ResourceLoader.exists("res://assets/audio/siren_chirp.ogg"), "siren_chirp.ogg exists")
+	check(ResourceLoader.exists("res://assets/audio/siren_whoop.ogg"), "siren_whoop.ogg exists")

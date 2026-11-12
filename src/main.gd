@@ -19,6 +19,7 @@ extends Node
 ##   popup even under autoplay)
 ##   tutor=auto (the first-run tutorials run even under autoplay and act themselves out
 ##   after 1.6 s, for screenshots)
+##   boot=1 (play the brand boot screens even with debug args; boot=0 skips them)
 ##   panel=station|style|settings|daily|missions|spin|codex|booster|chest|welcome|revive|
 ##         liberation|map   (open that screen over the map; map = the map alone)
 ## Autoplay skips boosters, the revive offer, the ad popups and the tutorials.
@@ -89,6 +90,22 @@ func _ready() -> void:
 	result.station_pressed.connect(_open_station_from_result)
 	ui.add_child(result)
 	result.visible = false
+	if _boot_screens():
+		# Brand (spec v2 §1): axnex intro -> logo -> loading; the flow starts under the full bar.
+		add_child(BootSequence.new(BootSequence.is_first_launch(), _begin_flow))
+	else:
+		_begin_flow()
+
+
+## The boot screens play on a normal launch (no debug args) or with boot=1; never headless.
+func _boot_screens() -> bool:
+	if _args.has("boot"):
+		return String(_args["boot"]) != "0"
+	return _args.is_empty() and DisplayServer.get_name() != "headless"
+
+
+## The start of the app flow: a level= run, a brand-new player's level 1, or the map.
+func _begin_flow() -> void:
 	if _args.has("level"):
 		_start_level(int(_args["level"]), _debug_boosters())
 	elif _is_new_player() and not _args.has("lobby") and not _args.has("panel"):

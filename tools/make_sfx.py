@@ -13,6 +13,9 @@ is a list of layers mixed together; a layer is a slice of one recording, optiona
 mix is trimmed, faded, levelled to the id's loudness, kept under -1 dBFS and written as mono
 44.1 kHz OGG Vorbis into assets/audio. Needs ffmpeg (FFMPEG env or the winget path), numpy
 and scipy.
+
+A few ids are synthesised here instead of cut from recordings (SY layers: the siren
+sounds); they need no downloads, so `make_sfx.py . siren_whoop siren_chirp` works anywhere.
 """
 import glob, os, subprocess, sys
 from pathlib import Path
@@ -88,6 +91,58 @@ EMO = "emopain/" + G + "Painsounds v2 - Track "
 
 def chime(notes, delay=0.0, gain=0.0):
     return L(BELL, notes=notes, delay=delay, gain=gain, hp=400)
+
+
+def SY(kind, delay=0.0, gain=0.0):
+    """A synthesised layer (see SYNTH): no recording needed."""
+    return dict(synth=kind, delay=delay, gain=gain)
+
+
+def _siren(f, harmonics=7, lp=3800.0):
+    """An electronic siren voice following the pitch curve f (Hz per sample): a band-limited
+    saw (harmonics 1..n at 1/k), low-passed, with a short slap-back room."""
+    phase = 2 * np.pi * np.cumsum(f) / SR
+    y = sum(np.sin(k * phase) / k for k in range(1, harmonics + 1))
+    y = signal.sosfilt(signal.butter(2, lp, "lowpass", fs=SR, output="sos"), y)
+    y = signal.sosfilt(signal.butter(2, 250, "highpass", fs=SR, output="sos"), y)
+    room = np.zeros(len(y) + int(0.2 * SR))
+    for d, g in ((0.0, 1.0), (0.047, 0.32), (0.089, 0.2), (0.137, 0.11)):
+        room[int(d * SR):int(d * SR) + len(y)] += y * g
+    return room
+
+
+def _env(n, attack, release):
+    e = np.ones(n)
+    a, r = int(attack * SR), int(release * SR)
+    e[:a] = np.linspace(0, 1, a)
+    e[n - r:] *= np.cos(np.linspace(0, np.pi / 2, r)) ** 2
+    return e
+
+
+def siren_whoop():
+    """The intro "whoop": a fast rise from 420 to ~1300 Hz, a short hold, then a falling tail."""
+    t = np.arange(int(0.95 * SR)) / SR
+    rise = 420 + 880 * (1 - np.exp(-t * 5.5))
+    fall = rise[int(0.62 * SR)] - 520 * np.clip((t - 0.62) / 0.33, 0, None) ** 1.4
+    f = np.where(t < 0.62, rise, fall) * (1 + 0.006 * np.sin(2 * np.pi * 7 * t))  # a touch of wobble
+    env = np.concatenate([_env(len(t), 0.02, 0.3), np.ones(int(0.2 * SR))])  # + the room tail
+    return _siren(f) * env
+
+
+def siren_chirp():
+    """Backup joins: two quick upward police "bwoop" yelps (700 -> 1500 Hz)."""
+    out = np.zeros(int(0.42 * SR))
+    for start in (0.0, 0.17):
+        n = int(0.13 * SR)
+        t = np.arange(n) / SR
+        f = 700 + 800 * (t / 0.13) ** 0.7
+        y = _siren(f, harmonics=5, lp=3200)[:n] * _env(n, 0.006, 0.03)
+        a = int(start * SR)
+        out[a:a + n] += y
+    return out
+
+
+SYNTH = {"siren_whoop": siren_whoop, "siren_chirp": siren_chirp}
 
 
 # id -> (takes, options). Options: level (dB RMS of the loudest 50 ms, default -14), tail
@@ -232,6 +287,9 @@ RECIPES = {
                      dict(level=-14.0, tail=0.4)),
     "rank_up": ([[L("jingles/" + G + "jingles_SAX02.ogg")]], dict(level=-13.0, tail=0.2)),
     "gate_bad": ([[L("jingles/" + G + "jingles_HIT01.ogg")]], dict(level=-14.0, tail=0.1)),
+    # --- siren (brand, synthesised): the axnex intro whoop and the backup-joins chirp
+    "siren_whoop": ([[SY("siren_whoop")]], dict(level=-14.0, tail=0.25)),
+    "siren_chirp": ([[SY("siren_chirp")]], dict(level=-17.0, tail=0.08)),
 }
 
 
@@ -276,6 +334,8 @@ def chime_layer(x, ly: dict):
 
 
 def layer(dl: Path, ly: dict):
+    if ly.get("synth"):
+        return SYNTH[ly["synth"]]() * 10 ** (ly["gain"] / 20.0), int(ly["delay"] * SR)
     x = decode(find(dl, ly["src"]))
     if ly["notes"]:
         return chime_layer(x, ly)

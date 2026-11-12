@@ -27,13 +27,16 @@ const ALIASES := {"strike": "boom", "crash": "boom"}
 ## One call that plays several sounds: [id, delay s, extra dB]. "glass" is the old finale
 ## call; it now gets the shatter plus falling shards.
 const COMBOS := {"glass": [["glass_break", 0.0, 0.0], ["glass_tinkle", 0.16, -3.0]]}
+## Sounds that bring a second one along: id -> [extra id, delay s, extra dB]. Backup joining
+## the squad (the recruit sound) adds the siren chirp, which MIN_GAP keeps to once per 3 s.
+const ALSO := {"recruit": ["siren_chirp", 0.06, -5.0]}
 
 ## Most copies of one id sounding at once. A new play over the cap is dropped, so a full
 ## squad firing reads as a steady volley, not a wall of noise. Default 3.
 const MAX_SAME := {
 	"knife": 3, "shot": 4, "shot_big": 3, "shot_rifle": 3, "hit": 3, "punch": 3, "die": 3,
 	"coin": 4, "spin_tick": 2, "tick": 2, "glass_break": 3, "glass_tinkle": 2, "boom": 2,
-	"tap": 2, "hurt": 2, "boss_roar": 1, "fire": 2,
+	"tap": 2, "hurt": 2, "boss_roar": 1, "fire": 2, "siren_chirp": 1, "siren_whoop": 1,
 }
 ## Minimum seconds between two plays of the same id.
 const MIN_GAP := {
@@ -43,6 +46,7 @@ const MIN_GAP := {
 	"coin": 0.05, "glass_break": 0.05, "glass_tinkle": 0.1, "thunk": 0.08, "pothole": 0.25,
 	"fire": 0.2, "snipe": 0.2, "boss_roar": 1.5, "build": 0.15, "recruit": 0.08,
 	"gate_good": 0.08, "gate_bad": 0.08, "blocked": 0.08, "collect": 0.08,
+	"siren_chirp": 3.0, "siren_whoop": 1.5,
 }
 ## Pitch spread per id (+/- fraction). Default 0.03. Musical sounds get none, so they stay
 ## in tune with each other (star1-3 are a chord).
@@ -54,6 +58,7 @@ const PITCH_SPREAD := {
 	"star3": 0.0, "spin_win": 0.0, "daily_claim": 0.0, "mission_done": 0.0, "unlock": 0.0,
 	"build_done": 0.0, "chest_open": 0.0, "collect": 0.0, "recruit": 0.0, "tap": 0.0,
 	"error": 0.0, "flip": 0.0, "tick": 0.0, "spin_tick": 0.02, "boss_roar": 0.0,
+	"siren_chirp": 0.0, "siren_whoop": 0.0,
 }
 ## Mix trim per id in dB, added to the caller's volume. tools/make_sfx.py levels every file
 ## it builds (loudest 50 ms: big hits -11..-13, weapons and bodies -12..-16, rewards -13..-16,
@@ -122,6 +127,9 @@ func play(id: String, volume_db := 0.0, pitch := 1.0) -> void:
 		for part in COMBOS[id]:
 			_play_later(str(part[0]), float(part[1]), volume_db + float(part[2]), pitch)
 		return
+	if ALSO.has(id):
+		var extra: Array = ALSO[id]
+		_play_later(str(extra[0]), float(extra[1]), volume_db + float(extra[2]), 1.0)
 	id = ALIASES.get(id, id)
 	var stream := _stream_for(id)
 	if stream == null:
