@@ -61,7 +61,7 @@ static func run(eco: Dictionary, finale: Dictionary, units: Dictionary, opts: Di
 		t += int(o["level_seconds"])
 		# The win.
 		var fx: Dictionary = SaveData.effects(eco, save["station"])
-		var cap := int(units["world"].get("max_squad", 150)) + int(fx["capacity"])
+		var cap := LevelSim.squad_cap_for(units, 1, int(fx["capacity"]))  # troops as district-1 equivalents
 		var troops := mini(int(round(float(o["troops_base"]) + float(o["troops_per_level"]) * L)), cap)
 		var base := float(finale["clear_bonus"]) + troops * float(finale["per_troop"])
 		# v1.1 combo: the bottles break in a row, so the n-th adds bonus_per_bottle x combo(n).

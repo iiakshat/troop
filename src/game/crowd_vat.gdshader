@@ -9,6 +9,7 @@ render_mode cull_back;
 uniform sampler2D vat : filter_nearest;
 uniform sampler2D nrm : filter_nearest;
 uniform float rim_strength = 0.22;
+uniform float sun_shadow_floor = 0.55;  // light a figure keeps in the sun's shadow (0 = full shadow)
 varying float v_flash;
 varying float v_dissolve;
 varying vec3 v_local;
@@ -47,5 +48,8 @@ void light() {
 	// Two clean tones plus a soft highlight band: the textured-cartoon look.
 	float ndl = dot(NORMAL, LIGHT);
 	float tone = smoothstep(-0.02, 0.08, ndl) * 0.75 + smoothstep(0.62, 0.7, ndl) * 0.25;
-	DIFFUSE_LIGHT += LIGHT_COLOR * ATTENUATION * (0.1 + tone) / PI;
+	// Spec v2 §4 smudge: in a packed squad every cap sits in its neighbours' shadow, and full
+	// shadow turned the centre into one dark blob. The sun's shadow only half-darkens a figure.
+	float att = LIGHT_IS_DIRECTIONAL ? mix(sun_shadow_floor, 1.0, ATTENUATION) : ATTENUATION;
+	DIFFUSE_LIGHT += LIGHT_COLOR * att * (0.1 + tone) / PI;
 }

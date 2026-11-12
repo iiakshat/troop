@@ -165,10 +165,13 @@ func test_foe_halving_and_bomb() -> void:
 			eq(int(e["horde"]["count"]), 50, "spawned already halved")
 	var h: Dictionary = sim.hordes[0]
 	_step_until(sim, func(): return LevelSim.front_z(h) > -40.0)
-	var before: int = h["count"]
+	sim.stats["hero"]["dmg"] = 0  # only the bomb kills here
 	check(sim.use_power("bomb"), "bomb used")
-	eq(int(h["count"]), before - maxi(int(before * 0.5), 10), "bomb wipes half")
 	check(not sim.use_power("bomb"), "no charges left")
+	var before: int = h["count"]
+	var boom := _until_event(sim, "bomb")
+	eq(int(boom.get("killed", -1)), maxi(before / 2, 10), "bomb wipes half")
+	eq(int(h["count"]), before - maxi(before / 2, 10), "gang halved")
 
 
 func test_bomb_on_the_boss_is_flat_damage() -> void:
@@ -176,8 +179,106 @@ func test_bomb_on_the_boss_is_flat_damage() -> void:
 		{"at": 60, "type": "wave", "groups": [{"enemy": "boss", "n": 1}]}, {"at": 200, "type": "finish"}]}
 	var sim := LevelSim.new(lvl, units)
 	_step_until(sim, func(): return not sim.hordes.is_empty() and LevelSim.front_z(sim.hordes[0]) > -40.0)
+	var hp := LevelSim.boss_hp(sim.hordes[0])
+	sim.stats["hero"]["dmg"] = 0
 	check(sim.use_power("bomb"), "bomb used on boss")
+	var seen := _step_until(sim, func(): return sim.bombs.is_empty())
 	eq(int(sim.hordes[0]["count"]), 1, "boss survives a single bomb")
+	eq(LevelSim.boss_hp(sim.hordes[0]), hp - int(units["powers"]["bomb"]["big_dmg"]), "flat damage")
+	check(not _events_of(seen, "boss_hit").is_empty(), "the boss bar updates")
+
+
+# ---------------------------------------------------------------- v2 §12.5: the bomb is thrown
+
+func test_bomb_with_no_gang_still_spends_and_explodes() -> void:
+	var lvl := {"charges": {"bomb": 1}, "events": [{"at": 200, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(2)
+	sim.step(1.0 / 30.0)
+	sim.drain()
+	check(sim.use_power("bomb"), "a bomb can be thrown at an empty road")
+	eq(int(sim.charges["bomb"]), 0, "the charge is spent")
+	var throw := _events_of(sim.drain(), "bomb_throw")
+	eq(throw.size(), 1, "the throw is reported at once")
+	var cfg: Dictionary = units["powers"]["bomb"]
+	if throw.size() == 1:
+		eq(int(throw[0]["lane"]), 2, "down the squad's lane")
+		eq(String(throw[0]["target"]), "road", "nothing in reach: the road")
+		check(absf(float(throw[0]["t"]) - float(cfg["flight"])) < 1e-6, "flight time from config")
+	var t0 := sim.time
+	var boom := _until_event(sim, "bomb")
+	check(not boom.is_empty(), "it explodes")
+	eq(int(boom.get("killed", -1)), 0, "nobody to kill")
+	check(absf(sim.time - t0 - float(cfg["flight"])) < 0.05, "lands after the flight time")
+	check(float(boom.get("z", 0.0)) < -float(cfg["reach"]) * 0.5, "lands far down the road (%.1f)" % float(boom.get("z", 0.0)))
+
+
+func _bomb_obstacle_sim(kind: String) -> LevelSim:
+	var lvl := {"charges": {"bomb": 1}, "events": [
+		{"at": 90, "type": "obstacle", "kind": kind, "lane": 1, "hp": 5000},
+		{"at": 200, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	sim.stats["hero"]["dmg"] = 0
+	_step_until(sim, func(): return not sim.obstacles.is_empty() and float(sim.obstacles[0]["z"]) > -30.0)
+	sim.drain()
+	return sim
+
+
+func test_bomb_lands_on_a_barricade_and_destroys_it() -> void:
+	for kind in ["barricade", "car"]:
+		var sim := _bomb_obstacle_sim(kind)
+		var ob: Dictionary = sim.obstacles[0]
+		check(sim.use_power("bomb"), "bomb thrown")
+		var throw := _events_of(sim.drain(), "bomb_throw")
+		eq(String(throw[0]["target"]) if throw.size() == 1 else "", "obstacle", "%s is the nearest thing in the lane" % kind)
+		eq(sim.obstacles.size(), 1, "%s still stands while the bomb flies" % kind)
+		var seen := _step_until(sim, func(): return not _events_of(sim.out, "bomb").is_empty() or sim.bombs.is_empty())
+		seen.append_array(sim.drain())
+		check(not _events_of(seen, "bomb").is_empty(), "the bomb went off")
+		var broken := _events_of(seen, "obstacle_broken")
+		eq(broken.size(), 1, "%s destroyed" % kind)
+		check(not sim.obstacles.has(ob), "%s gone from the road" % kind)
+		var before := sim.squad.total()
+		_step_until(sim, func(): return sim.state != "run")
+		eq(sim.squad.total(), before, "nothing left to crash into")
+
+
+func test_bomb_sets_off_a_barrel() -> void:
+	var lvl := {"charges": {"bomb": 1}, "events": [
+		{"at": 90, "type": "obstacle", "kind": "barrel", "lane": 1, "hp": 5000, "kill": 8, "radius": 8},
+		{"at": 92, "type": "wave", "groups": [{"enemy": "thug", "n": 20, "hp": 100000}]},
+		{"at": 200, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	sim.stats["hero"]["dmg"] = 0
+	_step_until(sim, func(): return not sim.obstacles.is_empty() and float(sim.obstacles[0]["z"]) > -30.0)
+	check(sim.use_power("bomb"), "bomb thrown at the barrel")
+	var seen := _step_until(sim, func(): return sim.bombs.is_empty())
+	eq(_events_of(seen, "barrel_boom").size(), 1, "the barrel goes off")
+
+
+func test_bomb_kills_apply_at_landing_not_at_the_tap() -> void:
+	var lvl := {"charges": {"bomb": 1}, "events": [
+		{"at": 80, "type": "wave", "groups": [{"enemy": "thug", "n": 60}]},
+		{"at": 200, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	sim.stats["hero"]["dmg"] = 0  # only the bomb kills
+	_step_until(sim, func(): return not sim.hordes.is_empty() and LevelSim.front_z(sim.hordes[0]) > -35.0)
+	var h: Dictionary = sim.hordes[0]
+	check(sim.use_power("bomb"), "thrown")
+	var throw := _events_of(sim.drain(), "bomb_throw")
+	eq(String(throw[0]["target"]) if throw.size() == 1 else "", "horde", "the gang's front is the target")
+	eq(int(h["count"]), 60, "nobody dies at the tap")
+	sim.step(float(units["powers"]["bomb"]["flight"]) * 0.5)
+	eq(int(h["count"]), 60, "nobody dies mid-flight")
+	var boom := _until_event(sim, "bomb")
+	eq(int(boom.get("killed", -1)), 30, "half the gang at landing")
+	eq(int(h["count"]), 30, "exactly half left")
+	eq(int(boom.get("horde", -1)), int(h["id"]), "the event names the gang")
+	var c := sim.clone()
+	eq(c.bombs.size(), sim.bombs.size(), "clone copies bombs in the air")
 
 
 func test_levels_are_winnable_and_reward_planning() -> void:
@@ -605,8 +706,11 @@ func test_obstacle_hits_spatially() -> void:
 	eq((hit[0]["slots"] as Array).size() > 0, true, "the event names the slots that fell")
 	var away := _obstacle_row(2.8)
 	seen = _step_until(away, func(): return away.state != "run")
-	eq(_events_of(seen, "obstacle_hit").size(), 0, "steered fully into the next lane: missed")
-	eq(away.squad.total(), 40, "nobody lost")
+	# Spec v2 §4: the squad is about one lane wide, so from the next lane's centre only its
+	# outermost figures brush the barricade (intended: steering matters more).
+	var brushed := 40 - away.squad.total()
+	check(brushed <= 3, "steered fully into the next lane: at most the outer edge brushes it (lost %d)" % brushed)
+	eq(away.state, "strike", "and the level goes on")
 	# Capacity: centred on a cost-6 barricade loses exactly 6.
 	var six := _obstacle_row(0.0, 6)
 	_step_until(six, func(): return six.state != "run")
@@ -692,7 +796,7 @@ func test_red_gate_climb_past_zero_keeps_the_level_step() -> void:
 func test_standoff_stops_the_street() -> void:
 	var lvl := {"events": [
 		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 30}]},
-		{"at": 90, "type": "wave", "groups": [{"enemy": "gunman", "n": 6, "hp": 30, "shot_dmg": 0}]},
+		{"at": 90, "type": "wave", "groups": [{"enemy": "gunman", "n": 6, "hp": 30, "return_fire": {"rate": 0.0, "share": 0}}]},
 		{"at": 160, "type": "finish"}]}
 	var sim := LevelSim.new(lvl, units)
 	sim.set_lane(1)
@@ -789,3 +893,173 @@ func test_gang_within_priority_takes_fire_before_red_gate() -> void:
 	var far := _priority_sim(-25.0)
 	far._shoot(1.0 / 30.0)
 	eq(far.target_kind, "gate", "a gang outside 15 m: the nearer red gate is shot first")
+
+
+# ---------------------------------------------------------------- v2 §12.4: squad cap, big numbers
+
+func test_squad_cap_grows_by_district() -> void:
+	var caps: Array = units["world"]["squad_cap"]
+	eq(caps.size(), 5, "one cap per district")
+	eq(int(caps[0]), 300, "district 1 starts at 300")
+	eq(int(caps[4]), 100000, "district 5 starts at 100K")
+	for d in range(1, 6):
+		var sim := LevelSim.new({"district": d, "events": []}, units)
+		eq(sim.squad.cap, int(caps[d - 1]), "district %d cap" % d)
+	eq(LevelSim.new({"events": []}, units).squad.cap, 300, "no district: district 1")
+	# Barracks: a percentage of the district cap (exact integers).
+	eq(LevelSim.new({"district": 2, "events": []}, units, {"capacity": 50}).squad.cap, 1500, "d2 +50%")
+	eq(LevelSim.squad_cap_for(units, 5, 25), 125000, "d5 +25%")
+
+
+func test_big_numbers_stay_exact() -> void:
+	var lvl := {"district": 5, "events": [
+		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 19999}]},
+		{"at": 20, "type": "gates", "gates": [{"lane": 1, "op": "mul", "k": 5}]},
+		{"at": 30, "type": "gates", "gates": [{"lane": 1, "op": "pct", "v": -33}]},
+		{"at": 40, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": -12345}]},
+		{"at": 50, "type": "gates", "gates": [{"lane": 1, "op": "mul", "k": 5}]},
+		{"at": 80, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	var totals: Array = []
+	for e in _step_until(sim, func(): return sim.state != "run"):
+		if e["type"] == "row_pass":
+			totals.append(int(e["after"]))
+	eq(totals, [20000, 100000, 67000, 54655, 100000], "+19999, x5, -33%, -12345, x5 (capped at 100K)")
+	eq(sim.state, "strike", "won")
+
+
+func test_huge_gang_is_drawn_and_fought_in_capped_rows() -> void:
+	# 18,000 thugs: each of the gang's 180 figures carries 100 people, a row is 900, and
+	# the gang is 20 rows deep (not 2,000), so the squad's fire never outruns its front.
+	var figs := int(units["world"]["gang_figures"])
+	eq(figs, 180, "gang figure cap in config")
+	var lvl := {"district": 4, "events": [
+		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 24999}]},
+		{"at": 120, "type": "wave", "groups": [{"enemy": "thug", "n": 18000}]},
+		{"at": 160, "type": "finish"}]}
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	_step_until(sim, func(): return not sim.hordes.is_empty())
+	var h: Dictionary = sim.hordes[0]
+	eq(int(h.get("per", 0)), 100, "100 people per figure")
+	var z0 := LevelSim.front_z(h)
+	sim._kill(h, 900)
+	check(absf(LevelSim.front_z(h) - (z0 - float(h["row_gap"]))) < 0.001, "900 down = one row back")
+	sim._kill(h, 899)
+	check(absf(LevelSim.front_z(h) - (z0 - float(h["row_gap"]))) < 0.001, "a part row keeps the front")
+	_step_until(sim, func(): return sim.state != "run")
+	eq(sim.state, "strike", "25K troops beat 18K thugs")
+	check(sim.squad.total() > 10000, "and keep most of the squad (%d)" % sim.squad.total())
+
+
+## Gunmen that cannot be shot down (a do-nothing squad), 19 constables + the hero.
+func _return_fire_level(district: int, enemy := "gunman", n := 4) -> Dictionary:
+	return {"district": district, "events": [
+		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 19}]},
+		{"at": 80, "type": "wave", "groups": [{"enemy": enemy, "n": n, "hp": 100000}]},
+		{"at": 200, "type": "finish"}]}
+
+
+func test_return_fire_kills_followers_one_by_one_then_the_hero() -> void:
+	var rf: Dictionary = units["enemies"]["gunman"]["return_fire"]
+	check(float(rf["rate"]) > 0.0 and int(rf["share"]) == 100, "every gunman carries a gun")
+	var sim := LevelSim.new(_return_fire_level(1), units)
+	sim.set_lane(1)
+	var shots := 0
+	var lost := 0
+	var hero_kept := true
+	var events := 0
+	for i in 20000:
+		sim.step(1.0 / 30.0)
+		for e in sim.drain():
+			if e["type"] != "return_fire":
+				continue
+			events += 1
+			shots += int(e["shots"])
+			lost += int(e["lost"])
+			check(int(e["lost"]) <= int(e["shots"]), "a hit kills at most one")
+			if sim.squad.total() > 0 and sim.squad.count("constable") > 0 and not sim.squad.hero_alive():
+				hero_kept = false
+		if sim.state != "run":
+			break
+	check(events >= 5, "a stream of shots, not one volley (%d)" % events)
+	check(hero_kept, "the hero stands while any follower is left")
+	eq(sim.state, "lost", "the squad is worn down")
+	eq(sim.lose_cause, "gunman", "cause")
+	eq(lost, 20, "every follower, then the hero")
+	check(shots >= lost, "each hit is one troop")
+
+
+func test_return_fire_is_blocked_by_the_shield() -> void:
+	var sim := LevelSim.new(_return_fire_level(1), units)
+	sim.set_lane(1)
+	var first := _until_event(sim, "return_fire")
+	check(not first.is_empty(), "the gunmen fire back")
+	sim.charges["shield"] = 1
+	check(sim.use_power("shield"), "shield up")
+	var before := sim.squad.total()
+	var blocked := 0
+	while sim.shield_t > 0.1:
+		sim.step(1.0 / 30.0)
+		for e in sim.drain():
+			if e["type"] == "return_fire":
+				check(bool(e["blocked"]), "shots under the shield are blocked")
+				eq(int(e["lost"]), 0, "nobody falls under the shield")
+				blocked += 1
+	check(blocked > 0, "shots hit the shield (%d)" % blocked)
+	eq(sim.squad.total(), before, "squad intact")
+
+
+func test_return_fire_from_district_two_and_gunmen_everywhere() -> void:
+	var share := int(units["enemies"]["thug"]["return_fire"]["share"])
+	check(share > 0 and share < 100, "some thugs carry guns (%d%%)" % share)
+	eq(int(units["return_fire"]["from_district"]), 2, "gangs fire back from district 2")
+	# District 1: thugs never fire back (today's rules); district 2: they do.
+	for d in [1, 2]:
+		var sim := LevelSim.new(_return_fire_level(d, "thug", 30), units)
+		sim.set_lane(1)
+		var fired := not _until_event(sim, "return_fire").is_empty()
+		eq(fired, d >= 2, "district %d thugs fire back: %s" % [d, d >= 2])
+	# Gunmen use return fire in district 1 too, and no longer fire volleys.
+	var g := LevelSim.new(_return_fire_level(1), units)
+	g.set_lane(1)
+	var seen := _step_until(g, func(): return g.state != "run")
+	check(not _events_of(seen, "return_fire").is_empty(), "district 1 gunmen fire back")
+	for e in _events_of(seen, "hurt"):
+		check(String(e["cause"]) != "gunman", "no old volley from the gunmen")
+
+
+func test_live_firepower_rises_with_troops_and_taps() -> void:
+	var lvl := _gate_level([{"lane": 1, "op": "num", "v": 20}],
+		[{"at": 40, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 10}])
+	var sim := LevelSim.new(lvl, units)
+	sim.set_lane(1)
+	var cold := sim.firepower()
+	eq(cold, int(round(sim.squad.firepower(sim.stats, sim.weapons))), "int of Squad.firepower")
+	eq(cold, 1, "a cold hero: 3 x 0.4 = 1.2 -> 1")
+	for i in 4:
+		sim.tap()
+	eq(sim.firepower(), 3, "tapping heats him up to 3")
+	_step_until(sim, func(): return sim.rows.is_empty() and sim.rows_passed == 1)
+	var joined := sim.firepower()
+	check(joined >= 20 * 1.6, "20 constables joined (%d)" % joined)
+	_step_until(sim, func(): return sim.obstacles.is_empty())
+	check(sim.firepower() < joined, "the pothole's losses drop it (%d < %d)" % [sim.firepower(), joined])
+
+
+func test_start_firepower_is_the_hud_unit_with_a_hot_hero() -> void:
+	eq(LevelSim.start_firepower(units), 3, "the hero alone at full tap rate: 1 x 3/s")
+	var up := {"squad": 4}
+	eq(LevelSim.start_firepower(units, up), int(round(3.0 + 4 * 1.6)), "+4 starting constables")
+	check(LevelSim.start_firepower(units, {"headstart": 1}) > LevelSim.start_firepower(units), "a head start raises it")
+
+
+func test_coin_troops_are_district_one_equivalents() -> void:
+	var sim := LevelSim.new({"district": 3, "events": []}, units)
+	sim.squad.add("constable", 4999)
+	eq(sim.squad.total(), 5000, "a full district-3 squad")
+	eq(sim.coin_troops(), 300, "pays like a full district-1 squad")
+	var d1 := LevelSim.new({"district": 1, "events": []}, units)
+	d1.squad.add("constable", 41)
+	eq(d1.coin_troops(), 42, "district 1 unchanged")

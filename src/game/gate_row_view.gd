@@ -14,6 +14,9 @@ const RED := Color(0.9, 0.24, 0.27)
 const BLUE := Color(0.25, 0.52, 0.95)
 const GOLD := Color(0.95, 0.72, 0.2)
 const GREY := Color(0.42, 0.42, 0.45)
+const BARREL_RED := Color("c8302a")
+const FUSE_COLOR := Color("ffb020")
+const ARC := preload("res://src/game/arc_ring.gdshader")
 
 var _plank_mesh: BoxMesh
 var _plank_mat: StandardMaterial3D
@@ -218,9 +221,9 @@ static func describe(g: Dictionary) -> Dictionary:
 	match String(g["op"]):
 		"num":
 			var v := int(g["v"])
-			return {"text": ("+%d" % v) if v >= 0 else ("-%d" % -v), "color": GREEN if v > 0 else RED}
+			return {"text": ("+" if v >= 0 else "") + NumFormat.fmt(v), "color": GREEN if v > 0 else RED}
 		"recruit":
-			return {"text": "+%d" % int(g.get("n", 1)), "color": GREEN}
+			return {"text": "+" + NumFormat.fmt(int(g.get("n", 1))), "color": GREEN}
 		"mul":
 			return {"text": "×%d" % int(g["k"]), "color": GREEN}
 		"div":
@@ -233,12 +236,76 @@ static func describe(g: Dictionary) -> Dictionary:
 		"foe_strip":
 			return {"text": "", "icon": "armour_break", "color": BLUE}
 		"turncoat":
-			return {"text": "%d" % int(g.get("n", 1)), "icon": "turncoat", "color": BLUE}
+			return {"text": NumFormat.fmt(int(g.get("n", 1))), "icon": "turncoat", "color": BLUE}
 		"weapon":
 			return {"text": "", "icon": String(g["id"]), "color": GOLD}
 		"power":
 			return {"text": "+%d" % int(g.get("n", 1)), "icon": String(g["id"]), "color": GOLD}
 	return {"text": "?", "color": Color.GRAY}
+
+
+## Explosive barrel (spec v2 §5): a red oil drum, never a box. Dark ribs, a yellow hazard
+## band with a flame decal facing the camera, and a fuse ring on the road around it.
+## LevelView sets the ring's "fill" as shots land (full = armed), blinks ring and drum once
+## armed, and shows the blast's kill count when a gang sets it off.
+## Returns {root, body (StandardMaterial3D), fuse (ShaderMaterial)}.
+static func barrel_model() -> Dictionary:
+	var root := Node3D.new()
+	var body := StandardMaterial3D.new()
+	body.albedo_color = BARREL_RED
+	body.roughness = 0.42
+	body.metallic = 0.3
+	root.add_child(_drum_part(0.5, 1.3, 0.65, body))
+	var rib := StandardMaterial3D.new()
+	rib.albedo_color = Color("7a1913")
+	rib.roughness = 0.5
+	rib.metallic = 0.35
+	for y in [0.14, 1.16]:
+		root.add_child(_drum_part(0.53, 0.08, y, rib))
+	var lid := StandardMaterial3D.new()
+	lid.albedo_color = Color("8f221b")
+	lid.roughness = 0.6
+	root.add_child(_drum_part(0.46, 0.04, 1.31, lid))
+	var band := StandardMaterial3D.new()
+	band.albedo_color = Color("f2c14e")
+	band.roughness = 0.55
+	root.add_child(_drum_part(0.508, 0.34, 0.66, band))
+	var dec := Sprite3D.new()
+	dec.texture = UiKit.icon_texture("fire")
+	dec.pixel_size = 0.5 / 320.0
+	dec.shaded = false
+	dec.render_priority = 3
+	dec.position = Vector3(0, 0.67, 0.53)
+	root.add_child(dec)
+	var fuse := MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(2.3, 2.3)
+	fuse.mesh = pm
+	var fm := ShaderMaterial.new()
+	fm.shader = ARC
+	fm.set_shader_parameter("color", FUSE_COLOR)
+	fm.set_shader_parameter("track", Color(0.1, 0.08, 0.06, 0.45))
+	fm.set_shader_parameter("inner", 0.6)
+	fm.set_shader_parameter("outer", 0.84)
+	fuse.material_override = fm
+	fuse.position.y = 0.05
+	fuse.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(fuse)
+	return {"root": root, "body": body, "fuse": fm}
+
+
+static func _drum_part(r: float, h: float, y: float, mat: Material) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = r
+	cm.bottom_radius = r
+	cm.height = h
+	cm.radial_segments = 20
+	cm.rings = 1
+	mi.mesh = cm
+	mi.material_override = mat
+	mi.position.y = y
+	return mi
 
 
 static func _label(font: Font, size: int, px: float) -> Label3D:

@@ -26,38 +26,37 @@ var _lens_attr: CameraAttributesPractical
 var _rng := RandomNumberGenerator.new()
 const BASE_NEAR := 0.5
 
-## Look of each district (spec section 6): sky, sun (pitch and yaw in degrees; the low sun
-## of the later districts swings towards the end of the street), fill light, ambient, fog,
-## exposure, facade tint and the night extras (windows = lit-window emission, lamps = street-
-## lamp glow, neon = neon strips, wet = rain-slick road with lamp reflections). Visual only:
-## no gameplay number lives here.
-const THEMES := {
-	1: {"sky_top": "2f7fe0", "sky_hor": "bfe4ff", "ground_hor": "bfe4ff", "ground_bot": "6f8aa0", "sky_energy": 1.1,
-		"sun_pitch": -48.0, "sun_yaw": 148.0, "sun_color": "fff1d9", "sun_energy": 1.35, "sun_size": 20.0,
-		"fill_color": "d6e2ff", "fill_energy": 0.35, "ambient": "b9bcc9", "ambient_energy": 0.7,
-		"fog": "a9cdee", "fog_density": 0.0045, "exposure": 0.95, "glow": 0.3, "saturation": 1.18,
-		"tint": "ffffff", "walk": "ffffff", "windows": 0.0, "lamps": 0.0, "neon": 0.0, "wet": 0.0},
-	2: {"sky_top": "3f86d6", "sky_hor": "f6dcb6", "ground_hor": "f0d2a8", "ground_bot": "8a7a6a", "sky_energy": 1.1,
-		"sun_pitch": -36.0, "sun_yaw": 150.0, "sun_color": "ffdcaa", "sun_energy": 1.35, "sun_size": 18.0,
-		"fill_color": "d9d2ff", "fill_energy": 0.3, "ambient": "c7b9a6", "ambient_energy": 0.68,
-		"fog": "ecd2ad", "fog_density": 0.005, "exposure": 0.97, "glow": 0.32, "saturation": 1.2,
-		"tint": "fff3e2", "walk": "fff4e6", "windows": 0.0, "lamps": 0.0, "neon": 0.0, "wet": 0.0},
-	3: {"sky_top": "4d6fb8", "sky_hor": "ffbe76", "ground_hor": "ffb470", "ground_bot": "7a5a4a", "sky_energy": 1.15,
-		"sun_pitch": -20.0, "sun_yaw": 158.0, "sun_color": "ffb25e", "sun_energy": 1.45, "sun_size": 14.0,
-		"fill_color": "b9b2ff", "fill_energy": 0.32, "ambient": "b49a88", "ambient_energy": 0.62,
-		"fog": "f4b77a", "fog_density": 0.0065, "exposure": 1.0, "glow": 0.38, "saturation": 1.22,
-		"tint": "ffe4c2", "walk": "ffe9cf", "windows": 0.0, "lamps": 0.0, "neon": 0.0, "wet": 0.0},
-	4: {"sky_top": "2e3570", "sky_hor": "ff8a4a", "ground_hor": "e07a4c", "ground_bot": "4a3040", "sky_energy": 1.0,
-		"sun_pitch": -9.0, "sun_yaw": 162.0, "sun_color": "ff7a3a", "sun_energy": 1.0, "sun_size": 10.0,
-		"fill_color": "8e86ff", "fill_energy": 0.38, "ambient": "8d7592", "ambient_energy": 0.72,
-		"fog": "d9805a", "fog_density": 0.0075, "exposure": 1.06, "glow": 0.45, "saturation": 1.18,
-		"tint": "e9c6b8", "walk": "e6c4b8", "windows": 0.55, "lamps": 0.7, "neon": 0.35, "wet": 0.0},
-	5: {"sky_top": "060a1f", "sky_hor": "262a63", "ground_hor": "1d2150", "ground_bot": "06070f", "sky_energy": 1.0,
-		"sun_pitch": -52.0, "sun_yaw": 140.0, "sun_color": "9fb0ff", "sun_energy": 0.42, "sun_size": 3.0,
-		"fill_color": "b06cff", "fill_energy": 0.28, "ambient": "5c66a8", "ambient_energy": 0.95,
-		"fog": "1b2350", "fog_density": 0.0085, "exposure": 1.2, "glow": 0.65, "saturation": 1.15,
-		"tint": "a3a9d4", "walk": "8e93b8", "windows": 1.0, "lamps": 1.0, "neon": 1.0, "wet": 1.0},
-}
+## Look of each district: config/world_look.json (spec v2 §5 colour grade). Visual only.
+const LOOK_PATH := "res://config/world_look.json"
+static var _looks: Dictionary = {}
+
+
+## District d's look (1-5), loaded once from config/world_look.json.
+static func look(d: int) -> Dictionary:
+	if _looks.is_empty():
+		var data: Variant = Config.load_json(LOOK_PATH)
+		if data is Dictionary:
+			_looks = data
+	return _looks.get(str(d), {})
+
+
+## The street camera: {pos: [x, y, z], look: [x, y, z]} from config/world_look.json.
+static func camera_rig() -> Dictionary:
+	look(1)
+	return _looks.get("camera", {})
+
+
+static func _vec3(a: Array) -> Vector3:
+	return Vector3(float(a[0]), float(a[1]), float(a[2]))
+
+
+static func look_count() -> int:
+	var n := 0
+	while not look(n + 1).is_empty():
+		n += 1
+	return maxi(n, 1)
+
+
 const NEON_COLORS := ["ff3fa8", "38f0ff", "b25cff", "ffd23f", "48ff8a"]
 const WINDOW_LIGHT := "ffc678"
 const LAMP_LIGHT := "ffcf86"
@@ -91,7 +90,7 @@ func _ready() -> void:
 ## before or after the World enters the tree, and as often as needed (one World serves the
 ## whole session).
 func set_theme(d: int) -> void:
-	district = clampi(d, 1, THEMES.size())
+	district = clampi(d, 1, look_count())
 	if is_node_ready():
 		_apply_theme()
 
@@ -223,9 +222,12 @@ func _camera() -> void:
 	camera.fov = _base_fov
 	camera.near = 0.5
 	camera.far = 220.0
-	camera.position = Vector3(0, 9.0, 12.0)
+	# Spec v2 §4: the squad sits low (hero about a quarter up the screen) with more street
+	# ahead. Numbers: config/world_look.json "camera".
+	var rig := camera_rig()
+	camera.position = _vec3(rig.get("pos", [0, 9.0, 12.0]))
 	add_child(camera)
-	camera.look_at(Vector3(0, 0.5, -14.0), Vector3.UP)
+	camera.look_at(_vec3(rig.get("look", [0, 0.5, -14.0])), Vector3.UP)
 	_cam_base = camera.transform
 	camera.current = true
 
@@ -517,9 +519,9 @@ func _place_reflections() -> void:
 		refl.global_transform = Transform3D(Basis(x, dir, Vector3.UP), at - dir * 1.2 + Vector3(0, 0.02, 0))
 
 
-## Applies THEMES[district] to the sky, lights, environment, materials and night extras.
+## Applies the district's look (config/world_look.json) to the sky, lights, environment, materials and night extras.
 func _apply_theme() -> void:
-	var t: Dictionary = THEMES[district]
+	var t: Dictionary = look(district)
 	_sky_mat.sky_top_color = Color(t["sky_top"])
 	_sky_mat.sky_horizon_color = Color(t["sky_hor"])
 	_sky_mat.ground_horizon_color = Color(t["ground_hor"])
@@ -538,6 +540,7 @@ func _apply_theme() -> void:
 	_env.tonemap_exposure = float(t["exposure"])
 	_env.glow_intensity = float(t["glow"])
 	_env.adjustment_saturation = float(t["saturation"])
+	_env.adjustment_contrast = float(t.get("contrast", 1.1))
 	var tint := Color(t["tint"])
 	var windows := float(t["windows"])
 	for m in _facade_mats:

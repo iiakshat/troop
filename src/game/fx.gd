@@ -8,6 +8,7 @@ const MAX_PROJ := 320
 const MAX_LOB := 48
 const MAX_PARTS := 600
 const MAX_FIRES := 6
+const MAX_BOMBS := 8
 ## Bullet-mesh scale per projectile kind (x/y thickness, z length).
 const BULLET_SCALE := {
 	"bullet": Vector3(0.75, 0.75, 1), "bullet_big": Vector3(1.3, 1.3, 1.6), "tracer": Vector3(0.6, 0.6, 0.8),
@@ -21,6 +22,7 @@ var _parts: Array = []     # {pos, vel, t, life, col, size, grav}
 var _knife_mm: MultiMesh
 var _bullet_mm: MultiMesh
 var _lob_mm: MultiMesh     # firebomb bottles and grenades (lit, tumbling)
+var _bomb_mm: MultiMesh    # the hero's thrown bombs (round, with a sparking fuse)
 var _fires: Array = []     # {pos, t, life}: burning patches on the road
 var _part_mm: MultiMesh
 var _labels: Array[Label3D] = []
@@ -37,6 +39,7 @@ func _ready() -> void:
 	bm.albedo_color = Color(1, 1, 1, 0.6)
 	_bullet_mm = _mm(_bullet_mesh(), MAX_PROJ, false, bm)
 	_lob_mm = _mm(_bottle_mesh(), MAX_LOB, false, _lit_vertex_mat())
+	_bomb_mm = _mm(_bomb_mesh(), MAX_BOMBS, false, _lit_vertex_mat())
 	var cube := BoxMesh.new()
 	cube.size = Vector3.ONE
 	_part_mm = _mm(cube, MAX_PARTS, true, _unshaded_instance_mat())
@@ -46,6 +49,18 @@ func _ready() -> void:
 func set_knife_skin(blade: Color, trail: String) -> void:
 	_knife_mm.mesh = _knife_mesh(blade)
 	_trail = Color(trail) if trail != "" else Color.TRANSPARENT
+
+
+## Spec v2 §3: one of every effect at `at` (below the road, out of sight) so their shaders
+## compile while a level loads; the floating-number pool is filled now, not mid-fight.
+func prewarm(at: Vector3) -> void:
+	for k in ["knife", "bullet"]:
+		shoot(k, at, at + Vector3(0, 0, -0.5), 1.0)
+	lob(at, at + Vector3(0, 0, -0.5), 0.3, 0.2)
+	bomb(at, at + Vector3(0, 0, -0.5), 0.3, 0.2)
+	burst(at, Color.WHITE, 2, 0.1, 0.2, 0.1, 0.0, 0.0)
+	for i in 12:
+		float_text("0", at, Color(1, 1, 1, 0), 1.0, 0.0, 0.05)
 
 
 func clear() -> void:
@@ -82,6 +97,21 @@ func lob(from: Vector3, to: Vector3, t: float, height := 5.0) -> void:
 	var vy := (to.y - from.y) / t + 0.5 * g * t
 	var vel := Vector3((to.x - from.x) / t, vy, (to.z - from.z) / t)
 	_proj.append({"pos": from, "vel": vel, "t": t, "kind": "lob", "spin": randf() * TAU, "grav": g})
+
+
+## Spec v2 §12.5: the hero's bomb, a round black bomb with a sparking fuse, arcing from his
+## hand to `to` in `t` seconds. Like lob(), it vanishes on landing: the sim's "bomb" event
+## shows the blast.
+func bomb(from: Vector3, to: Vector3, t: float, height := 4.0) -> void:
+	lob(from, to, t, height)
+	if not _proj.is_empty() and _proj.back()["kind"] == "lob":
+		_proj.back()["kind"] = "bomb"
+
+
+## A gun's muzzle flash: a quick bright pop (enemy return fire).
+func muzzle(at: Vector3) -> void:
+	burst(at, Color(1.0, 0.95, 0.6), 3, 1.2, 0.26, 0.07, 0.0, 0.0)
+	burst(at, Color(1.0, 0.6, 0.2), 2, 2.0, 0.14, 0.1, 0.0, 0.0)
 
 
 # ---------------------------------------------------------------- particles
@@ -178,6 +208,7 @@ func _tick_proj(delta: float) -> void:
 	var kn := 0
 	var bn := 0
 	var ln := 0
+	var mn := 0
 	var i := 0
 	while i < _proj.size():
 		var p: Dictionary = _proj[i]
@@ -201,6 +232,17 @@ func _tick_proj(delta: float) -> void:
 			if ln < MAX_LOB:
 				_lob_mm.set_instance_transform(ln, Transform3D(Basis(Vector3.RIGHT, float(p["spin"])).scaled(Vector3.ONE * 1.8), p["pos"]))
 				ln += 1
+		elif kind == "bomb":
+			# A slow tumble; the fuse throws white-gold sparks and a thin smoke trail.
+			p["spin"] = float(p["spin"]) + delta * 6.0
+			var rot := Basis(Vector3.RIGHT, float(p["spin"]))
+			var fuse: Vector3 = (p["pos"] as Vector3) + rot * Vector3(0, 0.5, 0)
+			burst(fuse, Color(1.0, 0.9 + randf() * 0.1, 0.5 + randf() * 0.4), 2, 2.4, 0.09, 0.22, 1.0, 6.0)
+			if randf() < 0.5:
+				burst(fuse, Color(0.7, 0.7, 0.72), 1, 0.3, 0.2, 0.4, 0.5, -1.0)
+			if mn < MAX_BOMBS:
+				_bomb_mm.set_instance_transform(mn, Transform3D(rot, p["pos"]))
+				mn += 1
 		elif kind == "knife":
 			p["spin"] = float(p["spin"]) + delta * 28.0
 			if _trail.a > 0.0 and randf() < 0.6:
@@ -219,6 +261,7 @@ func _tick_proj(delta: float) -> void:
 	_knife_mm.visible_instance_count = kn
 	_bullet_mm.visible_instance_count = bn
 	_lob_mm.visible_instance_count = ln
+	_bomb_mm.visible_instance_count = mn
 
 
 func _tick_fires(delta: float) -> void:
@@ -329,6 +372,36 @@ func _bottle_mesh() -> Mesh:
 	_cube(st, Vector3(0, 0.68, 0), Vector3(0.28, 0.26, 0.28), Color(1.0, 0.75, 0.3))
 	st.generate_normals()
 	return st.commit()
+
+
+## The hero's bomb: a round black body with a shine band, a steel cap and a short fuse
+## (sparks come from _tick_proj).
+func _bomb_mesh() -> Mesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var r := 0.36
+	var rings := 7
+	var segs := 10
+	for j in rings:
+		var a0 := PI * j / rings
+		var a1 := PI * (j + 1) / rings
+		for k in segs:
+			var b0 := TAU * k / segs
+			var b1 := TAU * (k + 1) / segs
+			var col := Color(0.13, 0.13, 0.16) if j != 2 else Color(0.32, 0.33, 0.4)
+			var q := [_sph(r, a0, b0), _sph(r, a0, b1), _sph(r, a1, b1), _sph(r, a1, b0)]
+			for tri in [[0, 2, 1], [0, 3, 2]]:  # clockwise from outside, like _cube
+				for n in tri:
+					st.set_color(col)
+					st.add_vertex(q[n])
+	_cube(st, Vector3(0, r + 0.05, 0), Vector3(0.18, 0.12, 0.18), Color(0.55, 0.57, 0.62))
+	_cube(st, Vector3(0, r + 0.19, 0), Vector3(0.05, 0.2, 0.05), Color(0.62, 0.45, 0.25))
+	st.generate_normals()
+	return st.commit()
+
+
+static func _sph(r: float, a: float, b: float) -> Vector3:
+	return Vector3(sin(a) * cos(b), cos(a), sin(a) * sin(b)) * r
 
 
 func _bullet_mesh() -> Mesh:

@@ -15,7 +15,7 @@
     "replay_mult": 0.5
   },
 
-  "_station_note": "Cost of level k = base x growth^(k-1), rounded (price_round). req[k-1] = district that must be liberated before level k can be bought (0 = open from the start). Effects: knife +per damage, speed +per (sim: +0.5 throws/s each), squad +per starting constables, capacity +per squad cap, coins +per finale coin bonus, charges: shield ceil(lv/2), bomb floor(lv/2).",
+  "_station_note": "Cost of level k = base x growth^(k-1), rounded (price_round). req[k-1] = district that must be liberated before level k can be bought (0 = open from the start). Effects: knife +per damage, speed +per (sim: +0.5 throws/s each), squad +per starting constables, capacity +per percent of the district's squad cap (units.json world.squad_cap), coins +per finale coin bonus, charges: shield ceil(lv/2), bomb floor(lv/2).",
   "station": {
     "armory":   { "icon": "knife",      "max": 10, "base": 80,  "growth": 1.45, "req": [0, 0, 0, 1, 1, 2, 2, 3, 4, 4], "effect": "knife",    "per": 1 },
     "range":    { "icon": "speed",      "max": 10, "base": 80,  "growth": 1.45, "req": [0, 0, 0, 1, 1, 2, 2, 3, 4, 4], "effect": "speed",    "per": 1 },
@@ -29,7 +29,7 @@
   "power": {
     "_note": "Squad Power (lobby top bar, level nodes) = dps x (hero knife dmg x throws/s + starting constables x constable dmg x rate) + cap x squad cap + charge x (shields + bombs) + coin_pct x evidence coin bonus in percent; all from the station's real effects (units.json base numbers). recommended = [[level, power], ...], linear between anchors, fitted with tests/econ_sim.gd to what a player who spends their coins has at that level. More than 15% below it, the current or next node shows a warning tint (never under the first-build pointer); every level is still winnable without upgrades.",
     "dps": 10.0,
-    "cap": 0.2,
+    "cap": 0.1,
     "charge": 15.0,
     "coin_pct": 1.0,
     "recommended": [[1, 60], [3, 60], [5, 90], [10, 155], [20, 300], [30, 485], [40, 670], [50, 815]]

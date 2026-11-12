@@ -33,6 +33,11 @@ const ALLY_SFX := {
 }
 const CHAR_H := 1.85            # baked character height (config/characters.json)
 const BOSS_SCALE := 2.6         # bosses are drawn this much bigger than a thug
+const BOSS_FAR_SCALE := 1.6     # a far boss is drawn up to this much bigger again (boss_grow)
+const BOSS_RIM := 0.3           # extra rim light on the boss: his dark suit never melts into the stash
+const INK_W := 0.028            # crowd ink outline width (crowd_outline.gdshader default)
+const INK_W_PACKED := 0.012     # a full squad's followers: thinner ink, no grey-purple smudge
+const DEPTH_SPREAD := 1.3       # a full squad's rows open up this much in depth (view only; smudge fix)
 const ENEMY_SCALE := 1.3        # gang members are drawn bigger than troops so far fights read
 const BOSS_BEAT_Z := -35.0      # a boss closer than this pulls the camera in (World.beat)
 const CAM_FOLLOW := 0.5         # the camera follows the squad sideways by this share
@@ -46,12 +51,18 @@ var world: World
 var fx: Fx
 var font: Font
 var level_id := 1
+var _level: Dictionary = {}    # the level config (pre-warm reads its gates and icons)
+var _places: Dictionary = {}   # squad size -> formation place per slot (see _place_of)
 var district := 1
 var demo := false
 var paused := false
 var input_enabled := true      # false under --autoplay so stray clicks can't interfere
 var hold := false              # a first-run tutorial (Tutorial) freezes the street until the player acts
-var slow := false              # ... or runs it at 0.3 speed while it shows something (red gate)
+var perf_on := false           # perf=1: main.gd logs these markers next to each frame time
+var perf_marks: Array[String] = []
+const PERF_EVENTS := ["rank_join", "row_pass", "horde_spawn", "bomb", "barrel_boom", "obstacle_hit",
+	"obstacle_broken", "finish", "revive", "lost", "melee_start"]
+var slow := false              # unused since spec v2 §3 (time never slows); kept for Tutorial
 
 var _crowds: Dictionary = {}
 var _allies: Array = []        # {kind, pos, slot, phase, flash, fire_t}
@@ -72,10 +83,17 @@ var _label_pop := 0.0
 var _shield: MeshInstance3D
 var _shield_mat: StandardMaterial3D
 var _finish: Node3D
+var _finish_live := false      # the finish was spawned (it is built hidden at load to pre-warm)
+const WARM_FRAMES := 3         # spec v2 §3: every crowd, effect, obstacle, gate and the stash
+var _warm: Array[Node3D] = []  # draws out of sight for the first frames, so their shaders
+var _warm_left := 0            # compile during loading and not when a rank joins
+var _warm_at := Vector3(0, -8, -16)
 var _hq: Node3D
 var _hq_fill: MeshInstance3D
 var finale: BottleShot = null
 var _hero_throw_t := -1.0
+var _bomb_throw_t := -1.0          # seconds into the hero's bomb throw (-1: none; spec v2 §12.5)
+var _rf_sfx_t := 0.0               # return fire plays its shot sound at most this often
 var _hero_knife_t := 9.0         # seconds since the hero's last in-level knife throw
 var _spotlight := 0.0            # seconds of new-rank spotlight left (real time)
 var _spot_kind := ""             # the rank in the spotlight
@@ -86,6 +104,16 @@ var _danger_at := Vector3.ZERO
 var _was_standoff := false
 var _boss_step := 0.0            # boss footfall clock (camera thump, dust)
 var _touching := false
+var _touch: TouchClassifier = null   # tap vs swipe per finger (spec v2 §2)
+var _steer_id := -1              # the finger that steers (-1: none)
+var _flick_t := 9.0              # seconds since the last tap (the hero's hand flick)
+const FLICK_S := 0.14            # the flick's length (s)
+var _heat_ring: MeshInstance3D   # spec v2 §2: the tap-heat arc at the hero's feet
+var _heat_mat: ShaderMaterial
+var _heat_local := 0.0           # visual heat while the sim has no tap_heat (before CORE's merge)
+const HEAT_COLD := Color("5ab4ff")
+const HEAT_WARM := Color("ffd23f")
+const HEAT_HOT := Color("ff4a24")
 var _drag_from_x := 0.0          # finger x when the drag (re)started
 var _steer_from := 0.0           # squad target x at that moment
 var _steer_x := 0.0              # where the finger wants the squad
@@ -102,7 +130,6 @@ var _laser_mat: StandardMaterial3D
 var _marks: Array = []         # per lane {node, mat, t, dur}: firebomb landing rings
 var _shown_count: Dictionary = {}  # ally kind -> figures drawn (updated on squad changes)
 var _boss_music := false
-var _slowmo := 0.0             # seconds of boss-death slow motion left (real time)
 var _key_light: OmniLight3D = null
 var _anim_t := 0.0             # animation clock (seconds)
 var _meshes: Dictionary = {}            # size -> BoxMesh / name -> Mesh, shared by this level's obstacles
@@ -122,6 +149,7 @@ func setup(level: Dictionary, upgrades: Dictionary, w: World, f: Fx, fnt: Font, 
 	font = fnt
 	demo = is_demo
 	level_id = int(level.get("id", 1))
+	_level = level
 	district = district_of(level)
 	sim = LevelSim.new(level, Game.units, upgrades)
 	fx.scroll_speed = 0.0
@@ -148,7 +176,7 @@ func _ready() -> void:
 		_crowds[k] = c
 		# Stronger rim light keeps figures off the road, more so at dusk and night.
 		(c.material_override as ShaderMaterial).set_shader_parameter("rim_strength",
-			(0.4 if k in ALLY_KINDS else 0.3) + (0.2 if district >= 4 else 0.0))
+			(0.4 if k in ALLY_KINDS else 0.3) + (0.2 if district >= 4 else 0.0) + (BOSS_RIM if k == "boss" else 0.0))
 	_build_lasers()
 	if district >= 4:
 		# Dusk and night: a soft key light rides with the squad so it never sinks into the road.
@@ -166,6 +194,8 @@ func _ready() -> void:
 	_squad_label.modulate = Color("8fd0ff")
 	add_child(_squad_label)
 	_build_shield()
+	_build_heat_ring()
+	_prewarm()
 	var outfit := Game.outfit()
 	var hc: Dictionary = Game.economy["hero_colors"]
 	(_crowds["hero"] as Crowd).recolor({Color(String(hc["shirt"])): Color(String(outfit["shirt"])),
@@ -183,16 +213,36 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if demo or paused or _state != "play" or not input_enabled:
 		return
-	# Drag to steer: the squad follows the finger 1:1 anywhere on screen; the lane is the
-	# nearest one; letting go settles the squad into it.
+	# Spec v2 §2: a short still touch in the lower half is a tap (powers the hero, never
+	# steers); a touch that moves is a swipe (steers 1:1 anywhere on screen, never fires).
+	if _touch == null:
+		_touch = TouchClassifier.new(Game.units.get("input", {}), touch_density())
+	var now := Time.get_ticks_msec() / 1000.0
 	if event is InputEventScreenTouch:
 		var t := event as InputEventScreenTouch
-		_touching = t.pressed
-		_drag_from_x = t.position.x
-		_steer_from = _squad_x
-		_steer_x = _squad_x
-	elif event is InputEventScreenDrag and _touching:
+		if t.pressed:
+			_touch.press(t.index, t.position, now)
+			return
+		var from: Variant = _touch.origin(t.index)
+		var r := _touch.release(t.index, t.position, now)
+		if r == "tap" and from != null and _touch.in_zone(from, get_viewport().get_visible_rect().size):
+			tap()
+		if t.index == _steer_id:
+			_steer_id = -1
+			_touching = false
+	elif event is InputEventScreenDrag:
 		var d := event as InputEventScreenDrag
+		if _touch.move(d.index, d.position, now) != "steer":
+			return
+		if _steer_id < 0:
+			# The swipe starts where the finger went down, so the first few pixels count too.
+			_steer_id = d.index
+			_touching = true
+			_drag_from_x = (_touch.origin(d.index) as Vector2).x
+			_steer_from = _squad_x
+			_steer_x = _squad_x
+		if d.index != _steer_id:
+			return
 		var w := get_viewport().get_visible_rect().size.x
 		_steer_x = clampf(_steer_from + (d.position.x - _drag_from_x) / w * STEER_PER_SCREEN,
 			LANE_X[0], LANE_X[2])
@@ -216,6 +266,72 @@ func _unhandled_input(event: InputEvent) -> void:
 			use_power("shield")
 		elif k == KEY_B:
 			use_power("bomb")
+		elif k == KEY_SPACE:
+			tap()
+
+
+## Screen density for the tap threshold: the OS scale, or dots per inch over 160 (Android dp).
+static func touch_density() -> float:
+	return maxf(DisplayServer.screen_get_scale(), DisplayServer.screen_get_dpi() / 160.0)
+
+
+## One tap: the hero's heat rises (LevelSim.tap, spec v2 §2) and his hand flicks.
+func tap() -> void:
+	if paused or _state != "play":
+		return
+	if sim.has_method("tap"):
+		sim.call("tap")
+	else:
+		var tc: Dictionary = Game.units.get("hero", {}).get("tap", {})
+		_heat_local = minf(_heat_local + float(tc.get("per_tap", 0.3)), 1.0)
+	_flick_t = 0.0
+	# The flick: a pinch of sparks off his throwing hand.
+	if not _allies.is_empty() and _allies[0]["kind"] == "hero" and sim.squad.hero_alive():
+		fx.burst((_allies[0]["pos"] as Vector3) + Vector3(0.32, 1.35, -0.25), Color(1.0, 0.9, 0.6), 3, 2.2, 0.07, 0.16, 1.0, 0.0)
+
+
+## The hero's tap heat 0..1 (LevelSim.tap_heat; the view's own estimate until the sim has it).
+func tap_heat() -> float:
+	var h: Variant = sim.get("tap_heat") if sim else null
+	return float(h) if h != null else _heat_local
+
+
+func _build_heat_ring() -> void:
+	_heat_ring = MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(1.9, 1.9)
+	_heat_ring.mesh = pm
+	_heat_mat = ShaderMaterial.new()
+	_heat_mat.shader = GateRowView.ARC
+	_heat_mat.set_shader_parameter("track", Color(HEAT_COLD, 0.3))
+	_heat_mat.set_shader_parameter("inner", 0.74)
+	_heat_mat.set_shader_parameter("outer", 0.92)
+	_heat_ring.material_override = _heat_mat
+	_heat_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_heat_ring)
+
+
+## The heat arc follows the hero's feet: it fills and warms (blue, gold, red-hot) with tapping.
+func _update_heat_ring(d: float) -> void:
+	_flick_t += d
+	if sim.get("tap_heat") == null:
+		var tc: Dictionary = Game.units.get("hero", {}).get("tap", {})
+		_heat_local = maxf(_heat_local - d / maxf(float(tc.get("decay_s", 1.0)), 0.05), 0.0)
+	var show: bool = not demo and _state == "play" and not _allies.is_empty() \
+		and _allies[0]["kind"] == "hero" and sim.squad.hero_alive()
+	_heat_ring.visible = show
+	if not show:
+		return
+	var h := clampf(tap_heat(), 0.0, 1.0)
+	_heat_ring.position = (_allies[0]["pos"] as Vector3) + Vector3(0, 0.05, 0)
+	_heat_mat.set_shader_parameter("fill", h)
+	var c := HEAT_COLD.lerp(HEAT_WARM, h * 2.0) if h < 0.5 else HEAT_WARM.lerp(HEAT_HOT, h * 2.0 - 1.0)
+	_heat_mat.set_shader_parameter("color", c)
+
+
+## The hero's fire-rate multiplier from the heat (1 until the sim has it).
+func hero_mult() -> float:
+	return float(sim.call("hero_rate_mult")) if sim and sim.has_method("hero_rate_mult") else 1.0
 
 
 func _move(dir: int) -> void:
@@ -300,26 +416,20 @@ func _process(delta: float) -> void:
 				finished.emit({"won": false, "cause": sim.lose_cause, "kills": sim.kills, "level": level_id})
 
 
+## The street's speed this frame (1 = real time; 0 only while a first-run tutorial holds it).
+func time_scale() -> float:
+	return _time_scale
+
+
 func _update_time_scale(delta: float) -> void:
 	var target := 1.0
 	if hold:
 		_time_scale = 0.0
 		return
-	if slow:
-		_time_scale = 0.3
-		return
-	if _slowmo > 0.0:
-		# Boss death: half a second of slow motion (the sim stays exact, just slower).
-		_slowmo -= delta
-		_time_scale = 0.3
-		return
+	# Spec v2 §3: nothing else slows the street (no rank spotlight, no red-gate or boss-death
+	# slow motion); only the first-run tutorial holds above and below stop it.
 	if _spotlight > 0.0:
-		# A new rank's first arrival: one second at 0.3 speed with a ring under them.
-		_spotlight -= delta
-		_time_scale = 0.3
-		if _spotlight <= 0.0 and _spot_ring:
-			_spot_ring.visible = false
-		return
+		_spotlight -= delta   # the new rank's gold ring stays up for a second, at full speed
 	for id in _rows:
 		var row: Dictionary = (_rows[id] as GateRowView).row
 		var z := float(row["z"])
@@ -346,6 +456,8 @@ func _update_time_scale(delta: float) -> void:
 
 func _handle_events(events: Array) -> void:
 	for e in events:
+		if perf_on and String(e["type"]) in PERF_EVENTS:
+			perf_marks.append(String(e["type"]) + ("" if not e.has("unit") else ":" + String(e["unit"])))
 		if _log_events and not String(e["type"]) in ["kill", "gate_tick", "boss_hit"]:
 			print("EV %d %s %s" % [Engine.get_process_frames(), e["type"], e["horde"].get("enemy", "") if e.get("horde") is Dictionary else ""])
 		match String(e["type"]):
@@ -400,6 +512,10 @@ func _handle_events(events: Array) -> void:
 					Sfx.play("flip")
 			"bomb":
 				_on_bomb(e)
+			"bomb_throw":
+				_on_bomb_throw(e)
+			"return_fire":
+				_on_return_fire(e)
 			"shield_on":
 				Sfx.play("shield")
 			"hint":
@@ -423,6 +539,11 @@ func _handle_events(events: Array) -> void:
 				Sfx.play("hurt")
 				var hit_ob: Dictionary = e["ob"]
 				var hole := String(hit_ob.get("kind", "")) == "pothole"
+				if String(hit_ob.get("kind", "")) == "barrel":
+					# The squad smashes an unarmed drum: metal and oil fly (never "rubber").
+					var bp := _obstacle_pos(hit_ob) + Vector3(0, 0.7, 0)
+					fx.burst(bp, GateRowView.BARREL_RED, 16, 6.0, 0.22, 0.6, 4.0)
+					fx.burst(bp, Color(0.08, 0.07, 0.06), 12, 4.0, 0.3, 0.7, 2.0)
 				# Exactly the figures that stood on its footprint fall; the rest close ranks.
 				_kill_overlap(e, hole)
 				# A pothole stays in the road and rides away; anything solid was smashed.
@@ -486,11 +607,11 @@ func _on_row_pass(e: Dictionary) -> void:
 	fx.burst(src + Vector3(0, 1.6, 0), col.lightened(0.3), 26, 7.0, 0.22, 0.6)
 	match String(g["op"]):
 		"num", "pct", "div", "mul", "recruit":
-			var txt := ("+%d" % delta) if delta >= 0 else ("%d" % delta)
+			var txt := NumFormat.signed(delta) if delta != 0 else "+0"
 			if g["op"] == "mul":
-				txt = "×%d  →  %d" % [int(g["k"]), int(e["after"])]
+				txt = "×%d  →  %s" % [int(g["k"]), NumFormat.fmt(int(e["after"]))]
 			elif g["op"] == "recruit":
-				txt = "+%d %s" % [delta, String(g["unit"]).to_upper()]
+				txt = "+%s %s" % [NumFormat.fmt(delta), String(g["unit"]).to_upper()]
 			if delta >= 0:
 				Sfx.play("gate_good")
 				Sfx.play("recruit", -4.0)
@@ -512,11 +633,13 @@ func _on_row_pass(e: Dictionary) -> void:
 func _on_horde_spawn(h: Dictionary) -> void:
 	var kind := String(h["enemy"])
 	var n := int(h["count"])
-	var per := maxi(1, int(ceil(n / float(HORDE_CAP))))
+	# The sim stands a gang in at most world.gang_figures figures of `per` people each
+	# (LevelSim._spawn_horde); one figure row is one of its rows, so rows sit row_gap apart.
+	var per := maxi(int(h.get("per", ceili(n / float(HORDE_CAP)))), 1)
 	var vis := int(ceil(n / float(per)))
 	var cols := int(h["cols"])
 	var dx := 9.0 / maxf(cols, 1)
-	var dz := float(h["row_gap"]) * per
+	var dz := float(h["row_gap"]) * (1 if h.has("per") else per)
 	var offs: Array = []
 	for i in vis:
 		var r := i / cols
@@ -579,9 +702,15 @@ func _on_turncoat(e: Dictionary) -> void:
 
 func _on_barrel_boom(e: Dictionary) -> void:
 	var ob: Dictionary = e["ob"]
-	var p := _obstacle_pos(ob)
+	var od: Dictionary = _obstacles.get(int(ob["id"]), {})
+	var p: Vector3 = (od["node"] as Node3D).position if not od.is_empty() else _obstacle_pos(ob)
 	_free_obstacle(int(ob["id"]))
 	fx.explosion(p + Vector3(0, 0.8, 0), 2.2)
+	fx.ring(p + Vector3(0, 0.3, 0), Color("ff8a2a"), 48, 13.0, 0.3)
+	# Spec v2 §5: a big, readable blast count (exactly the gang members it killed).
+	var killed := int(e.get("killed", 0))
+	if killed > 0:
+		fx.float_text("-" + NumFormat.fmt(killed), p + Vector3(0, 3.2, 0), Color("ffd23f"), 2.2, 3.0, 1.5)
 	world.shake(1.1)
 	Sfx.play("boom")
 	Game.vibrate(150)
@@ -622,16 +751,61 @@ func _gun_tracers(horde_id: int, blocked: bool) -> void:
 		world.shake(0.5)
 
 
+## Spec v2 §12.5, the throw: the hero plays the overhand `throw` clip and a bomb with a
+## sparking fuse arcs from his hand down the lane to where its target will be at landing.
+func _on_bomb_throw(e: Dictionary) -> void:
+	_bomb_throw_t = 0.0
+	var from := Vector3(_squad_x + 0.35, 1.7, -0.9)
+	if not _allies.is_empty() and _allies[0]["kind"] == "hero":
+		from = (_allies[0]["pos"] as Vector3) + Vector3(0.35, 1.7, -0.3)
+	var to := Vector3(float(e.get("x", _squad_x)), 0.35, float(e["z"]))
+	fx.bomb(from, to, float(e["t"]), clampf(-float(e["z"]) * 0.12, 1.5, 6.0))
+	Sfx.play("swoosh", -3.0, 0.8)
+
+
+## The landing: the blast where the sim set it off (a gang's front, a wreck, the road),
+## a shock ring and the exact number it killed.
 func _on_bomb(e: Dictionary) -> void:
-	var hv: Dictionary = _hordes.get(e["horde"], {})
-	var p := Vector3(0, 0.5, float(e["z"]) - 2.0)
-	if not hv.is_empty():
-		p = _horde_front(hv) + Vector3(0, 0.5, -2.0)
-	fx.shoot("bullet_big", Vector3(_squad_x, 2.0, -1.0), p, 30.0)
-	fx.explosion(p, 1.6)
+	var hv: Dictionary = _hordes.get(e.get("horde", -1), {})
+	var p := Vector3(float(e.get("x", _squad_x)), 0.5, float(e["z"]))
+	if not hv.is_empty() and String(e.get("target", "horde")) == "horde":
+		p.z = _horde_front(hv).z
+	fx.explosion(p, 1.8)
+	fx.ring(p + Vector3(0, 0.2, 0), Color("ffb347"), 40, 11.0, 0.28)
+	var killed := int(e.get("killed", 0))
+	if killed > 0:
+		fx.float_text("-" + NumFormat.fmt(killed), p + Vector3(0, 3.0, 0), Color("ffd23f"), 2.0, 3.0, 1.3)
 	world.shake(1.0)
 	Sfx.play("boom")
 	Game.vibrate(150)
+
+
+## Spec v2 §12.2: a gang firing back. Muzzle flashes on its front shooters, tracers into the
+## squad (or onto the shield), and the followers it hit fall.
+func _on_return_fire(e: Dictionary) -> void:
+	var hv: Dictionary = _hordes.get(e["horde"], {})
+	if hv.is_empty():
+		return
+	var offs: Array = hv["offs"]
+	if offs.is_empty():
+		return
+	hv["shoot_flash"] = 0.12
+	var blocked := bool(e["blocked"])
+	var front := mini(offs.size(), maxi(int(hv["h"]["cols"]) * 2, 1))
+	for i in mini(int(e["shots"]), 5):
+		var from := _fig_pos(hv, offs[randi() % front]) + Vector3(0.22, 1.3, 0.55)
+		fx.muzzle(from)
+		var to := Vector3(_squad_x + randf_range(-1.2, 1.2), 1.0, randf_range(-0.2, 1.8))
+		if blocked:
+			to = Vector3(_squad_x + randf_range(-1.4, 1.4), 1.2 + randf(), -2.2)
+		fx.shoot("tracer", from, to, 75.0)
+	if _rf_sfx_t <= 0.0:
+		_rf_sfx_t = 0.09
+		Sfx.play("shot", -9.0, randf_range(0.8, 0.95))
+	if blocked:
+		fx.burst(Vector3(_squad_x, 1.6, -2.2), Color("9fc6ff"), 4, 4.0, 0.15, 0.25)
+	elif int(e["lost"]) > 0:
+		_sync_allies(Vector3(_squad_x, 0, 0))
 
 
 # ---------------------------------------------------------------- v1 threats and moments
@@ -647,7 +821,7 @@ func _on_pothole(e: Dictionary) -> void:
 	fx.burst(hole + Vector3(0, 0.3, 0), Color(0.42, 0.36, 0.3), 16, 4.0, 0.22, 0.5)
 	var lost := int(e["lost"])
 	if lost > 0:
-		fx.float_text("-%d" % lost, hole + Vector3(0, 2.6, 0), Color("ff5a5f"), 0.9)
+		fx.float_text("-" + NumFormat.fmt(lost), hole + Vector3(0, 2.6, 0), Color("ff5a5f"), 0.9)
 		Game.vibrate(70)
 	# The troops the hole took drop into it (obstacle_hit picks exactly which ones).
 	_death_at = hole
@@ -661,7 +835,7 @@ func _on_barricade_hit(e: Dictionary) -> void:
 	Game.vibrate(90)
 	var lost := int(e["lost"])
 	if lost > 0:
-		fx.float_text("-%d" % lost, p + Vector3(0, 2.8, 0), Color("ff5a5f"), 0.9)
+		fx.float_text("-" + NumFormat.fmt(lost), p + Vector3(0, 2.8, 0), Color("ff5a5f"), 0.9)
 	var g = e.get("blocked_gate")
 	if g == null:
 		return
@@ -729,7 +903,7 @@ func _on_firebomb_hit(e: Dictionary) -> void:
 		Sfx.play("hurt", -3.0)
 		world.shake(0.45)
 		Game.vibrate(60)
-		fx.float_text("-%d" % lost, at + Vector3(0, 2.8, 0), Color("ff8a3d"), 0.9)
+		fx.float_text("-" + NumFormat.fmt(lost), at + Vector3(0, 2.8, 0), Color("ff8a3d"), 0.9)
 		_sync_allies(Vector3(_squad_x, 0, 0))
 
 
@@ -782,7 +956,7 @@ func _on_boss_hit(e: Dictionary) -> void:
 				fx.burst(bp, Color("e0484f"), 26, 7.0, 0.24, 0.6, 4.0)
 				fx.burst(bp, Color(0.06, 0.06, 0.08), 12, 6.0, 0.2, 0.5, 3.0)
 				(hv["bar"] as Node3D).visible = false
-			_slowmo = 0.5
+			fx.ring(c, Color(1.0, 0.85, 0.35), 40, 14.0, 0.3)   # no slow motion (spec v2 §3): a shock ring
 	if hp <= 0:
 		world.shake(1.2)
 		Sfx.play("boom")
@@ -798,7 +972,7 @@ func _on_rank_join(e: Dictionary) -> void:
 	if first:
 		fx.ring(Vector3(_squad_x, 0.4, 0.4), GateRowView.GOLD, 32, 8.0)
 		_sfx("rank_up", "recruit", -2.0)
-		# Spotlight: one second at 0.3 speed with a gold ring under the newcomers.
+		# Spotlight: a gold ring under the newcomers for a second (time stays at 1.0).
 		if not demo:
 			_spotlight = 1.0
 		_spot_kind = String(e["unit"])
@@ -959,12 +1133,12 @@ func _update_boss_bar(hv: Dictionary, d: float) -> void:
 	var h: Dictionary = hv["h"]
 	var bar: Node3D = hv["bar"]
 	var front := _horde_front(hv)
-	var k := BOSS_SCALE * crowd_scale((hv["offs"] as Array).size())
+	var k := BOSS_SCALE * boss_grow(front.z) * crowd_scale((hv["offs"] as Array).size())
 	# Always above the scaled model's head, never inside it.
 	# Faces the camera and grows with distance, so it reads the same far up the street;
 	# its bottom edge stays above the scaled model's head.
 	var size := 1.0
-	var cam := get_viewport().get_camera_3d()
+	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
 	if cam:
 		bar.basis = cam.global_transform.basis
 		size = clampf(cam.global_position.distance_to(front) / 16.0, 1.0, 3.2)
@@ -975,7 +1149,7 @@ func _update_boss_bar(hv: Dictionary, d: float) -> void:
 	var fill: MeshInstance3D = hv["bar_fill"]
 	if hp != int(hv["bar_hp"]):
 		hv["bar_hp"] = hp
-		(hv["bar_num"] as Label3D).text = str(hp)
+		(hv["bar_num"] as Label3D).text = NumFormat.fmt(hp)
 		var frac := clampf(hp / mx, 0.0, 1.0)
 		fill.scale.x = maxf(frac, 0.001)
 		fill.position.x = -1.65 * (1.0 - frac)
@@ -1079,7 +1253,7 @@ func _kill_overlap(e: Dictionary, hole: bool) -> void:
 	for a in _allies:
 		if a["kind"] == "hero" and sim.squad.hero_alive():
 			continue
-		var sx := at_x + Squad.slot_offset(int(a["slot"]), n, sim.form_half).x
+		var sx := at_x + Squad.slot_offset(_place_of(int(a["slot"]), n), n, sim.form_half).x  # where it stands
 		order.append([absf(sx - ob_x), int(a["slot"]), a])
 	order.sort_custom(func(x, y): return x[0] < y[0] or (x[0] == y[0] and x[1] < y[1]))
 	for i in mini(k, order.size()):
@@ -1165,8 +1339,52 @@ static func crowd_scale(n: int) -> float:
 func _slot_pos(slot: int, n: int) -> Vector3:
 	var lift := -7.0 if demo else 0.0  # lobby: squad further up the street, above the menu
 	# The same formation the sim hits obstacles with (Squad.slot_offset), around _squad_x.
-	var o := Squad.slot_offset(slot, n, sim.form_half if sim else 0.0)
-	return Vector3(_squad_x + o.x, 0, o.y + lift)
+	var o := Squad.slot_offset(_place_of(slot, n), n, sim.form_half if sim else 0.0)
+	# Spec v2 §4 smudge: a big squad packs its rows so tight that only caps show (a dark blob).
+	# Rows open up in depth around the formation's centre; depth is the view's alone (the sim
+	# hits obstacles by x only), so the arithmetic is untouched.
+	if slot > 0:
+		var zc := 1.1 + 0.18 * crowd_scale(n) * sqrt(maxf(n, 1))  # Squad.slot_offset's centre
+		o.y = zc + (o.y - zc) * depth_spread(n)
+	# A hair of height per place keeps overlapping caps and hats from z-fighting.
+	return Vector3(_squad_x + o.x, 0.012 * (slot % 4), o.y + lift)
+
+
+## Spec v2 §5: a boss far up the street is drawn bigger (up to BOSS_FAR_SCALE at 70 m), easing
+## to his true size by 30 m, so he is never lost behind his escorts while he walks in.
+static func boss_grow(z: float) -> float:
+	return lerpf(1.0, BOSS_FAR_SCALE, clampf((-z - 30.0) / 40.0, 0.0, 1.0))
+
+
+## Followers' ink outline width for a squad of n shown figures: full ink while the squad is
+## small, thinner once heads overlap (the hero keeps full ink and stands out).
+static func ink_width(n: int) -> float:
+	return lerpf(INK_W, INK_W_PACKED, clampf((n - 30) / 40.0, 0.0, 1.0))
+
+
+## How much a squad of n shown figures opens up in depth (1 = the sim's rows).
+static func depth_spread(n: int) -> float:
+	return lerpf(1.0, DEPTH_SPREAD, clampf((n - 30) / 40.0, 0.0, 1.0))
+
+
+## Spec v2 §4 smudge fix. The formation's places are the sim's (Squad.slot_offset); this only
+## decides who stands where. Slot 0 (the hero) stays in front; the ranks after him (snipers,
+## commandos, SWAT, inspectors, sergeants, by ALLY_ORDER) take the rear places nearest the
+## camera, seen whole instead of as a clump of purple and brown hats in the middle of the
+## blob; constables fill the rest, rear to front.
+func _place_of(slot: int, n: int) -> int:
+	if slot <= 0 or n <= 2:
+		return slot
+	if not _places.has(n):
+		var half := sim.form_half if sim else 0.0
+		var idx: Array = range(1, n)
+		idx.sort_custom(func(a, b):
+			var za := Squad.slot_offset(a, n, half).y
+			var zb := Squad.slot_offset(b, n, half).y
+			return za > zb or (za == zb and a < b))
+		_places[n] = [0] + idx
+	var p: Array = _places[n]
+	return int(p[slot]) if slot < p.size() else slot
 
 
 # ---------------------------------------------------------------- visuals
@@ -1182,6 +1400,11 @@ func _update_visuals(d: float) -> void:
 	var target_pos = _target_point()
 	_anim_t += d
 	_hero_knife_t += d
+	_rf_sfx_t = maxf(_rf_sfx_t - d, 0.0)
+	if _bomb_throw_t >= 0.0:
+		_bomb_throw_t += d
+		if _bomb_throw_t > Crowd.clip_length(_throw_clip()) or _state != "play":
+			_bomb_throw_t = -1.0
 	var moving := demo or _state == "play" or _state == "done"
 
 	for k in _crowds:
@@ -1190,6 +1413,10 @@ func _update_visuals(d: float) -> void:
 	# Allies
 	var n := _allies.size()
 	var troop_k := crowd_scale(_allies.size())
+	var ink := ink_width(n)
+	for k in ALLY_KINDS:
+		if k != "hero" and _crowds.has(k):
+			(_crowds[k] as Crowd).set_ink_width(ink)
 	for a in _allies:
 		var target := _slot_pos(int(a["slot"]), n)
 		var pos: Vector3 = a["pos"]
@@ -1212,6 +1439,10 @@ func _update_visuals(d: float) -> void:
 			dir.y = 0
 			if dir.length() > 0.5:
 				basis = Basis.looking_at(dir.normalized(), Vector3.UP)
+		if a["kind"] == "hero" and _flick_t < FLICK_S and _state == "play":
+			# The hand flick on a tap: a quick twist into the throw and back.
+			var fk := sin(PI * _flick_t / FLICK_S)
+			basis = basis * Basis(Vector3.UP, 0.2 * fk) * Basis(Vector3.RIGHT, -0.08 * fk)
 		var ph := float(a["phase"]) * 3.0
 		if a["kind"] == "hero" and _state == "finale":
 			if finale != null and is_instance_valid(finale) and finale.camera_in_head():
@@ -1224,10 +1455,14 @@ func _update_visuals(d: float) -> void:
 			var throw := _throw_clip()
 			var clip := throw if _hero_throw_t >= 0.0 else "idle"
 			(_crowds["hero"] as Crowd).push(Transform3D(basis, pos), clip, maxf(_hero_throw_t, 0.0) if clip == throw else _anim_t)
+		elif a["kind"] == "hero" and _bomb_throw_t >= 0.0:
+			# Spec v2 §12.5: one full overhand throw for the bomb (any weapon he holds).
+			var throw := _throw_clip()
+			(_crowds["hero"] as Crowd).push(Transform3D(basis, pos), throw, minf(_bomb_throw_t, Crowd.clip_length(throw)), float(a["flash"]))
 		elif aim > 0.0 and a["kind"] == "hero" and sim.squad.hero_weapon == "":
 			# Knives: a real overhand throw per knife, the clip sped up to fit the throw rate.
 			var throw := _throw_clip()
-			var per := 1.0 / maxf(float(sim.stats["hero"]["rate"]), 0.5)
+			var per := 1.0 / maxf(float(sim.stats["hero"]["rate"]) * hero_mult(), 0.5)
 			var speed := maxf(Crowd.clip_length(throw) / per, 1.0)
 			(_crowds["hero"] as Crowd).push(Transform3D(basis, pos), throw, minf(_hero_knife_t * speed, Crowd.clip_length(throw)), float(a["flash"]))
 		elif aim > 0.0:
@@ -1238,7 +1473,7 @@ func _update_visuals(d: float) -> void:
 			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis.scaled(Vector3.ONE * (1.0 if a["kind"] == "hero" else troop_k)), pos), "idle", _anim_t + ph, float(a["flash"]))
 
 	# Enemies
-	var cam := get_viewport().get_camera_3d()
+	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
 	var boss_near := false
 	for id in _hordes:
 		var bh: Dictionary = _hordes[id]["h"]
@@ -1253,7 +1488,7 @@ func _update_visuals(d: float) -> void:
 		var h: Dictionary = hv["h"]
 		var want := int(ceil(int(h["count"]) / float(hv["per"])))
 		var offs: Array = hv["offs"]
-		var esc := ENEMY_SCALE if hv["kind"] != "boss" else BOSS_SCALE
+		var esc := ENEMY_SCALE if hv["kind"] != "boss" else BOSS_SCALE * boss_grow(float(h["z"]))
 		while offs.size() > want:
 			var o: Vector3 = offs.pop_front()
 			var p := _fig_pos(hv, o)
@@ -1293,15 +1528,21 @@ func _update_visuals(d: float) -> void:
 		lab.scale = Vector3.ONE * ls
 		var ly := (4.6 if hv["kind"] == "brute" else 3.6) * ENEMY_SCALE * 0.85 + 0.3 * (ls - 1.0)
 		# Escorts walking with a boss: their count sits above the boss's bar, never on his chest.
+		# A gang walking ahead of a boss keeps its count low, just over its own heads, so the
+		# boss behind it stays in sight (spec v2 §5).
 		for bid in _hordes:
 			var bv: Dictionary = _hordes[bid]
-			if bv.has("bar") and absf(float(bv["h"]["z"]) - lz) < 7.0 and (bv["bar"] as Node3D).visible:
+			if not bv.has("bar") or not (bv["bar"] as Node3D).visible:
+				continue
+			if absf(float(bv["h"]["z"]) - lz) < 7.0:
 				var bar_top: float = (bv["bar"] as Node3D).position.y + 0.4 * (bv["bar"] as Node3D).scale.y
 				ly = maxf(ly, bar_top + 0.7 * ls)
+			elif float(bv["h"]["z"]) < lz and int(bv["h"]["count"]) > 0:
+				ly = minf(ly, CHAR_H * ENEMY_SCALE * crowd_scale(offs.size()) + 0.45 * ls)
 		lab.position = Vector3(0, ly, lz)
 		if int(h["count"]) != int(hv["shown"]):
 			hv["shown"] = int(h["count"])
-			lab.text = str(int(h["count"]))
+			lab.text = NumFormat.fmt(int(h["count"]))
 		# Closing in while the squad's fire goes elsewhere (a red gate, an obstacle): the count
 		# pulses so the threat behind the gate is visible before it arrives.
 		var ignored: bool = _state == "play" and not is_same(sim.target_ref, h) and LevelSim.front_z(h) > -18.0 and not h["melee"]
@@ -1390,6 +1631,9 @@ func _update_visuals(d: float) -> void:
 		(_crowds[fd["kind"]] as Crowd).push(Transform3D(basis, p), "hit", 0.1, 0.0)
 		i += 1
 
+	_update_heat_ring(d)
+	if _warm_left > 0:
+		_warm_frame()
 	for k in _crowds:
 		(_crowds[k] as Crowd).finish()
 	_update_telegraphs(d)
@@ -1398,7 +1642,7 @@ func _update_visuals(d: float) -> void:
 	for id in _rows:
 		var v: GateRowView = _rows[id]
 		v.position.z = float(v.row["z"])
-	if _finish:
+	if _finish and _finish_live:
 		_finish.position.z = -(sim.finish_at - sim.traveled)
 	for oid in _obstacles:
 		_update_obstacle(_obstacles[oid], d)
@@ -1437,7 +1681,7 @@ func _update_visuals(d: float) -> void:
 
 	# Squad label and shield.
 	_label_pop = maxf(_label_pop - d * 4.0, 0.0)
-	_squad_label.text = str(sim.squad.total())
+	_squad_label.text = NumFormat.fmt(sim.squad.total())
 	_squad_label.position = Vector3(_squad_x, 3.9, -0.8)
 	if _key_light:
 		_key_light.position = Vector3(_squad_x, 4.5, 2.5)
@@ -1489,7 +1733,9 @@ func _fire(a: Dictionary, target: Vector3) -> void:
 	var kind := String(a["kind"])
 	var unit: Dictionary = sim.stats[kind]
 	var rate := float(unit["rate"])
-	if kind != "hero":
+	if kind == "hero":
+		rate *= hero_mult()   # tap heat: idle hero throws slower, a tapping hero at full rate
+	else:
 		# A thinned-out rank fires faster so the screen still shows its real firepower.
 		var per := maxf(float(sim.squad.count(kind)) / maxf(float(_shown_count.get(kind, 1)), 1.0), 1.0)
 		rate *= minf(per, 2.5)
@@ -1561,8 +1807,11 @@ func _spawn_obstacle(ob: Dictionary) -> void:
 		"pothole":
 			_build_pothole(n, od)
 		"barrel":
-			n.add_child(_part(Vector3(1.0, 1.3, 1.0), Color("c8352b"), Vector3(0, 0.65, 0)))
-			n.add_child(_part(Vector3(1.06, 0.18, 1.06), Color("f2c14e"), Vector3(0, 0.95, 0)))
+			var bm := GateRowView.barrel_model()
+			n.add_child(bm["root"])
+			od["fuse"] = bm["fuse"]
+			od["body"] = bm["body"]
+			od["kick"] = 0.0
 		"car":
 			var car := World.model(["cars/sedan.glb", "cars/taxi.glb", "cars/van.glb", "cars/suv.glb"][int(ob["id"]) % 4], 1.45)
 			car.rotation.y = PI * (0.5 if int(ob["id"]) % 2 == 0 else -0.5)
@@ -1584,7 +1833,7 @@ func _spawn_obstacle(ob: Dictionary) -> void:
 		tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		tag.modulate = Color("ff5a5f")
 		tag.position = Vector3(0, 0.5, 0.9 if kind == "barrel" else 1.5)
-		tag.text = ("-%d%%" % int(ob["dmg_pct"])) if ob.has("dmg_pct") else ("-%d" % int(ob.get("dmg", 0)))
+		tag.text = ("-%d%%" % int(ob["dmg_pct"])) if ob.has("dmg_pct") else ("-" + NumFormat.fmt(int(ob.get("dmg", 0))))
 		n.add_child(tag)
 		od["tag"] = tag
 	add_child(n)
@@ -1616,7 +1865,7 @@ func _build_pothole(n: Node3D, od: Dictionary) -> void:
 	lab.modulate = Color("ff5a5f")
 	# On the hole's near lip, in front of any gate sign sharing the lane.
 	lab.position = Vector3(0, 0.55, 1.5)
-	lab.text = ("-%d%%" % int(ob["fall_pct"])) if ob.has("fall_pct") else ("-%d" % int(ob.get("fall", 0)))
+	lab.text = ("-%d%%" % int(ob["fall_pct"])) if ob.has("fall_pct") else ("-" + NumFormat.fmt(int(ob.get("fall", 0))))
 	n.add_child(lab)
 	od["tag"] = lab
 
@@ -1655,6 +1904,8 @@ func _update_obstacle(od: Dictionary, d: float) -> void:
 		on.scale = Vector3.ONE * (1.0 + 0.12 * absf(sin(_anim_t * 16.0)))
 		if od.has("tag"):
 			(od["tag"] as Node3D).visible = false  # an armed barrel no longer hurts the squad
+	if od.has("fuse"):
+		_update_barrel(od, on, armed, d)
 	od["chip_t"] = float(od["chip_t"]) - d
 	var lab = od["label"]
 	if lab == null:
@@ -1668,12 +1919,36 @@ func _update_obstacle(od: Dictionary, d: float) -> void:
 		var wood := String(ob.get("kind", "")) == "barricade"
 		fx.burst(on.position + Vector3(randf_range(-0.8, 0.8), 1.0, 0.4), Color("b88a52") if wood else Color(0.85, 0.85, 0.8), 3, 4.0, 0.14, 0.3)
 	od["hp_shown"] = hp
-	(lab as Label3D).text = str(hp)
+	(lab as Label3D).text = NumFormat.fmt(hp)
 	(lab as Label3D).visible = hp > 0 and not armed
 	var frac := float(ob["hp"]) / maxf(float(ob.get("hp_max", 1.0)), 1.0)
 	var cracks: Array = od["cracks"]
 	for ci in cracks.size():
 		(cracks[ci] as Node3D).visible = frac < (0.67 if ci == 0 else 0.34)
+
+
+## Spec v2 §5 barrel states: the fuse ring fills with the shots it takes; armed, ring and drum
+## blink. An armed barrel is no longer solid (the sim lets the squad through), so one the squad
+## walks into is kicked rolling to the kerb instead of the troops passing through it.
+func _update_barrel(od: Dictionary, on: Node3D, armed: bool, d: float) -> void:
+	var ob: Dictionary = od["ob"]
+	var fm: ShaderMaterial = od["fuse"]
+	var frac := 1.0 if armed else 1.0 - float(ob["hp"]) / maxf(float(ob.get("hp_max", 1.0)), 1.0)
+	fm.set_shader_parameter("fill", frac)
+	var bl := (0.5 + 0.5 * sin(_anim_t * 18.0)) if armed else 0.0
+	fm.set_shader_parameter("blink", bl)
+	fm.set_shader_parameter("color", Color("ff3b2a") if armed else GateRowView.FUSE_COLOR)
+	(od["body"] as StandardMaterial3D).albedo_color = GateRowView.BARREL_RED.lerp(Color("ffd23f"), bl * 0.55)
+	var kick := float(od["kick"])
+	var lane_x: float = LANE_X[int(ob["lane"])]
+	if armed and kick == 0.0 and absf(lane_x - _squad_x) < 1.9 and on.position.z > -1.2 and on.position.z < 1.5:
+		kick = 0.01 * (1.0 if lane_x >= _squad_x else -1.0)
+		Sfx.play("clink", -4.0, 0.7)
+	if kick != 0.0:
+		kick = signf(kick) * minf(absf(kick) + d * 7.0, 4.0)
+		od["kick"] = kick
+		on.position.x = clampf(lane_x + kick, -World.ROAD_HALF + 0.5, World.ROAD_HALF - 0.5)
+		(on.get_child(0) as Node3D).rotation = Vector3(0, 0, -kick * 1.2)
 
 
 ## `ride`: leave the node on the road (it scrolls away under the squad) instead of vanishing.
@@ -1750,10 +2025,113 @@ func _build_shield() -> void:
 	add_child(_shield)
 
 
+# ---------------------------------------------------------------- pre-warm (spec v2 §3)
+
+## Everything that first appears mid-level (each rank and enemy crowd, the effects, every
+## obstacle kind, a gate row, the rings, the stash) is drawn once below the road, inside the
+## camera's view and shadow range, for the first WARM_FRAMES frames. The GPU pipelines compile
+## while the level loads instead of as a hitch when followers join or the stash appears.
+func _prewarm() -> void:
+	_warm_at = _warm_spot()
+	_warm_left = WARM_FRAMES
+	_build_finish()
+	_finish.position = _warm_at + Vector3(0, -6, -6)
+	_spot_ring = _ground_ring(GateRowView.GOLD)
+	_spot_ring.position = _warm_at
+	var kinds := ["pothole", "barricade", "car", "barrel"]
+	for i in kinds.size():
+		var fake := {"id": -100 - i, "kind": kinds[i], "lane": 1, "z": 0.0, "hp": 10.0, "hp_max": 10.0,
+			"dmg": 1, "fall": 1, "x": 0.0}
+		_spawn_obstacle(fake)
+		var od: Dictionary = _obstacles[-100 - i]
+		_obstacles.erase(-100 - i)
+		_warm.append(od["node"])
+		(od["node"] as Node3D).position = _warm_at + Vector3(-4.5 + 3.0 * i, 0, -3)
+	var row := {"id": -1, "z": 0.0, "gates": [
+		{"lane": 0, "op": "num", "v": 5}, {"lane": 1, "op": "num", "v": -5, "step": 1.0, "max": 6},
+		{"lane": 2, "op": "power", "id": "bomb", "n": 1}]}
+	var gv := GateRowView.new().setup(row, font, LANE_X)
+	add_child(gv)
+	gv.position = _warm_at + Vector3(0, 0, 3)
+	_warm.append(gv)
+	if fx.has_method("prewarm"):
+		fx.prewarm(_warm_at)
+	# The boss bar (see-through backing, crown sprite, big number): first drawn when the boss
+	# walked in, a 54 ms frame on L10 with a cold shader cache.
+	var boss_lab := Label3D.new()
+	add_child(boss_lab)
+	var bv := {"label": boss_lab}
+	_build_boss_bar(bv)
+	(bv["bar"] as Node3D).position = _warm_at + Vector3(0, 1.0, -2.0)
+	(bv["bar_num"] as Label3D).text = "1,234K"
+	_warm.append_array([bv["bar"], boss_lab])
+	# Every icon this level shows (UiKit caches them), and every glyph at every label size and
+	# outline the street uses (the font is rasterised per size on first draw).
+	for e in _level.get("events", []):
+		for g in (e as Dictionary).get("gates", []):
+			var icon := String(GateRowView.describe(g).get("icon", ""))
+			if icon != "":
+				UiKit.icon_texture(icon)
+			if String(g.get("op", "")) == "recruit":
+				UiKit.icon_texture(String(g.get("unit", "constable")))
+		if String(e.get("type", "")) == "hint":
+			UiKit.icon_texture(String(e.get("icon", "")))
+	var j := 0
+	for so in [[150, 36], [130, 36], [108, 36], [100, 36], [84, 36], [120, 28], [110, 26], [100, 24],
+			[90, 21], [84, 20]]:
+		var lab := GateRowView._label(font, so[0], 0.011)
+		lab.outline_size = so[1]
+		lab.text = "+-×÷%0123456789?"
+		lab.position = _warm_at + Vector3(0, 0.5, -1.0 - j)
+		add_child(lab)
+		_warm.append(lab)
+		j += 1
+
+
+## A point below the road along a view ray through the lower screen: drawn (inside the view
+## and the sun's shadow range) but hidden under the street.
+func _warm_spot() -> Vector3:
+	var cam: Camera3D = world.camera if world else null
+	if cam == null or not cam.is_inside_tree():
+		return Vector3(0, -8, -16)
+	var size := cam.get_viewport().get_visible_rect().size
+	var o := cam.global_position
+	var dir := cam.project_ray_normal(Vector2(size.x * 0.5, size.y * 0.7))
+	if dir.y > -0.2:
+		return Vector3(0, -8, -16)
+	# Far enough along the ray to sit 8 m under the road.
+	return o + dir * ((o.y + 8.0) / -dir.y)
+
+
+func _warm_frame() -> void:
+	_warm_left -= 1
+	var i := 0
+	for k in _crowds:
+		(_crowds[k] as Crowd).push(Transform3D(Basis(), _warm_at + Vector3(-6.0 + 0.7 * i, -1.0, 0)), "run", 0.0, 0.5)
+		i += 1
+	if _warm_left > 0:
+		return
+	for n in _warm:
+		n.queue_free()
+	_warm.clear()
+	_spot_ring.visible = false
+	if not _finish_live:
+		_finish.visible = false
+
+
 func _spawn_finish(at: float) -> void:
+	if _finish == null:
+		_build_finish()
+	_finish_live = true
+	_finish.visible = true
+	_finish.position = Vector3(0, 0, -(at - sim.traveled))
+
+
+## The finish line and the gang's stash, built at load (out of sight, pre-warm) and shown when
+## the sim spawns the finish: building it then cost a 70 ms frame on a cold shader cache.
+func _build_finish() -> void:
 	_finish = Node3D.new()
 	add_child(_finish)
-	_finish.position.z = -(at - sim.traveled)
 	# Chequered line
 	for i in 20:
 		for j in 2:
@@ -1781,7 +2159,9 @@ func _begin_strike() -> void:
 	strike_ready.emit()
 	var hero := _slot_pos(0, _allies.size())
 	_hq.visible = false   # the squad bursts in: the finale is played inside the stash
-	finale = BottleShot.new().setup(world, fx, font, level_id, sim.squad.total(), hero, Game.coin_bonus())
+	# Coins count the squad as district-1 troops (LevelSim.coin_troops), so a 100K squad in
+	# district 5 pays like a full squad in district 1 and the economy's curve holds.
+	finale = BottleShot.new().setup(world, fx, font, level_id, sim.coin_troops(), hero, Game.coin_bonus())
 	finale.on_throw = func(): _hero_throw_t = 0.0
 	finale.done.connect(_on_finale_done)
 	add_child(finale)

@@ -162,3 +162,28 @@ func test_footprint_hits_only_the_overlap_up_to_capacity() -> void:
 	var near := Squad.footprint_hits(40, 72, 1.0, 0.0, 1.3, 0.2, 3, 1.25)
 	for i in (near["slots"] as Array):
 		check(Squad.slot_offset(int(i), 40, 1.25).x + 1.0 <= 1.0, "hit slots sit on the obstacle's side")
+
+
+func test_firepower_is_nominal_dps_with_the_hero_tap_rate() -> void:
+	# Spec v2 §12.4: damage per second against a plain unarmoured crowd, every rank at its
+	# best (bursts, splash, a sniper round's full damage), the hero at his current tap rate.
+	var stats: Dictionary = Config.units()["allies"]
+	var weapons: Dictionary = Config.units()["hero_weapons"]
+	var s := Squad.new()
+	s.hero_rate = 0.4
+	check(absf(s.firepower(stats, weapons) - 1.0 * 3.0 * 0.4) < 1e-6, "a cold hero alone: knife x 40%")
+	s.hero_rate = 1.0
+	check(absf(s.firepower(stats, weapons) - 3.0) < 1e-6, "a hot hero: full knife rate")
+	s.add("constable", 10)
+	check(absf(s.firepower(stats, weapons) - (3.0 + 16.0)) < 1e-6, "+10 constables x 1.6")
+	s.add("swat", 1)
+	s.add("commando", 1)
+	s.add("sniper", 1)
+	var want := 3.0 + 16.0 + 1.0 * 3.2 * 2.0 + 2.0 * 0.96 * 5.0 + 16.0 * 0.4
+	check(absf(s.firepower(stats, weapons) - want) < 1e-6, "burst, splash and sniper rounds at their best (%.2f vs %.2f)" % [s.firepower(stats, weapons), want])
+	s.hero_weapon = "pistol"
+	s.hero_rate = 0.5
+	var with_gun := s.firepower(stats, weapons)
+	check(absf(with_gun - (want - 1.5 + 2.0 * 3.0 * 0.5)) < 1e-6, "a held pistol fires at the hero's tap rate too")
+	s.lose(10)
+	check(s.firepower(stats, weapons) < with_gun, "losses drop it")

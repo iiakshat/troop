@@ -44,7 +44,18 @@ WEAPONS = UNITS["hero_weapons"]
 S0 = float(W["scroll_speed"])
 FIRE = float(W["fire_range"])
 CONTACT = float(W["contact_z"])
-CAP = int(W["max_squad"])
+# Spec v2 section 12.4: the squad cap grows by district (300 / 1K / 5K / 25K / 100K), so
+# gates and gangs scale with it; every count stays an exact integer.
+CAPS = [int(c) for c in W["squad_cap"]]
+CAP = CAPS[0]
+GANG_FIGS = int(W.get("gang_figures", 180))
+# Gang size ceilings below were tuned for the v1 squad cap of 150; they grow with the cap.
+V1_CAP = 150
+RF = UNITS.get("return_fire", {})
+
+
+def cap_of(d: int) -> int:
+    return CAPS[min(max(d, 1), len(CAPS)) - 1]
 
 DISTRICTS = ["Downtown", "Market", "Docks", "Industrial", "Uptown"]
 BOSS_BANNERS = ["KINGPIN", "THE BUTCHER", "DOCK KING", "IRON BARON", "OVERLORD"]
@@ -106,13 +117,17 @@ def unlocked(table: dict, level: int) -> list[str]:
 
 
 def nice(n: float) -> int:
-    """Friendly gate numbers: exact below 13, even to 40, then multiples of 5."""
+    """Friendly gate numbers: exact below 13, even to 40, multiples of 5 to 1,000, then
+    two or three leading digits (1,250 / 12,500 / 125,000)."""
     n = max(1, int(round(n)))
     if n <= 12:
         return n
     if n <= 40:
         return int(round(n / 2.0)) * 2
-    return int(round(n / 5.0)) * 5
+    if n <= 1000:
+        return int(round(n / 5.0)) * 5
+    step = 50 if n <= 10000 else (500 if n <= 100000 else 5000)
+    return int(round(n / float(step))) * step
 
 
 # ------------------------------------------------------------------ squad (mirrors Squad)
@@ -121,14 +136,16 @@ ORDER = ["constable", "sergeant", "inspector", "swat", "sniper", "commando", "he
 
 
 class Sq:
-    def __init__(self, cap: int = CAP):
+    def __init__(self, d: int = 1):
         self.c = {r: 0 for r in ORDER}
         self.c["hero"] = 1
-        self.cap = cap
+        self.d = d              # district: the cap, gang ceilings and return fire follow it
+        self.cap = cap_of(d)
         self.weapon = ""
 
     def copy(self) -> "Sq":
-        s = Sq(self.cap)
+        s = Sq(self.d)
+        s.cap = self.cap
         s.c = dict(self.c)
         s.weapon = self.weapon
         return s
@@ -167,7 +184,7 @@ class Sq:
         return max(n, 0) - left
 
     def pct(self, p: int) -> None:
-        amount = int(math.floor(self.total() * abs(p) / 100.0))
+        amount = self.total() * abs(p) // 100
         if p >= 0:
             self.add("constable", amount)
         else:
@@ -248,8 +265,12 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05) -> bool:
             attack = "fire"
         elif float(d.get("shoot_every", 0.0)) > 0:
             attack = "gun"
+        rf = d.get("return_fire", {})
+        rf_on = sq.d >= int(rf.get("from_district", RF.get("from_district", 2)))
         hs.append({"n": n, "start": n, "hp": float(d["hp"]), "armour": int(d["armour"]),
                    "power": int(d["power"]), "v": v, "stop": stop, "cols": int(d.get("cols", 9)),
+                   # a huge gang stands in GANG_FIGS figures of `per` people (LevelSim)
+                   "per": max(1, (n + GANG_FIGS - 1) // GANG_FIGS),
                    "gap": float(d.get("row_gap", 0.95)), "boss": bool(d.get("boss", False)),
                    "z": -stop - (x0 + float(g.get("gap", 0.0))) * (S0 + v) / S0,
                    "shield": float(d.get("shield", 0.0)) * n, "acc": 0.0, "st": 0.0, "mt": 0.0,
@@ -257,10 +278,17 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05) -> bool:
                    "every": float(d.get("throw_every", d.get("shoot_every", 0.0))),
                    "first": float(d.get("first_shot", d.get("throw_every", d.get("shoot_every", 0.0)))),
                    "hit": int(d.get("burn", d.get("shot_dmg", 1))),
-                   "range": float(d.get("shoot_range", 0.0))})
+                   "range": float(d.get("shoot_range", 0.0)),
+                   # return fire (spec v2 section 12.2)
+                   "rf_rate": float(rf.get("rate", 0.0)) if rf_on else 0.0,
+                   "rf_share": int(rf.get("share", 0)),
+                   "rf_range": float(rf.get("range", RF.get("range", 32.0))), "rf_acc": 0.0})
+
+    def row_size(h):
+        return max(h["cols"], 1) * h["per"]
 
     def front(h):
-        return h["z"] - ((h["start"] - h["n"]) // max(h["cols"], 1)) * h["gap"]
+        return h["z"] - ((h["start"] - h["n"]) // row_size(h)) * h["gap"]
 
     def damage(h, dmg, pierce):
         if h["shield"] > 0:
@@ -282,13 +310,13 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05) -> bool:
         speed = 0.0 if any(h["boss"] and front(h) >= -float(W["boss_halt"]) for h in hs) else S0
         for h in hs:
             if h["melee"]:
-                h["z"] = CONTACT + ((h["start"] - h["n"]) // max(h["cols"], 1)) * h["gap"]
+                h["z"] = CONTACT + ((h["start"] - h["n"]) // row_size(h)) * h["gap"]
                 continue
             if h["stopped"]:
                 continue
             h["z"] += (speed + h["v"]) * dt
             if h["stop"] > 0 and front(h) >= -h["stop"]:
-                h["z"] = -h["stop"] + ((h["start"] - h["n"]) // max(h["cols"], 1)) * h["gap"]
+                h["z"] = -h["stop"] + ((h["start"] - h["n"]) // row_size(h)) * h["gap"]
                 h["stopped"] = True
                 h["st"] = max(h["every"] - h["first"], 0.0)
         in_range = [h for h in hs if front(h) >= -FIRE and h["n"] > 0]
@@ -312,6 +340,16 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05) -> bool:
                 h["st"] -= h["every"]
                 sq.lose(h["n"] * h["hit"])
         for h in hs:
+            # Return fire: shooters = share % of the gang (rounded up), rf_rate shots/s each,
+            # one troop per hit, while the front is within rf_range (LevelSim._return_fire).
+            if h["n"] <= 0 or h["rf_rate"] <= 0 or h["melee"] or front(h) < -h["rf_range"]:
+                continue
+            h["rf_acc"] += (h["n"] * h["rf_share"] + 99) // 100 * h["rf_rate"] * dt
+            shots = int(math.floor(h["rf_acc"]))
+            if shots > 0:
+                h["rf_acc"] -= shots
+                sq.lose(shots)
+        for h in hs:
             if h["n"] <= 0:
                 continue
             if not h["melee"]:
@@ -323,7 +361,7 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05) -> bool:
             if h["mt"] > 0:
                 continue
             h["mt"] = float(W["melee_tick"])
-            row = min(h["cols"], h["n"])
+            row = min(row_size(h), h["n"])
             sq.lose(row * h["power"])
             if not h["boss"]:
                 h["n"] -= row
@@ -352,8 +390,9 @@ MIXES = {
 
 MIN_COUNT = {"thug": 6, "knifer": 6, "gunman": 3, "brute": 2, "biker": 3, "riot": 5,
              "molotov": 2, "sniper_foe": 2, "grenadier": 2, "boss": 1}
-# Gangs can be big (the view draws at most ~180 bodies per gang and the number tells the
-# rest); late squads of 150 with strong ranks need big ranged/armoured cores to feel it.
+# Gangs can be big (the view draws at most gang_figures bodies per gang and the number tells
+# the rest); late squads with strong ranks need big ranged/armoured cores to feel it. These
+# were tuned for a squad cap of 150 and grow with the district's cap (max_count).
 MAX_COUNT = {"thug": 600, "knifer": 500, "gunman": 400, "brute": 240, "biker": 400, "riot": 600,
              "molotov": 120, "sniper_foe": 90, "grenadier": 200, "boss": 1}
 
@@ -362,22 +401,29 @@ def mix_ok(name: str, level: int) -> bool:
     return all(int(ENEMIES[e]["unlock"]) <= level for e, _, _ in MIXES[name])
 
 
+def max_count(enemy: str, d: int) -> int:
+    """The gang size ceiling in district d: MAX_COUNT grows with the squad cap (spec v2 12.4)."""
+    if enemy == "boss":
+        return 1
+    return MAX_COUNT.get(enemy, 9999) * cap_of(d) // V1_CAP
+
+
 def screen_size(sq: Sq, enemy: str, secs: float) -> int:
     """How many of `enemy` the squad needs `secs` seconds of fire to cut down."""
     d = ENEMIES[enemy]
     dps = max(sq.dps(int(d["armour"]), float(d["hp"]), 1 << 30), 1.0)
     n = dps * secs / (float(d["hp"]) + float(d.get("shield", 0.0)))
-    return max(MIN_COUNT[enemy], min(MAX_COUNT[enemy], int(round(n))))
+    return max(MIN_COUNT[enemy], min(max_count(enemy, sq.d), int(round(n))))
 
 
-def wave_groups(mix: list, s: float, screen: int) -> list[dict]:
+def wave_groups(mix: list, s: float, screen: int, dist: int = 1) -> list[dict]:
     out = []
     single = len(mix) == 1
     for n, (e, w, gap) in enumerate(mix):
         if n == 0 and not single:
             count = screen
         else:
-            count = max(MIN_COUNT.get(e, 1), min(MAX_COUNT.get(e, 9999), int(round(s * w))))
+            count = max(MIN_COUNT.get(e, 1), min(max_count(e, dist), int(round(s * w))))
         g = {"enemy": e, "n": count}
         if gap:
             g["gap"] = gap
@@ -397,10 +443,10 @@ def size_wave(sq: Sq, mix: list, loss: float, screen_secs: float) -> tuple[list[
 
     def cost(s: float) -> tuple[bool, int]:
         s2 = sq.copy()
-        fight(s2, wave_groups(mix, s, screen))
+        fight(s2, wave_groups(mix, s, screen, sq.d))
         return s2.alive(), t0 - s2.total()
 
-    top = max(MAX_COUNT[e] / max(w, 0.01) for e, w, _ in (mix if len(mix) == 1 else mix[1:]))
+    top = max(max_count(e, sq.d) / max(w, 0.01) for e, w, _ in (mix if len(mix) == 1 else mix[1:]))
     lo, hi = 0.0, top
     alive, lost = cost(hi)
     if alive and lost < want:
@@ -413,7 +459,7 @@ def size_wave(sq: Sq, mix: list, loss: float, screen_secs: float) -> tuple[list[
                 lo = mid
             else:
                 hi = mid
-    groups = wave_groups(mix, lo * (0.7 if small else 1.0), screen)
+    groups = wave_groups(mix, lo * (0.7 if small else 1.0), screen, sq.d)
     after = sq.copy()
     fight(after, groups)
     return groups, after
@@ -481,12 +527,32 @@ def lane_obstacle(rng: random.Random, sq: Sq, lane: int, at: float, level: int, 
     return ev
 
 
+# Spec v2 section 12.4: bigger gates as the cap grows. Growth offers size themselves on the
+# squad, but never on less than GROW_FLOOR x the district's cap, so a fresh squad in a late
+# district gets a real kick (+350 in district 5, not +7). Multipliers reach x5: the highest
+# k a district offers, and the share of rows where the big one shows up.
+GROW_FLOOR = 0.01
+MUL_TOP = [3, 3, 4, 5, 5]
+MUL_BIG_P = [0.35, 0.35, 0.45, 0.5, 0.55]
+
+
+def grow_base(sq: Sq) -> int:
+    return max(sq.total(), int(cap_of(sq.d) * GROW_FLOOR))
+
+
 def offer(rng: random.Random, kind: str, sq: Sq, lane: int, level: int, ctx: dict) -> dict:
     t = sq.total()
+    b = grow_base(sq)
     if kind == "add":
-        return {"lane": lane, "op": "num", "v": nice(max(3, t * rng.uniform(0.35, 0.85) + rng.randint(3, 8)))}
+        return {"lane": lane, "op": "num", "v": nice(max(3, b * rng.uniform(0.35, 0.85) + rng.randint(3, 8)))}
     if kind == "mul":
-        k = 3 if (level >= 2 and t <= 30 and rng.random() < 0.35) else 2
+        top = MUL_TOP[sq.d - 1]
+        # District 1-2 keep v1's rule (x3 only while the squad is small); later districts
+        # offer x3..x5 while the squad is below a fifth of the cap.
+        small = t <= 30 if sq.d <= 2 else t * 5 <= sq.cap
+        k = 2
+        if level >= 2 and small and rng.random() < MUL_BIG_P[sq.d - 1]:
+            k = 3 if top == 3 else rng.randint(3, top)  # (districts 1-2 draw as in v1)
         return {"lane": lane, "op": "mul", "k": k}
     if kind == "recruit":
         ranks = [r for r in unlocked(ALLIES, level) if r not in ("hero", "constable")]
@@ -494,7 +560,7 @@ def offer(rng: random.Random, kind: str, sq: Sq, lane: int, level: int, ctx: dic
         weights = [1.0 + 2.0 * i for i in range(len(ranks))]  # newer ranks more often
         rank = rng.choices(ranks, weights)[0]
         value = sq_value(rank)
-        n = max(2, int(round((t * rng.uniform(0.25, 0.45) + 4) / value)))
+        n = max(2, int(round((b * rng.uniform(0.25, 0.45) + 4) / value)))
         return {"lane": lane, "op": "recruit", "unit": rank, "n": nice(n)}
     if kind == "pct":
         return {"lane": lane, "op": "pct", "v": rng.choice([30, 40, 50, 60])}
@@ -509,7 +575,7 @@ def offer(rng: random.Random, kind: str, sq: Sq, lane: int, level: int, ctx: dic
     if kind == "foe_div":
         return {"lane": lane, "op": "foe_div", "k": 2}
     if kind == "turncoat":
-        return {"lane": lane, "op": "turncoat", "n": nice(max(6, t * rng.uniform(0.3, 0.6)))}
+        return {"lane": lane, "op": "turncoat", "n": nice(max(6, b * rng.uniform(0.3, 0.6)))}
     raise ValueError(kind)
 
 
@@ -800,7 +866,7 @@ def generate(level: int) -> dict:
     i = index_in_district(level)
     boss = is_boss(level)
     diff = difficulty(level)
-    sq = Sq()
+    sq = Sq(d)
     events: list[dict] = []
     ctx: dict = {}
     run_secs = 64 + 14 * (level - 1) / (LEVELS - 1)
@@ -907,7 +973,7 @@ def generate(level: int) -> dict:
         at = pos
         lanes = [0, 1, 2]
         rng.shuffle(lanes)
-        gates = [offer(rng, "mul" if sq.total() < 90 else "recruit", sq, lanes[0], level, ctx),
+        gates = [offer(rng, "mul" if sq.total() < max(90, cap_of(d) * 3 // 10) else "recruit", sq, lanes[0], level, ctx),
                  {"lane": lanes[1], "op": "power", "id": "bomb", "n": 1}]
         gates.append(red_gate(rng, sq, lanes[2], level))
         gates.sort(key=lambda g: g["lane"])
@@ -920,7 +986,11 @@ def generate(level: int) -> dict:
         # Boss health: about 12 s of the planned squad's fire; his gun gets heavier each district.
         dps_boss = max(after.dps(int(ENEMIES["boss"]["armour"]), float(ENEMIES["boss"]["hp"]), 1), 5.0)
         hp = nice(max(150, dps_boss * (9 + 3 * d)))
-        boss_grp = {"enemy": "boss", "n": 1, "gap": 22, "hp": hp, "shot_dmg": 2 + 2 * d}
+        # His gun and his fists grow with the district's cap (a 100K squad must still feel them).
+        boss_grp = {"enemy": "boss", "n": 1, "gap": 22, "hp": hp,
+                    "shot_dmg": max(2 + 2 * d, (2 + 2 * d) * cap_of(d) // CAPS[0])}
+        if cap_of(d) > 1000:
+            boss_grp["power"] = nice(int(ENEMIES["boss"]["power"]) * cap_of(d) / 1000.0)
         wave_at = at + 36
         events.append({"at": wave_at, "type": "wave", "label": BOSS_BANNERS[d - 1], "groups": crew + [boss_grp]})
         last_arrival = wave_at + 22

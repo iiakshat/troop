@@ -90,7 +90,7 @@ func _loss_order() -> Array:
 
 ## Percent change of the whole squad, rounded down. Gains arrive as constables.
 func apply_percent(pct: int) -> int:
-	var amount := int(floor(total() * absi(pct) / 100.0))
+	var amount := total() * absi(pct) / 100  # exact 64-bit integers, rounded down
 	if pct >= 0:
 		return add("constable", amount)
 	return -lose(amount)
@@ -100,7 +100,7 @@ func apply_percent(pct: int) -> int:
 func divide(k: int) -> int:
 	if k <= 1:
 		return 0
-	var target := maxi(int(floor(total() / float(k))), 1)
+	var target := maxi(total() / k, 1)
 	return -lose(total() - target)
 
 
@@ -119,6 +119,20 @@ func dps(stats: Dictionary, weapons: Dictionary, armour: int, hp := 1.0, enemies
 		sum += n * hit_value(stats[rank], armour, hp, enemies) * _rate_of(rank)
 	if which != Fire.SNIPE and hero_weapon != "" and hero_alive() and weapons.has(hero_weapon):
 		sum += hit_value(weapons[hero_weapon], armour, hp, enemies) * hero_rate
+	return sum
+
+
+## Live firepower (spec v2 §12.4, the HUD's lightning number): damage per second against a
+## plain unarmoured crowd, every rank at its best (bursts, splash and a sniper round's full
+## damage count), the hero and a held weapon at the current tap rate (hero_rate).
+func firepower(stats: Dictionary, weapons: Dictionary) -> float:
+	var sum := 0.0
+	for rank in counts:
+		var n := count(rank)
+		if n > 0 and stats.has(rank):
+			sum += n * hit_value(stats[rank], 0, 1.0, 1 << 30, true) * _rate_of(rank)
+	if hero_weapon != "" and hero_alive() and weapons.has(hero_weapon):
+		sum += hit_value(weapons[hero_weapon], 0, 1.0, 1 << 30, true) * hero_rate
 	return sum
 
 
