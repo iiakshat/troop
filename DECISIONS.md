@@ -253,3 +253,11 @@ Unity wasn't installed, would need about 15 GB plus a licence sign-in, and is he
 **Boss fights.** If a gang's count would land on the boss's body on screen (a projected check), it moves above the boss's bar. Bosses are drawn 3.2× a thug instead of 2.6×.
 
 **Finale prewarm.** The district's Bottle Shot is built out of sight at level load (`BottleShot.warm`), with the squad's figures in its lights. This compiles the stash, bottle, light and shadow pipelines then. The remaining burst frame is the CPU build of the stash and weapon.
+
+## v2 shield polish (2026-11-12, SHIELD)
+
+**The shield reads as a shield.** Owner: the shield looked off next to everything else. The power button was a glowing blue orb, so it did not read as a shield beside the cartoon bomb. It is now a glossy police heater shield (silver rim, cyan inner edge, gold star) in the gloss set's style, everywhere the shield icon shows. The Codex marks a riot gang with the riot-shield icon, so the squad's shield icon only ever means the squad's power.
+
+**A clear bubble, not a pale dome.** The old dome was a flat 3.4 m hemisphere at 22-30 % alpha, so it washed the squad out. The new bubble (`ShieldBubble`) is clear in the middle with a bright cyan-white fresnel rim, so troops keep their colours. It sits on the road like a soap bubble, widest around the figures' bodies. It is sized every frame to hold the figures on screen, feet to raised hand, so it grows with the squad and hugs it. Its rim is softer over the top, where it passes over the front rank's heads. Numbers live in `world_look.json` `shield_bubble`.
+
+**Honest hits.** Only hits the sim really blocked ripple the bubble: gunfire, return fire, sniper rounds and firebombs stop on its surface (the far wall, so both walls are drawn), and gang members charging in bounce off it. Obstacles are not blocked by the shield (`units.json`), so they never ripple it. The last-second blink follows the sim's timer, and the bubble bursts the moment the shield ends. A ring drains around the HUD button while the shield is up.
