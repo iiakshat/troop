@@ -17,6 +17,9 @@ var _power_pop := 0.0
 var _cap_bar: ProgressBar
 var _power_buttons: Dictionary = {}
 var _power_ready_ms: Dictionary = {}   # v2: power id -> ticks when its free charge is back
+var _shield_ring: DrainRing            # drains around the shield button while the shield is up
+var _shield_full := 0.0
+var _shield_last := 0.0
 var _banner: Label
 var _banner_t := 0.0
 var _pulse: Dictionary = {}
@@ -144,6 +147,56 @@ func _add_power(id: String, color: String, left: bool) -> void:
 	b.add_child(timer)
 	b.set_meta("timer", timer)
 	b.set_meta("timer_label", tl)
+	if id == "shield":
+		# While the shield is up: a ring around the button drains with the sim's timer.
+		_shield_ring = DrainRing.new()
+		_shield_ring.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		for side in ["offset_left", "offset_top"]:
+			_shield_ring.set(side, -12.0)
+		for side in ["offset_right", "offset_bottom"]:
+			_shield_ring.set(side, 12.0)
+		_shield_ring.color = Color(String(ShieldBubble.look().get("rim", "62e6ff")))
+		_shield_ring.visible = false
+		b.add_child(_shield_ring)
+
+
+## A ring that drains clockwise from the top (`frac` 1 = full), on a dark track.
+class DrainRing extends Control:
+	var frac := 0.0
+	var color := Color("62e6ff")
+	var alpha := 1.0
+
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		var c := size * 0.5
+		var r := minf(size.x, size.y) * 0.5 - 6.0
+		draw_arc(c, r, 0.0, TAU, 72, Color(UiKit.INK, 0.6), 13.0, true)
+		if frac > 0.0:
+			draw_arc(c, r, -PI * 0.5, -PI * 0.5 + TAU * frac, 72, Color(color, alpha), 8.0, true)
+
+
+## The sim's shield seconds left this frame (0 when none or when the level is not running).
+## The ring is full at each new shield (a press or a revive) and blinks in the last second,
+## like the bubble in the street.
+func set_shield(t: float) -> void:
+	if _shield_ring == null:
+		return
+	if t > _shield_last + 0.05 or _shield_full <= 0.0:
+		_shield_full = t
+	_shield_last = t
+	_shield_ring.visible = t > 0.0
+	if t <= 0.0:
+		_shield_full = 0.0
+		return
+	_shield_ring.frac = clampf(t / maxf(_shield_full, 0.001), 0.0, 1.0)
+	_shield_ring.alpha = ShieldBubble.blink(t, ShieldBubble.look())
+	_shield_ring.queue_redraw()
+
+
+func shield_ring() -> Control:
+	return _shield_ring
 
 
 ## A rank joined the squad for the first time ever: its stat card in the corner (2.5 s).
@@ -247,6 +300,7 @@ func power_rect(id: String) -> Rect2:
 
 
 func enter_finale() -> void:
+	set_shield(0.0)
 	for id in _power_buttons:
 		(_power_buttons[id] as Control).visible = false
 	_progress.get_parent().visible = false

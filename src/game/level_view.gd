@@ -80,8 +80,7 @@ var _state := "play"           # play | strike | striking | done
 var _end_t := 0.0
 var _squad_label: Label3D
 var _label_pop := 0.0
-var _shield: MeshInstance3D
-var _shield_mat: StandardMaterial3D
+var _shield_fx: ShieldBubble   # the squad's shield bubble (src/game/shield_bubble.gd)
 var _finish: Node3D
 var _finish_live := false      # the finish was spawned (it is built hidden at load to pre-warm)
 const WARM_FRAMES := 3         # spec v2 §3: every crowd, effect, obstacle, gate and the stash
@@ -793,7 +792,7 @@ func _gun_tracers(horde_id: int, blocked: bool) -> void:
 			from = _fig_pos(hv, hv["offs"][i]) + Vector3(0.5, CHAR_H * BOSS_SCALE * 0.62, 0.8)
 		var to := Vector3(_squad_x + randf_range(-1.5, 1.5), 1.0, randf_range(0.0, 2.0))
 		if blocked:
-			to = Vector3(_squad_x, 1.4, -2.2) + Vector3(randf_range(-1.5, 1.5), randf_range(0, 1), 0)
+			to = _shield_hit(from, Vector3(_squad_x + randf_range(-1.2, 1.2), 1.0 + randf(), 0.6))
 		if grenades:
 			# Grenade rounds burst on the squad (or on the shield).
 			fx.shoot("rocket", from, to - Vector3(0, 0.6, 0) if not blocked else to, 45.0)
@@ -922,14 +921,12 @@ func _on_return_fire(e: Dictionary) -> void:
 		fx.muzzle(from)
 		var to := Vector3(_squad_x + randf_range(-1.2, 1.2), 1.0, randf_range(-0.2, 1.8))
 		if blocked:
-			to = Vector3(_squad_x + randf_range(-1.4, 1.4), 1.2 + randf(), -2.2)
+			to = _shield_hit(from, Vector3(_squad_x + randf_range(-1.2, 1.2), 1.0 + randf(), 0.6))
 		fx.shoot("tracer", from, to, 75.0)
 	if _rf_sfx_t <= 0.0:
 		_rf_sfx_t = 0.09
 		Sfx.play("shot", -9.0, randf_range(0.8, 0.95))
-	if blocked:
-		fx.burst(Vector3(_squad_x, 1.6, -2.2), Color("9fc6ff"), 4, 4.0, 0.15, 0.25)
-	elif int(e["lost"]) > 0:
+	if not blocked and int(e["lost"]) > 0:
 		_sync_allies(Vector3(_squad_x, 0, 0))
 
 
@@ -1017,12 +1014,13 @@ func _on_firebomb_hit(e: Dictionary) -> void:
 	var lane := int(e["lane"])
 	var at := Vector3(LANE_X[lane], 0.1, 0.4)
 	_unmark_lane(lane)
-	fx.fire(at)
 	_sfx("fire", "boom", -5.0, 1.6)
 	if e["blocked"]:
 		Sfx.play("blocked")
-		fx.burst(Vector3(_squad_x, 1.6, -2.2), Color("9fc6ff"), 16, 6.0, 0.2, 0.4)
+		var splash := _shield_hit(Vector3(at.x, 9.0, -4.0), Vector3(_squad_x, 0.6, 0.6))
+		fx.burst(splash, Color("ff8a3d"), 16, 5.0, 0.2, 0.45, 1.5)
 		return
+	fx.fire(at)
 	var lost := int(e["lost"])
 	if lost > 0:
 		Sfx.play("hurt", -3.0)
@@ -1052,11 +1050,10 @@ func _on_snipe(e: Dictionary) -> void:
 	var offs: Array = hv["offs"]
 	for i in mini(offs.size(), 3):
 		var from := _fig_pos(hv, offs[i]) + Vector3(0, 1.5, 0.3)
-		var to := Vector3(_squad_x, 1.6, -2.3) if e["blocked"] else Vector3(_squad_x, 1.1, 0.2)
+		var to := _shield_hit(from, Vector3(_squad_x, 1.6, 0.6)) if e["blocked"] else Vector3(_squad_x, 1.1, 0.2)
 		fx.shoot("sniper_round", from, to, 160.0)
 	if e["blocked"]:
 		Sfx.play("blocked")
-		fx.burst(Vector3(_squad_x, 1.6, -2.2), Color("9fc6ff"), 10, 5.0, 0.18, 0.35)
 	elif int(e["lost"]) > 0:
 		Sfx.play("hurt", -3.0)
 		world.shake(0.3)
@@ -1739,7 +1736,10 @@ func _update_visuals(d: float) -> void:
 		var p: Vector3 = (c["pos"] as Vector3).move_toward(goal, d * 12.0)
 		c["pos"] = p
 		c["t"] = float(c.get("t", 0.0)) + d
-		if p.distance_to(goal) < (2.6 if c["shielded"] else 0.8) or float(c["t"]) > 0.9:
+		var bounced: bool = c["shielded"] and _shield_fx.is_up()
+		if (_shield_fx.touches(p + Vector3(0, 0.9, 0), 0.3) if bounced else p.distance_to(goal) < (2.6 if c["shielded"] else 0.8)) or float(c["t"]) > 0.9:
+			if bounced:
+				_shield_hit(p + Vector3(0, 0.9, 0), Vector3(_squad_x, 0.9, 0.6))
 			fx.puff(p)
 			_dying.append({"kind": c["kind"], "pos": p, "t": 0.0, "basis": Basis(Vector3.UP, PI).scaled(Vector3.ONE * ENEMY_SCALE)})
 			_charging.remove_at(i)
@@ -1848,13 +1848,8 @@ func _update_visuals(d: float) -> void:
 	if _key_light:
 		_key_light.position = Vector3(_squad_x, 4.5, 2.5)
 	_squad_label.scale = Vector3.ONE * (1.0 + 0.5 * _label_pop)
-	_shield.visible = sim.shield_t > 0.0
-	if _shield.visible:
-		_shield.position = Vector3(_squad_x, 0, 0.6)
-		var a := 0.22 + 0.08 * sin(Time.get_ticks_msec() / 90.0)
-		if sim.shield_t < 1.0:
-			a *= 0.5 + 0.5 * sin(Time.get_ticks_msec() / 40.0)
-		_shield_mat.albedo_color = Color(0.45, 0.75, 1.0, a)
+	_shield_fx.update(d, sim.shield_t if _state == "play" and sim.state == "run" else 0.0, _allies,
+		CHAR_H, CHAR_H * troop_k)
 
 
 func _fig_pos(hv: Dictionary, o: Vector3) -> Vector3:
@@ -2171,20 +2166,17 @@ func _mat(color: Color, unshaded := false) -> StandardMaterial3D:
 # ---------------------------------------------------------------- shield, finish, strike
 
 func _build_shield() -> void:
-	_shield = MeshInstance3D.new()
-	var sm := SphereMesh.new()
-	sm.radius = 3.4
-	sm.height = 4.4
-	sm.is_hemisphere = true
-	_shield.mesh = sm
-	_shield_mat = StandardMaterial3D.new()
-	_shield_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_shield_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_shield_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	_shield_mat.albedo_color = Color(0.45, 0.75, 1.0, 0.25)
-	_shield.material_override = _shield_mat
-	_shield.visible = false
-	add_child(_shield)
+	_shield_fx = ShieldBubble.new().setup(fx)
+	add_child(_shield_fx)
+
+
+func shield_bubble() -> ShieldBubble:
+	return _shield_fx
+
+
+## Where a blocked shot from `from` aimed at `to` ends: on the bubble, which ripples there.
+func _shield_hit(from: Vector3, to: Vector3) -> Vector3:
+	return _shield_fx.hit(from, to) if _shield_fx != null else to
 
 
 # ---------------------------------------------------------------- pre-warm (spec v2 §3)
@@ -2218,6 +2210,10 @@ func _prewarm() -> void:
 	_warm.append(gv)
 	if fx.has_method("prewarm"):
 		fx.prewarm(_warm_at)
+	var wb := ShieldBubble.new().setup()   # the shield bubble's shader, first drawn on a press
+	add_child(wb)
+	wb.show_warm(_warm_at + Vector3(0, 0, -6))
+	_warm.append(wb)
 	# The boss bar (see-through backing, crown sprite, big number): first drawn when the boss
 	# walked in, a 54 ms frame on L10 with a cold shader cache.
 	var boss_lab := Label3D.new()
