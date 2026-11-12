@@ -644,7 +644,8 @@ func _perf_frame() -> void:
 		marks = " ".join(view.perf_marks)
 		view.perf_marks.clear()
 	var vp := get_viewport().get_viewport_rid()
-	var cpu := (Performance.get_monitor(Performance.TIME_PROCESS) + Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)) * 1000.0 		+ RenderingServer.viewport_get_measured_render_time_cpu(vp) + RenderingServer.get_frame_setup_time_cpu()
+	var cpu := (Performance.get_monitor(Performance.TIME_PROCESS) + Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)) * 1000.0 \
+			+ RenderingServer.viewport_get_measured_render_time_cpu(vp) + RenderingServer.get_frame_setup_time_cpu()
 	var gpu := RenderingServer.viewport_get_measured_render_time_gpu(vp)
 	_perf.store_line("%d %.1f %.1f %.1f %s %s" % [_frame, ms, cpu, gpu, st, marks])
 	var worst := maxf(ms, cpu)
