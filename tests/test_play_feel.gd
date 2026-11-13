@@ -166,12 +166,11 @@ func test_view_mark_lands_with_the_sim() -> void:
 	_drop(parts)
 
 
-## Gunfire (return fire, the boss's gun) cannot be dodged: it is drawn as fast amber bullets that
-## hit within Fx.GUN_MAX_S, not as slow red tracers chasing the squad across the lanes.
+## Gunfire (return fire, the boss's gun) cannot be dodged: it is drawn as fast bullets that hit
+## within Fx.GUN_MAX_S, not as slow tracers chasing the squad across the lanes.
 func test_gunfire_is_fast_and_unlike_the_marked_attacks() -> void:
 	check(Fx.gun_flight(60.0) <= Fx.GUN_MAX_S and Fx.GUN_MAX_S <= 0.3, "a 60 m shot hits within 0.3 s")
 	check(Fx.enemy_flight(50.0) > 2.0 * Fx.GUN_MAX_S, "the dodgeable shots fly at least twice as long")
-	check(Fx.GUN_COLOR.g > Fx.ENEMY_TRACER_COLOR.g + 0.25, "gunfire is amber, the marked attacks' shots red")
 	var parts := _view(_fight_level(), {"squad": 40})
 	var view: LevelView = parts[0]
 	var fx: Fx = parts[2]

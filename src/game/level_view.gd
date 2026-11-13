@@ -1092,11 +1092,11 @@ func _on_bomb(e: Dictionary) -> void:
 
 
 ## Spec v2.1 §1.1: a gang firing back. Big muzzle flashes on its front shooters (bigger still
-## for its opening volley), up to 8 amber gunfire streaks that hit within Fx.GUN_MAX_S (the
+## for its opening volley), up to 8 fast gunfire streaks that hit within Fx.GUN_MAX_S (the
 ## squad or the shield), and the loss lands with them: the figures they hit fall, a red -N, the
 ## troop pill pulses, a short buzz. Gunfire cannot be dodged (the sim took the loss when it
-## fired), so it is drawn as bullets, never as a slow red shot that seems to chase a squad
-## changing lane (owner 2026-11-13); the dodgeable attacks are red, slow and lane-marked.
+## fired), so it is drawn as bullets, never as a slow shot that seems to chase a squad changing
+## lane (owner 2026-11-13); the dodgeable attacks are slow (lobbed or lasered) and lane-marked.
 func _on_return_fire(e: Dictionary) -> void:
 	var hv: Dictionary = _hordes.get(e["horde"], {})
 	var opening := bool(e.get("opening", false))
@@ -1531,7 +1531,8 @@ func _on_attack_land(e: Dictionary) -> void:
 	if not bool(e.get("hit", true)) and _state == "play":
 		# Dodged: the squad left the marked lane in time. A pale whoosh ring round it says so
 		# (the impact above lands on the empty lane).
-		fx.ring(Vector3(_squad_x, 0.25, 0.2), DODGE_TINT, 28, 7.0, 0.2)
+		# (Over the heads: at the feet a full squad's figures hid it.)
+		fx.ring(Vector3(_squad_x, 2.0, -0.4), DODGE_TINT, 36, 6.0, 0.28)
 		Sfx.play("swoosh", -8.0, 1.5)
 	if blocked:
 		Sfx.play("blocked")

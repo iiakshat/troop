@@ -31,15 +31,16 @@ const ENEMY_FAR_MAX := 5.0
 const ENEMY_TRACER_COLOR := Color(1.0, 0.3, 0.1)   # clearly not the squad's pale yellow-white
 const ENEMY_CORE_COLOR := Color(1.0, 0.78, 0.35)
 ## Gang and boss gunfire (return fire, the boss's gun: owner 2026-11-13) cannot be dodged: the
-## sim takes its loss when it is fired. It is drawn as what it is, a bullet: a fast amber streak
-## that hits within GUN_MAX_S, never a slow red projectile that seems to chase a squad changing
-## lane. Red, slow and lane-marked stays the look of the attacks a lane change dodges.
+## sim takes its loss when it is fired. It is drawn as what it is, a bullet: a fast, thin
+## orange-red streak (incoming, so never the squad's pale yellow) that hits within GUN_MAX_S,
+## never a slow tracer that seems to chase a squad changing lane. Slow, lobbed or lasered, and
+## lane-marked, stays the look of the attacks a lane change dodges.
 const GUN_SPEED := 150.0
 const GUN_MIN_S := 0.08
 const GUN_MAX_S := 0.3
 const GUN_SCALE := {"egun": Vector3(1.0, 1.0, 3.2), "egun_big": Vector3(1.7, 1.7, 3.6)}
-const GUN_COLOR := Color(1.0, 0.72, 0.18)
-const GUN_CORE_COLOR := Color(1.0, 0.97, 0.8)
+const GUN_COLOR := Color(1.0, 0.36, 0.1)
+const GUN_CORE_COLOR := Color(1.0, 0.9, 0.6)
 
 var font: Font
 
@@ -49,7 +50,7 @@ var _parts: Array = []     # {pos, vel, t, life, col, size, grav}
 var _knife_mm: MultiMesh
 var _bullet_mm: MultiMesh
 var _etracer_mm: MultiMesh # enemy tracers and sniper rounds (orange-red)
-var _egun_mm: MultiMesh    # gang and boss gunfire (amber streaks, GUN_SCALE)
+var _egun_mm: MultiMesh    # gang and boss gunfire (fast thin streaks, GUN_SCALE)
 var _gren_mm: MultiMesh    # grenades and the boss's barrage shells (lit, tumbling)
 var _lob_mm: MultiMesh     # firebomb bottles (lit, tumbling)
 var _bomb_mm: MultiMesh    # the hero's thrown bombs (round, with a sparking fuse)
@@ -638,7 +639,7 @@ func _enemy_tracer_mesh() -> Mesh:
 	return st.commit()
 
 
-## Gunfire (GUN_SCALE): an amber streak with a white-hot head (the end that leads).
+## Gunfire (GUN_SCALE): a thin orange-red streak with a hot head (the end that leads).
 func _gunfire_mesh() -> Mesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
