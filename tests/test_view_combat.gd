@@ -215,3 +215,46 @@ func test_gate_numbers_fit_their_lanes_in_every_level() -> void:
 						where = "L%d at %s lane %d '%s'" % [n, str(e["at"]), lane, tag.text if tag.visible else label.text]
 				v.free()
 	check(worst <= GateRowView.FIT_W + 0.001, "widest gate number %.2f m <= %.2f m (%s)" % [worst, GateRowView.FIT_W, where])
+
+
+## Spec v2.1 §1.4, the crowd clash on screen: a gang whose strikers are a part of one figure
+## (per > strikers) never loses figures faster than its count; the strikers charge in; the
+## squad's figures fall with the sim's count; the red -N keeps counting while the ticks come.
+func test_clash_figures_follow_the_counts() -> void:
+	var parts := _view({"id": 12, "district": 1, "events": [
+		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 59}]},
+		{"at": 90, "type": "wave", "groups": [{"enemy": "thug", "n": 3600, "hp": 100000}]},
+		{"at": 400, "type": "finish"}]})
+	var view: LevelView = parts[0]
+	view.sim.set_lane(1)
+	var hv := {}
+	var ticks := 0
+	var charged := 0
+	var worst := 0
+	var minus := []
+	for i in 6000:
+		if view.sim.state != "run":
+			break
+		view._process(1.0 / 60.0)
+		view.fx._process(1.0 / 60.0)
+		if hv.is_empty() and not view._hordes.is_empty():
+			hv = view._hordes.values()[0]
+		if hv.is_empty() or not bool(hv["h"]["melee"]):
+			continue
+		ticks += 1
+		var want := int(ceil(int(hv["h"]["count"]) / float(hv["per"])))
+		worst = maxi(worst, want - (hv["offs"] as Array).size())
+		charged = maxi(charged, view._charging.size())
+		if view._minus_label.visible:
+			minus.append(view._minus_label.text)
+		if ticks > 120:
+			break
+	check(ticks > 0, "the gang reached the squad")
+	eq(worst, 0, "the figures never fall faster than the gang's count")
+	check(charged > 0, "strikers charge in")
+	check(view._allies.size() <= view._desired_allies().values().reduce(func(a, b): return a + b, 0), "the squad's figures follow its count")
+	var grew := false
+	for i in range(1, minus.size()):
+		grew = grew or int(String(minus[i]).trim_prefix("-")) > int(String(minus[i - 1]).trim_prefix("-"))
+	check(grew, "the -N keeps counting through the clash (%s)" % str(minus.slice(0, 6)))
+	_drop(parts)

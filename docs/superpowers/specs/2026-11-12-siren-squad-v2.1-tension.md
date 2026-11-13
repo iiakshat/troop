@@ -138,7 +138,18 @@ Each attack takes at most `attack_cap_pct` (10-20%, by kind) of the current squa
 - He is drawn at 2.4× a thug with a distinct tint, with his own map-node icon and boss bar (smaller).
 - No liberation.
 
-### 1.4 Autopilot and generator mirror the rules
+### 1.4 Crowd clash (owner, 2026-11-13)
+
+The owner chose this after the fight advisor's review (`_local/advisor/fable_fight_verdict.md`, verdict ADJUST). It amends v1.1's "a bigger gang visibly wipes you out": a bigger gang now visibly grinds you down in seconds, and every −N is shown.
+
+- **The clash.** When a gang's living front reaches the squad, the two crowds grind 1:1. Every melee tick (0.22 s), at most `world.melee_cap_pct` (3) % of the squad it met strikes from the gang's front row, in troops (at least one enemy, never more than the row). Each striker takes its `power` in troops and falls. The rest of the row waits for the next tick, so the squad's number and the gang's number fall together. The squad keeps shooting the whole time, so a small remnant is shot down in a moment and a big one wins over a few seconds. Gangs in melee at the same time share that pace. On the shield, the strikers fall at the same pace and nobody is lost. A boss still swings with his own fists.
+- **The crowd closes ranks.** As a walking gang's front row falls, the rows behind step up, so its front keeps its pace. What reaches the squad is the gang minus what the squad shot on the way in. A strong squad no longer pins a gang's front in place until the HQ hold, which made the outcome a race and a cliff.
+- **Fire is texture.** A level's `fire_k` is fitted only within 0.5-2. Specials attack at most `telegraph.fire_k_max` (1.5×) as often. At most `telegraph.max_in_air` (2) marks are in the air, at least `min_gap_s` (0.9 s) apart. The opening volley is never multiplied.
+- **Boss dial.** A level's `boss_k` (0.6, 0.8, 1, 1.25 or 1.5) scales its boss's or lieutenant's `gun_pct` and `barrage_pct`, in per mille, exact.
+- **The bomb answers return fire.** A gang it lands on holds its fire for `powers.bomb.silence_s` (2 s).
+- **On screen.** The front rows punch. The strikers charge in. The squad's front figures fall where the gang meets it. The red −N keeps counting while the clash lasts. There is no slow-down.
+
+### 1.5 Autopilot and generator mirror the rules
 
 - `autopilot.gd`:
   - Raises the shield when any armed gang is in range, or a telegraph targets its lane, and a charge is free.

@@ -591,6 +591,8 @@ func _handle_events(events: Array) -> void:
 				pass
 			"melee_start":
 				Sfx.play("swoosh", -2.0, 0.7)
+				Game.vibrate(60)
+				world.shake(0.5)
 			"melee":
 				_on_melee(e)
 			"turncoat":
@@ -797,24 +799,30 @@ func _on_horde_spawn(h: Dictionary, lieutenant := false) -> void:
 		banner.emit(label_text, Color("ff5a5f"))
 
 
+## Spec v2.1 §1.4, the crowd clash: every melee tick a few of the gang's front row strike. The
+## sim already took them off its count; the figure sync (_update_visuals) pops exactly the
+## figures the count lost and sends this tick's strikers' worth of them charging in (a figure
+## stands for `per` people, so a tick's strikers can be part of one figure). The squad's front
+## rows fall where the gang meets it, and the red -N keeps counting while the clash lasts.
 func _on_melee(e: Dictionary) -> void:
 	var hv: Dictionary = _hordes.get(e["horde"], {})
 	if hv.is_empty():
 		return
-	# The striking row charges into the squad (the sim already removed them).
-	var n := mini(int(ceil(int(e["enemies"]) / float(hv["per"]))), (hv["offs"] as Array).size())
-	for i in n:
-		var o: Vector3 = hv["offs"].pop_front()
-		_charging.append({"kind": hv["kind"], "pos": _fig_pos(hv, o), "phase": o.y, "shielded": e["shielded"], "dx": clampf(o.x * 0.35, -1.6, 1.6)})
+	var per := float(hv["per"])
+	hv["strike"] = minf(float(hv.get("strike", 0.0)) + float(e["enemies"]), per * 4.0)
+	hv["strike_sh"] = bool(e["shielded"])
+	hv["clash_t"] = 0.4
 	var lost := int(e["lost"])
-	world.shake(clampf(0.2 + lost * 0.02, 0.2, 0.9))
+	world.shake(clampf(0.08 + lost * 0.004, 0.08, 0.3))
 	if e["shielded"]:
-		Sfx.play("blocked")
+		Sfx.play("blocked", -4.0, randf_range(0.9, 1.1))
 	elif lost > 0:
-		Sfx.play("hurt", -2.0)
-		Game.vibrate(60)
-		_add_loss(lost)
-	_sync_allies(Vector3(_squad_x, 0, -1.0))
+		Sfx.play("hurt", -6.0, randf_range(0.85, 1.15))
+		_add_loss(lost, true)
+	var front: Array = []
+	for x in [-1.2, -0.6, 0.0, 0.6, 1.2]:
+		front.append(Vector3(_squad_x + x, 0, -1.4))
+	_sync_allies(Vector3(_squad_x, 0, -1.0), front)
 
 
 func _on_turncoat(e: Dictionary) -> void:
@@ -1092,11 +1100,15 @@ func _land_impact(im: Dictionary) -> void:
 
 
 ## Spec v2.1 §1.1: the red -N over the squad. Losses within MINUS_WINDOW s add up; a later one
-## starts a new number (with a short buzz, through the vibration setting).
-func _add_loss(n: int) -> void:
+## starts a new number (with a short buzz, through the vibration setting). `run`: a crowd clash
+## tick (§1.4), which keeps the number counting while the ticks keep coming.
+func _add_loss(n: int, run := false) -> void:
 	if n <= 0:
 		return
-	if _anim_t - _minus_t0 > MINUS_WINDOW:
+	var fresh := _anim_t - _minus_t0 > MINUS_WINDOW
+	if run and _anim_t - _minus_last <= MINUS_WINDOW + 0.05:
+		fresh = false
+	if fresh:
 		_minus_t0 = _anim_t
 		_minus_n = 0
 		Game.vibrate(30)
@@ -1965,9 +1977,22 @@ func _update_visuals(d: float) -> void:
 		var esc := _boss_scale(hv) * boss_grow(float(h["z"])) if hv["bossy"] else ENEMY_SCALE
 		if hv.get("leader", false):
 			esc = ENEMY_SCALE * LEADER_SCALE
+		# The crowd closes ranks (spec v2.1 §1.4): when a walking gang's front row falls the sim
+		# steps the rows behind up at once; drawn, they catch up over a moment (`dz`).
+		var kr := LevelSim.killed_rows(h)
+		if kr > int(hv.get("kr", 0)) and not h["stopped"]:
+			hv["dz"] = maxf(float(hv.get("dz", 0.0)) - (kr - int(hv.get("kr", 0))) * float(h["row_gap"]), -6.0)
+		hv["kr"] = kr
+		hv["dz"] = move_toward(float(hv.get("dz", 0.0)), 0.0, d * 9.0)
 		while offs.size() > want:
 			var o: Vector3 = offs.pop_front()
 			var p := _fig_pos(hv, o)
+			if float(hv.get("strike", 0.0)) >= float(hv["per"]) * 0.5:
+				# A striker: it charges into the squad (the clash), it does not just drop.
+				hv["strike"] = float(hv["strike"]) - float(hv["per"])
+				_charging.append({"kind": hv["kind"], "pos": p, "phase": o.y, "shielded": bool(hv.get("strike_sh", false)),
+					"dx": clampf(o.x * 0.35, -1.6, 1.6)})
+				continue
 			_dying.append({"kind": hv["kind"], "pos": p, "t": 0.0,
 				"basis": Basis(Vector3.UP, PI).scaled(Vector3.ONE * esc * crowd_scale(offs.size() + 1))})
 			fx.puff(p)
@@ -1989,8 +2014,17 @@ func _update_visuals(d: float) -> void:
 		hv["shoot_flash"] = maxf(flash - d, 0.0)
 		flash = maxf(flash * 2.0, float(hv["hit_flash"]))
 		var face := Basis(Vector3.UP, PI).scaled(Vector3.ONE * crowd_scale(offs.size()) * esc)
+		# In a clash the front two rows throw punches into the squad (spec v2.1 §1.4).
+		var punch_z := INF
+		if h["melee"] and not hv["bossy"] and not offs.is_empty():
+			hv["clash_t"] = maxf(float(hv.get("clash_t", 0.0)) - d, 0.0)
+			punch_z = (offs[0] as Vector3).z + float(h["row_gap"]) * 1.5
+		var plen := Crowd.clip_length("punch")
 		for o in offs:
-			crowd.push(Transform3D(face, _fig_pos(hv, o)), clip, (_anim_t + o.y * 3.0) * speed, flash)
+			if o.z <= punch_z:
+				crowd.push(Transform3D(face, _fig_pos(hv, o)), "punch", fmod(_anim_t * 1.5 + o.y * plen, plen), flash)
+			else:
+				crowd.push(Transform3D(face, _fig_pos(hv, o)), clip, (_anim_t + o.y * 3.0) * speed, flash)
 		if hv.has("bar"):
 			_update_boss_bar(hv, d)
 			continue
@@ -2179,7 +2213,7 @@ func _update_visuals(d: float) -> void:
 
 func _fig_pos(hv: Dictionary, o: Vector3) -> Vector3:
 	var h: Dictionary = hv["h"]
-	var z := float(h["z"]) - o.z
+	var z := float(h["z"]) + float(hv.get("dz", 0.0)) - o.z
 	var k := clampf((z + 16.0) / 14.0, 0.0, 1.0)
 	var x := lerpf(o.x, _squad_x + o.x * 0.45, k)
 	return Vector3(x, 0, z)

@@ -3,7 +3,7 @@ extends RefCounted
 ## Plays a LevelSim with a fixed lane choice per gate row. Used by tests, the tuning
 ## tool and the debug --autoplay flag. `use_powers` fires shield/bomb at sensible moments;
 ## `dodge` steps out of a telegraphed attack's lane (a skilled player), each one with
-## probability `dodge_p` (spec v2.1 §1.4; decided once per attack, deterministically).
+## probability `dodge_p` (spec v2.1 §1.5; decided once per attack, deterministically).
 ## `tap_rate` taps the fire zone that many times per second of sim time (0 = a non-tapper).
 
 ## A pilot reacts this many seconds before a telegraphed attack lands (a human sees the mark,
@@ -39,7 +39,7 @@ func drive(sim: LevelSim) -> void:
 	sim.set_lane(want)
 	if not use_powers:
 		return
-	# Spec v2.1 §1.4: the shield goes up when an armed gang is in range (its guns or a special
+	# Spec v2.1 §1.5: the shield goes up when an armed gang is in range (its guns or a special
 	# attacking), a gang is in melee, or a telegraphed attack is about to land on the squad.
 	var danger := false
 	for a in sim.attacks:
