@@ -9,6 +9,8 @@
   "target_ratio": 0.58,
   "stars": {"star2": 40, "star3": 75},
   "charges": {"shield": 1, "bomb": 1},
+  "coin_ref": 522,
+  "route": [2, 0, 0, 1, 2, 0, 2, 0, 2],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "inspector", "n": 3}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 5}, {"lane": 2, "op": "num", "v": 8}]},
     {"at": 62, "type": "hint", "id": "return_fire", "icon": "thug", "enemy": "thug"},

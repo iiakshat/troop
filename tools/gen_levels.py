@@ -1305,9 +1305,11 @@ def level_3() -> dict:
             {"lane": 0, "op": "num", "v": 24}, {"lane": 1, "op": "mul", "k": 2}]},
         {"at": 184, "type": "obstacle", "kind": "pothole", "lane": 2, "fall": 10},
         {"at": 220, "type": "wave", "groups": [{"enemy": "knifer", "n": 80}, {"enemy": "gunman", "n": 10, "gap": 10}]},
+        # Review v2.1: the power gate shares its row with two good numbers (it was the power or a
+        # barrel next to +30, and a first-day player who took the power fell to the last wave).
         {"at": 254, "type": "gates", "gates": [
-            {"lane": 0, "op": "power", "id": "shield", "n": 1}, {"lane": 2, "op": "num", "v": 30}]},
-        {"at": 254, "type": "obstacle", "kind": "barrel", "lane": 1, "hp": 12, "radius": 8, "kill": 80, "dmg": 6},
+            {"lane": 0, "op": "power", "id": "shield", "n": 1}, {"lane": 1, "op": "num", "v": 26},
+            {"lane": 2, "op": "num", "v": 30}]},
         {"at": 290, "type": "wave", "groups": [{"enemy": "thug", "n": 150}]},
         {"at": 322, "type": "gates", "gates": [
             {"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "num", "v": -16, "step": 3, "max": 24, "inc": 2},

@@ -11,6 +11,8 @@
   "charges": {"shield": 1, "bomb": 1},
   "look": "rush",
   "scroll_speed": 9.6,
+  "coin_ref": 198,
+  "route": [1, 1, 1, 2, 1, 0, 1, 0, 2, 0, 0, 0],
   "events": [
     {"at": 28, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -1, "step": 0.5, "max": 5}, {"lane": 1, "op": "num", "v": 6}, {"lane": 2, "op": "recruit", "unit": "inspector", "n": 2}]},
     {"at": 54, "type": "wave", "groups": [{"enemy": "thug", "n": 6}]},

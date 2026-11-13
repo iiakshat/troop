@@ -7,7 +7,7 @@
   "archetype": "horde",
   "target_win": 0.47,
   "target_ratio": 0.58,
-  "stars": {"star2": 23, "star3": 44},
+  "stars": {"star2": 25, "star3": 47},
   "charges": {"shield": 1, "bomb": 1},
   "fire_k": 2.0,
   "events": [
@@ -15,15 +15,15 @@
     {"at": 95, "type": "wave", "groups": [{"enemy": "thug", "n": 4}]},
     {"at": 144, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 3}, {"lane": 1, "op": "num", "v": -3, "step": 5.3, "max": 4, "inc": 1}, {"lane": 2, "op": "num", "v": 12}]},
     {"at": 175, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 36}, {"lane": 1, "op": "num", "v": -3, "step": 14.8, "max": 4, "inc": 1}, {"lane": 2, "op": "mul", "k": 3}]},
-    {"at": 227, "type": "wave", "groups": [{"enemy": "thug", "n": 114}, {"enemy": "brute", "n": 16, "gap": 6}], "label": "BIG GANG"},
+    {"at": 227, "type": "wave", "groups": [{"enemy": "thug", "n": 112}, {"enemy": "brute", "n": 16, "gap": 6}], "label": "BIG GANG"},
     {"at": 265, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 150, "block_reach": 12, "dmg_pct": 10},
     {"at": 275, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 60}, {"lane": 1, "op": "foe_div", "k": 2}, {"lane": 2, "op": "mul", "k": 2}]},
     {"at": 296, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 300, "block_reach": 12, "dmg_pct": 10},
     {"at": 305, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 90}, {"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "power", "id": "shield", "n": 1}]},
-    {"at": 357, "type": "wave", "groups": [{"enemy": "thug", "n": 412}, {"enemy": "knifer", "n": 1113, "gap": 8}]},
+    {"at": 357, "type": "wave", "groups": [{"enemy": "thug", "n": 407}, {"enemy": "knifer", "n": 1099, "gap": 8}]},
     {"at": 406, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "swat", "n": 40}, {"lane": 2, "op": "mul", "k": 2}]},
     {"at": 406, "type": "obstacle", "kind": "pothole", "lane": 1, "fall_pct": 25},
-    {"at": 458, "type": "wave", "groups": [{"enemy": "thug", "n": 7459}, {"enemy": "gunman", "n": 17475, "gap": 10}], "label": "GANG WAR"},
+    {"at": 458, "type": "wave", "groups": [{"enemy": "thug", "n": 7214}, {"enemy": "gunman", "n": 16901, "gap": 10}], "label": "GANG WAR"},
     {"at": 496, "type": "finish"}
   ]
 }

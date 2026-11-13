@@ -9,6 +9,8 @@
   "target_ratio": 0.45,
   "stars": {"star2": 30, "star3": 57},
   "charges": {"shield": 1, "bomb": 1},
+  "coin_ref": 6048,
+  "route": [0, 0, 0, 0, 2, 0, 2, 1, 2, 1],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 95}, {"lane": 1, "op": "turncoat", "n": 100}, {"lane": 2, "op": "num", "v": -2, "step": 0.5, "max": 6}]},
     {"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 99}]},

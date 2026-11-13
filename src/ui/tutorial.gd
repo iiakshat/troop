@@ -592,7 +592,11 @@ static func gate_value(g: Dictionary, n: float) -> float:
 			return n * (1.0 + float(g.get("v", 0)) / 100.0)
 		"recruit":
 			return n + 3.0 * float(g.get("n", 1))
-		"weapon", "power", "foe_div", "foe_strip", "turncoat":
+		"turncoat":
+			# Review v2.1: its people join the squad (and leave the gang): a growth offer like +N.
+			return n + float(g.get("n", 1))
+		"weapon", "power", "foe_div", "foe_strip":
+			# Utilities: the row's third lane (gen_levels.py), never its biggest squad.
 			return n + 2.0
 	return n
 

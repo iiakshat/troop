@@ -7,7 +7,7 @@
   "archetype": "lieutenant",
   "target_win": 0.64,
   "target_ratio": -1.0,
-  "stars": {"star2": 12, "star3": 23},
+  "stars": {"star2": 10, "star3": 20},
   "charges": {"shield": 1},
   "events": [
     {"at": 44, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "sergeant", "n": 2}, {"lane": 1, "op": "num", "v": -2, "step": 0.5, "max": 5}, {"lane": 2, "op": "num", "v": 4}]},
@@ -35,7 +35,7 @@
     {"at": 482, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 490, "block_reach": 12, "dmg": 24},
     {"at": 490, "type": "gates", "gates": [{"lane": 0, "op": "power", "id": "shield", "n": 1}, {"lane": 1, "op": "num", "v": 105}, {"lane": 2, "op": "recruit", "unit": "sergeant", "n": 32}]},
     {"at": 516, "type": "hint", "id": "lieutenant", "icon": "lieutenant", "enemy": "lieutenant"},
-    {"at": 524, "type": "wave", "label": "LIEUTENANT", "groups": [{"enemy": "thug", "n": 5058}, {"enemy": "boss", "lieutenant": true, "n": 1, "hp": 1200, "gap": 18}]},
+    {"at": 524, "type": "wave", "label": "LIEUTENANT", "groups": [{"enemy": "thug", "n": 5876}, {"enemy": "boss", "lieutenant": true, "n": 1, "hp": 1200, "gap": 18}]},
     {"at": 564.0, "type": "finish"}
   ]
 }

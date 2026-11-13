@@ -9,6 +9,8 @@
   "target_ratio": 0.58,
   "stars": {"star2": 15, "star3": 28},
   "charges": {"shield": 1, "bomb": 1},
+  "coin_ref": 587,
+  "route": [0, 0, 2, 0, 0, 1, 2],
   "events": [
     {"at": 11, "type": "hint", "id": "swat", "icon": "swat"},
     {"at": 41, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 16}, {"lane": 1, "op": "recruit", "unit": "swat", "n": 4}, {"lane": 2, "op": "num", "v": -1, "step": 0.5, "max": 6}]},
