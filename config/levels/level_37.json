@@ -7,15 +7,14 @@
   "archetype": "horde",
   "target_win": 0.29,
   "target_ratio": 0.45,
-  "stars": {"star2": 16, "star3": 30},
+  "stars": {"star2": 24, "star3": 45},
   "charges": {"shield": 1, "bomb": 1},
   "need_upgrades": true,
-  "coin_ref": 25102,
-  "route": [2, 1, 0, 1, 1, 1],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 140}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 6}, {"lane": 2, "op": "num", "v": 170}]},
     {"at": 80, "type": "wave", "groups": [{"enemy": "thug", "n": 1441}]},
     {"at": 118, "type": "gates", "gates": [{"lane": 0, "op": "foe_div", "k": 2}, {"lane": 1, "op": "num", "v": 145}, {"lane": 2, "op": "mul", "k": 2}]},
+    {"at": 126, "type": "hazard", "kind": "steam", "n": 5, "every": 2.4},
     {"at": 144, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 775}, {"lane": 2, "op": "mul", "k": 4}]},
     {"at": 144, "type": "obstacle", "kind": "car", "lane": 0, "hp": 1300, "dmg": 4},
     {"at": 188, "type": "wave", "groups": [{"enemy": "thug", "n": 5942}, {"enemy": "molotov", "n": 4347, "gap": 10}], "label": "BIG GANG"},
@@ -30,7 +29,7 @@
     {"at": 366, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 11000}, {"lane": 1, "op": "pct", "v": -30, "inc": 10, "step": 8344.3, "max": 40}, {"lane": 2, "op": "mul", "k": 2}]},
     {"at": 410, "type": "wave", "groups": [{"enemy": "riot", "n": 23790}, {"enemy": "brute", "n": 16827, "gap": 8}, {"enemy": "gunman", "n": 20192, "gap": 16}]},
     {"at": 450, "type": "gates", "gates": [{"lane": 0, "op": "power", "id": "bomb", "n": 1}, {"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "turncoat", "n": 6550}]},
-    {"at": 494, "type": "wave", "groups": [{"enemy": "thug", "n": 1522048}, {"enemy": "gunman", "n": 1210224, "gap": 10}], "label": "BIG GANG"},
+    {"at": 494, "type": "wave", "groups": [{"enemy": "thug", "n": 1296831}, {"enemy": "gunman", "n": 1031148, "gap": 10}], "label": "BIG GANG"},
     {"at": 526, "type": "finish"}
   ]
 }

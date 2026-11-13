@@ -9,6 +9,9 @@ extends Node3D
 const W := 2.3          # footprint across (m)
 const D := 2.0          # depth (m)
 const H := 2.15         # bar height (m)
+## The "+N" tag floats this high over the roof (review v2.1: at H + 0.95 it sat on the guards'
+## count in front of the cage; up here it clears the gang label at every distance).
+const TAG_Y := H + 3.4
 const BAR := 0.07
 const STEEL := Color("3c434d")
 const STEEL_LIGHT := Color("6d7784")
@@ -79,7 +82,7 @@ func setup(c: Dictionary, font: Font) -> CageView:
 	_tag.outline_render_priority = 8
 	_tag.modulate = TAG_BLUE
 	_tag.text = "+" + NumFormat.fmt(int(c.get("hostages", 0)))
-	_tag.position = Vector3(0.25, H + 0.95, 0)
+	_tag.position = Vector3(0.25, TAG_Y, 0)
 	add_child(_tag)
 	_icon = Sprite3D.new()
 	_icon.texture = UiKit.icon_texture("rank_constable")
@@ -88,7 +91,7 @@ func setup(c: Dictionary, font: Font) -> CageView:
 	_icon.no_depth_test = true
 	_icon.render_priority = 9
 	_icon.shaded = false
-	_icon.position = Vector3(-0.2 - 0.09 * _tag.text.length(), H + 0.95, 0)
+	_icon.position = Vector3(-0.2 - 0.09 * _tag.text.length(), TAG_Y, 0)
 	add_child(_icon)
 	return self
 

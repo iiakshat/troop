@@ -7,10 +7,8 @@
   "archetype": "gauntlet",
   "target_win": 0.62,
   "target_ratio": 0.58,
-  "stars": {"star2": 29, "star3": 56},
+  "stars": {"star2": 40, "star3": 75},
   "charges": {"shield": 1, "bomb": 1},
-  "coin_ref": 89,
-  "route": [0, 1, 0, 1, 0, 0, 0, 0, 0],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "inspector", "n": 3}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 5}, {"lane": 2, "op": "num", "v": 8}]},
     {"at": 62, "type": "hint", "id": "return_fire", "icon": "thug", "enemy": "thug"},
@@ -33,7 +31,7 @@
     {"at": 442, "type": "hint", "id": "turncoat", "icon": "turncoat"},
     {"at": 445, "type": "wave", "groups": [{"enemy": "thug", "n": 786}, {"enemy": "brute", "n": 243, "gap": 6}]},
     {"at": 472, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "inspector", "n": 60}, {"lane": 1, "op": "foe_strip"}, {"lane": 2, "op": "turncoat", "n": 250}]},
-    {"at": 506, "type": "wave", "groups": [{"enemy": "riot", "n": 557}, {"enemy": "brute", "n": 1520, "gap": 8}, {"enemy": "gunman", "n": 1826, "gap": 16}], "label": "GANG WAR"},
+    {"at": 506, "type": "wave", "groups": [{"enemy": "riot", "n": 435}, {"enemy": "brute", "n": 1185, "gap": 8}, {"enemy": "gunman", "n": 1424, "gap": 16}], "label": "GANG WAR"},
     {"at": 544, "type": "finish"}
   ]
 }

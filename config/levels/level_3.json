@@ -7,10 +7,10 @@
   "archetype": "ambush",
   "target_win": 0.71,
   "target_ratio": -1.0,
-  "stars": {"star2": 36, "star3": 69},
+  "stars": {"star2": 38, "star3": 73},
   "charges": {"shield": 1},
   "start_heat": 0.5,
-  "coin_ref": 240,
+  "coin_ref": 259,
   "route": [0, 1, 0, 2, 0, 2],
   "events": [
     {"at": 30, "type": "wave", "fixed": true, "groups": [{"enemy": "thug", "n": 9}]},

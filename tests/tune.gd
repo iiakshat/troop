@@ -209,6 +209,9 @@ func _initialize() -> void:
 			mistakes = false
 		elif a == "cap=1":
 			cap_last = true
+		elif a == "order=1":
+			quit(run_order_report())
+			return
 		elif a == "sweep=1":
 			sweep = true
 		elif a.begins_with("fp="):
@@ -1112,7 +1115,7 @@ static func mix_share(mix: Dictionary, key: String) -> float:
 func calibrate_harder(n: int, base: Dictionary) -> Dictionary:
 	var t0 := Time.get_ticks_msec()
 	var bname := band(n, base)
-	var b: Dictionary = BANDS[bname]
+	var b: Dictionary = fit_band(n, base)
 	var want := band_mid(b["keep"])
 	var probes: Array = []
 	_floor_broke = false
@@ -1172,7 +1175,7 @@ func calibrate_harder(n: int, base: Dictionary) -> Dictionary:
 	r["probes"] = probes.size()
 	r["fit_s"] = (Time.get_ticks_msec() - t0) / 1000.0
 	# Left above its band because going harder broke a floor (gen_levels.py --merge records it).
-	r["floor_bound"] = _floor_broke and bool(r["greedy_win"]) and float(r["greedy_keep"]) > float(b["keep"][1]) + KEEP_SLACK
+	r["floor_bound"] = _floor_broke and bool(r["greedy_win"]) and float(r["greedy_keep"]) > float(BANDS[bname]["keep"][1]) + KEEP_SLACK
 	return r
 
 
@@ -1188,6 +1191,26 @@ static func _axes(base: Dictionary) -> Array:
 					out.append("bk")
 					return out
 	return out
+
+
+## The band the fit aims at (review v2.1, the difficulty curve): the spec band, except that a
+## district boss aims at the low part of the hard band (BOSS_FIT) and a lieutenant just above it
+## (LT_FIT), so each is a step harder than the levels around it; the checks keep the spec band.
+## The tutorial levels aim at the top of their band (TUTORIAL_FIT): a first-week player who
+## misses a row should still get through (review v2.1: L3 failed 25-33 % of noisy first tries).
+const BOSS_FIT := [0.35, 0.48]
+const LT_FIT := [0.38, 0.52]
+const TUTORIAL_FIT := [0.78, 0.85]
+static func fit_band(n: int, base: Dictionary) -> Dictionary:
+	var b: Dictionary = (BANDS[band(n, base)] as Dictionary).duplicate()
+	if band(n, base) == "tutorial":
+		b["keep"] = TUTORIAL_FIT
+	for e in base.get("events", []):
+		if e["type"] == "wave":
+			for g in e["groups"]:
+				if _is_boss_group(g):
+					b["keep"] = LT_FIT if bool(g.get("lieutenant", false)) else BOSS_FIT
+	return b
 
 
 ## A probe meets the band: a win, keep inside the band, lost inside lost_max.
@@ -1441,10 +1464,15 @@ func _floors(n: int, base: Dictionary, sc: Dictionary) -> Dictionary:
 	if floor_ok and band(n, base) == "normal":
 		weak_ok = greedy_probe(n, lv, weak_units())["state"] == "strike"
 	var ok := floor_ok and weak_ok and bool(noad(n, lv, base.get("route", []), false)["ok"])
+	var nf := -1.0
+	if ok and band(n, base) == "normal":
+		# Review v2.1: a normal level fails at most NOISY_CAP of the noisy player's first tries.
+		nf = noisy_fail(n, lv, {}, VALID_NOISY)
+		ok = nf <= NOISY_CAP + 1e-9
 	_floor_broke = _floor_broke or not ok
 	if verbose:
-		print("        floors k %.4f kf %.4f fk %.4f bk %.3f: random wins %.0f%%, weak %s, no-ad %s" % [sc["k"], sc["kf"], sc["fk"],
-			sc.get("bk", 1.0), share * 100.0, "ok" if weak_ok else "LOSE", ("ok" if ok else "LOSE") if floor_ok and weak_ok else "-"])
+		print("        floors k %.4f kf %.4f fk %.4f bk %.3f: random wins %.0f%%, weak %s, no-ad %s, noisy fails %.0f%%" % [sc["k"], sc["kf"], sc["fk"],
+			sc.get("bk", 1.0), share * 100.0, "ok" if weak_ok else "LOSE", ("ok" if ok or nf >= 0.0 else "LOSE") if floor_ok and weak_ok else "-", nf * 100.0])
 	return {"ok": ok, "share": share}
 
 
@@ -1578,6 +1606,42 @@ func run_sweep(lo: int, hi: int, only: Array) -> int:
 ## the random-route floor (RANDOM_FLOOR of the report's n_routes sample wins). full=1 adds the
 ## noisy first-try fail rate, printed against its band (~ when outside) and never asserted:
 ## it is a soft target. Returns the number of failures.
+## order=1 (review v2.1, the difficulty curve): from calibration.json's records, every
+## lieutenant and boss against its district: its noisy first-try fail rate at least the median of
+## the district's normal levels, and its greedy loss (lost / peak) at least ORDER_STEP above the
+## level before it; normal levels at most NOISY_CAP noisy fails. Prints each miss; returns how many.
+const ORDER_STEP := 0.05
+const NOISY_CAP := 0.25
+func run_order_report() -> int:
+	var cal: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://config/levels/calibration.json"))
+	var misses := 0
+	print("band order (review v2.1): lieutenants and bosses vs their district")
+	for d in range(1, 6):
+		var normal: Array = []
+		for i in range(1, 11):
+			var n := (d - 1) * 10 + i
+			var c: Dictionary = cal.get(str(n), {})
+			if String(c.get("band", "")) == "normal":
+				normal.append(float(c.get("noisy_fail", 0.0)))
+				if float(c.get("noisy_fail", 0.0)) > NOISY_CAP + 1e-9:
+					print("  ~ L%d normal level fails %.0f%% of noisy first tries (cap %.0f%%)" % [n, float(c["noisy_fail"]) * 100.0, NOISY_CAP * 100.0])
+					misses += 1
+		normal.sort()
+		var med: float = normal[normal.size() / 2] if not normal.is_empty() else 0.0
+		for n in [(d - 1) * 10 + 5, d * 10]:
+			var c: Dictionary = cal.get(str(n), {})
+			var prev: Dictionary = cal.get(str(n - 1), {})
+			var nf := float(c.get("noisy_fail", 0.0))
+			var step := float(c.get("greedy_lost", 0.0)) - float(prev.get("greedy_lost", 0.0))
+			var ok_f := nf >= med - 1e-9
+			var ok_s := step >= ORDER_STEP - 1e-9
+			print("  L%d noisy fails %.0f%% (district median %.0f%%) %s, loses %+.0f points over L%d %s" % [n, nf * 100.0,
+				med * 100.0, "ok" if ok_f else "~", step * 100.0, n - 1, "ok" if ok_s else "~"])
+			misses += (0 if ok_f else 1) + (0 if ok_s else 1)
+	print("band order: %d misses" % misses)
+	return 0
+
+
 func run_guard_checks(lo: int, hi: int, only: Array, full: bool) -> int:
 	if only.is_empty():
 		only = range(lo, hi + 1)

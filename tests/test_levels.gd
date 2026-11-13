@@ -617,3 +617,42 @@ func test_profile_hero_alone_opening_never_one_shot() -> void:
 		if shot != "":
 			bad.append("L%d %s" % [n, shot])
 	check(bad.is_empty(), "the hero alone is one-shot on: %s" % str(bad))
+
+
+## Review v2.1 (ux): a revive after a loss in the boss or lieutenant phase is a real chance.
+## A weaker squad (the pace with WEAK fire, no powers) on the stored route falls at the boss; the
+## revive pushes him back to his halt and the winning gang back to revive.push (it pays what it
+## took), and the main flow offers it only when a revived copy can win (main.revive_can_win).
+## Where it can win, the greedy-like pilot does win it; where it cannot, the offer is skipped.
+func test_revive_after_a_boss_phase_loss() -> void:
+	var Main = load("res://src/main.gd")
+	var offered := 0
+	for n in [5, 10, 15, 20, 30]:
+		var lv := Config.level(n)
+		var route: Array = lv.get("route", [])
+		for fp in [0.45, 0.6, 0.75]:
+			var sim := LevelSim.new(lv, Tune.scaled_units(units, fp), _model_pace().get(str(n), {}))
+			var pilot := Autopilot.new(route, false, true, 2.0, 0.7)
+			var boss_seen := false
+			while sim.state == "run" and sim.time < 400.0:
+				pilot.drive(sim)
+				sim.step(DT)
+				sim.drain()
+				for h in sim.hordes:
+					boss_seen = boss_seen or bool(h["boss"])
+			if sim.state != "lost" or not boss_seen:
+				continue
+			# The boss phase: decide the offer as the game does, then play the revive out.
+			var can: bool = Main.revive_can_win(sim, route)
+			var played := sim.clone()
+			check(played.revive(played.revive_troops()), "L%d fp %.2f: revived" % [n, fp])
+			var p2 := Autopilot.new(route, true, true, 2.0, 0.7)
+			while played.state == "run" and played.time < 600.0:
+				p2.drive(played)
+				played.step(DT)
+				played.drain()
+			if can:
+				offered += 1
+				eq(played.state, "strike", "L%d fp %.2f: an offered revive wins" % [n, fp])
+			break
+	check(offered >= 1, "at least one boss-phase revive is offered and won (%d)" % offered)

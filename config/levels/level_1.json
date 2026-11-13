@@ -9,7 +9,7 @@
   "target_ratio": -1.0,
   "stars": {"star2": 36, "star3": 68},
   "charges": {},
-  "coin_ref": 191,
+  "coin_ref": 175,
   "route": [2, 2, 1, 1, 2],
   "events": [
     {"at": 30, "type": "wave", "fixed": true, "groups": [{"enemy": "thug", "n": 5}, {"enemy": "thug", "n": 5, "gap": 30}]},

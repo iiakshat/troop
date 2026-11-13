@@ -195,6 +195,15 @@ ARCH = {
     "boss": {},
 }
 CAR_LEVEL = 9          # cars first show up here (spec v2.1 §4.2: their hint card at L9)
+# Review v2.1 (variety after L26): one district hazard for each of districts 3-5 (units.json
+# hazards), new in the district's first level and remixed through it: HAZARD_PLAN maps a slot to
+# how many hazard stretches it gets (never the lieutenant's or the boss's level). Each stretch
+# strikes HAZARD_N times, HAZARD_EVERY s apart (the chopper quicker).
+HAZARDS = {3: "crane", 4: "steam", 5: "chopper"}
+HAZARD_PLAN = {1: 1, 2: 1, 3: 1, 4: 2, 6: 1, 7: 1, 8: 2, 9: 2}
+HAZARD_N = (3, 5)
+HAZARD_EVERY = {"crane": (1.9, 2.4), "steam": (2.0, 2.5), "chopper": (1.2, 1.5)}
+HAZARD_DODGE = 0.7     # the planned squad dodges this share of the strikes (the greedy player's)
 CAGE_GUARDS = ("thug", "knifer", "brute", "riot", "gunman")   # gangs that stand guard over a cage
 
 
@@ -1116,9 +1125,13 @@ HINTS = {  # mechanic -> (hint id, icon, power)
     "sniper": ("sniper", "sniper", None),
     "grenadier": ("grenadier", "grenadier", None),
     "commando": ("commando", "commando", None),
-    "car": ("car", "police_car", None),
+    "car": ("car", "car", None),
     "return_fire": ("return_fire", "thug", None),  # spec v2.1 §1.1: L11, gang ▸ bullet ▸ squad -
-    "lieutenant": ("lieutenant", "boss", None),    # spec v2.1 §1.3: L5's mini-boss (his own card)
+    "lieutenant": ("lieutenant", "lieutenant", None),    # spec v2.1 §1.3: L5's mini-boss (his own card)
+    "cage": ("cage", "cage", None),                 # review v2.1: the rescue rule (L6)
+    "crane": ("crane", "crane", None),              # review v2.1: the district hazards (L21, L31, L41)
+    "steam": ("steam", "steam", None),
+    "chopper": ("chopper", "chopper", None),
 }
 
 
@@ -1149,6 +1162,10 @@ def mechanics_of(ev: dict, level: int = 0) -> list[tuple[str, float]]:
                 out.append(("bomb", at - 30))
     elif ev["type"] == "obstacle":
         out.append((ev["kind"], at - 28))
+    elif ev["type"] == "cage":
+        out.append(("cage", at - 30))
+    elif ev["type"] == "hazard":
+        out.append((ev["kind"], at))
     elif ev["type"] == "wave":
         for g in ev["groups"]:
             # A lieutenant is a boss group of his own kind: his own hint (if HINTS has one),
@@ -1574,6 +1591,25 @@ def generate(level: int) -> dict:
     return out
 
 
+def add_hazards(level: int, events: list[dict]) -> None:
+    """Review v2.1: the district's hazard stretches (HAZARD_PLAN), each starting 8 m past a gate
+    row (the squad has just picked its lane), on its own seeded RNG so the rest of the level is
+    unchanged. A level of districts 1-2, a lieutenant or a boss gets none."""
+    kind = HAZARDS.get(district(level))
+    count = HAZARD_PLAN.get(index_in_district(level), 0)
+    if not kind or not count:
+        return
+    rng = random.Random(7000 + level)
+    rows = [e for e in events if e["type"] == "gates"][1:-1]
+    if not rows:
+        return
+    picks = sorted(rng.sample(rows, min(count, len(rows))), key=lambda e: float(e["at"]))
+    lo, hi = HAZARD_EVERY[kind]
+    for r in picks:
+        events.append({"at": int(r["at"]) + 8, "type": "hazard", "kind": kind,
+                       "n": rng.randint(*HAZARD_N), "every": round(rng.uniform(lo, hi), 1)})
+
+
 # ------------------------------------------------------------------ output
 
 def stretch(events: list[dict], min_m: float = MIN_SECS * S0) -> None:
@@ -1590,6 +1626,7 @@ def build(level: int, seen: set, cal_all: dict) -> dict:
     cal = cal_all.get(str(level), {})
     lv = HAND[level]() if level in HAND else generate(level)
     events = lv["events"]
+    add_hazards(level, events)
     speed = float(lv.get("scroll_speed", S0))
     stretch(events, float(lv.get("min_secs", MIN_SECS)) * speed)
     apply_scale(events, float(cal.get("k", 1.0)), float(cal.get("kf", 1.0)))

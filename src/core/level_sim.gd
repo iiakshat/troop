@@ -128,6 +128,8 @@ var hordes: Array = []
 var attacks: Array = []     # telegraphed enemy attacks in the air: {id, kind, lane, src, land, base, pct, cause, x, z}
 var bombs: Array = []       # the squad's bombs in the air: {id, lane, x, land, target, ref, z}
 var cages: Array = []       # hostage cages on the road: {id, at, lane, hostages, unit, z, guard, open}
+var hazards: Array = []     # district hazards at work (review v2.1): {id, kind, left, t, every, warn, pm, lanes}
+var hazard_cfg: Dictionary  # units.hazards: per kind {warn_s, pct, lanes, first_s}
 var charges: Dictionary = {"shield": 0, "bomb": 0}
 var shield_t := 0.0
 var kills := 0
@@ -198,6 +200,7 @@ func _init(level: Dictionary = {}, units_cfg: Dictionary = {}, upgrades: Diction
 	boss_cfg = units_cfg.get("boss", {})
 	lt_cfg = units_cfg.get("lieutenant", {})
 	revive_cfg = units_cfg.get("revive", {})
+	hazard_cfg = units_cfg.get("hazards", {})
 	star_cfg = level.get("stars", units_cfg.get("stars", {}))
 
 	var hero: Dictionary = stats["hero"]
@@ -335,6 +338,10 @@ func _build_spawns(events: Array) -> void:
 			"finish":
 				finish_at = at
 				_spawns.append({"kind": "finish", "ev": e, "at": at, "spawn_at": at - spawn_dist})
+			"hazard":
+				# A district hazard (review v2.1: something new in districts 3-5) starts when the
+				# squad reaches its `at`.
+				_spawns.append({"kind": "hazard", "ev": e, "at": at, "spawn_at": at})
 			"hint":
 				_spawns.append({"kind": "hint", "ev": e, "at": at, "spawn_at": at})
 				if e.has("enemy"):
@@ -620,6 +627,9 @@ func step(dt: float) -> void:
 	_gunfire(dt)
 	if state != "run":
 		return
+	_hazard_strikes(dt)
+	if state != "run":
+		return
 	_return_fire(dt)
 	if state != "run":
 		return
@@ -771,6 +781,8 @@ func _spawn_one(sp: Dictionary, early := false) -> void:
 		"cage":
 			_pending_hordes -= 1
 			_spawn_cage(sp)
+		"hazard":
+			_start_hazard(ev)
 
 
 func _spawn_horde(sp: Dictionary, early := false) -> void:
@@ -1270,6 +1282,49 @@ func _boss_fire(h: Dictionary, dt: float) -> void:
 		else:
 			_telegraph("lt_barrage" if h["lieutenant"] else "barrage", int(h["id"]), float(cfg.get("warn_s", 1.0)),
 				-1, pm, "boss")
+
+
+## Review v2.1, something new in districts 3-5: a district hazard (units.json hazards; the level
+## event {at, type: "hazard", kind, n, every}). From its `at` it strikes `n` times, every `every`
+## s (the first after first_s): each strike is a telegraph on the squad's lane (`lanes` 2: that
+## lane and the one beside it toward the middle, like the boss's sweep) that lands warn_s later
+## and takes pct % of the squad if it is still there. Changing lane dodges it, the shield blocks
+## it, and it waits for a free mark like any telegraph. Events: hazard_start {id, kind, n},
+## hazard_end {id}. The docks' crane drops a container (one lane), the mill's steam vents burst
+## (two lanes), uptown's helicopter strafes (one lane, quick strikes that chase the squad).
+func _start_hazard(ev: Dictionary) -> void:
+	var kind := String(ev.get("kind", ""))
+	var cfg: Dictionary = hazard_cfg.get(kind, {})
+	if cfg.is_empty():
+		return
+	var hz := {"id": _new_id(), "kind": kind, "left": maxi(int(ev.get("n", 3)), 1),
+		"every": maxf(float(ev.get("every", cfg.get("every_s", 2.0))), 0.3),
+		"t": float(cfg.get("first_s", 1.0)), "warn": float(cfg.get("warn_s", 1.2)),
+		"pm": int(cfg.get("pct", 8)) * 10, "lanes": int(cfg.get("lanes", 1)), "n": 0}
+	hazards.append(hz)
+	out.append({"type": "hazard_start", "id": hz["id"], "kind": kind, "n": hz["left"]})
+
+
+func _hazard_strikes(dt: float) -> void:
+	for hz in hazards.duplicate():
+		if int(hz["left"]) <= 0:
+			var pending := attacks.any(func(a): return int(a["src"]) == int(hz["id"]))
+			if not pending:
+				hazards.erase(hz)
+				out.append({"type": "hazard_end", "id": hz["id"], "kind": hz["kind"]})
+			continue
+		hz["t"] = float(hz["t"]) - dt
+		if float(hz["t"]) > 0.0 or not mark_free():
+			continue
+		hz["t"] = float(hz["every"])
+		hz["left"] = int(hz["left"]) - 1
+		var lanes: Array = []
+		if int(hz["lanes"]) >= 2:
+			lanes = sweep_lanes(squad_lane(), int(hz["n"]))
+		hz["n"] = int(hz["n"]) + 1
+		_telegraph(String(hz["kind"]), int(hz["id"]), float(hz["warn"]), -1, int(hz["pm"]), String(hz["kind"]), lanes)
+		if state != "run":
+			return
 
 
 ## The two lanes a sweep covers when the squad stands in `lane`: that lane and its neighbour
@@ -1826,6 +1881,8 @@ func clone() -> LevelSim:
 	c.attacks = attacks.duplicate(true)
 	c.bombs = bombs.duplicate(true)
 	c.cages = cages.duplicate(true)
+	c.hazards = hazards.duplicate(true)
+	c.hazard_cfg = hazard_cfg
 	c.charges = charges.duplicate()
 	c._wave_mods = _wave_mods.duplicate(true)
 	c._joined = _joined.duplicate()

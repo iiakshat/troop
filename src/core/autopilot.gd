@@ -148,12 +148,12 @@ static func gate_row_count(level: Dictionary) -> int:
 
 
 ## Spec v2.1 §1.3, the boss HP rule's "expected squad": the damage per second the squad really
-## deals the level's boss (or lieutenant) over his first hp_secs seconds at the halt, playing
+## deals the level's boss (or lieutenant) over hp_secs seconds from its first hit on him (once his
+## escort in front is down), playing
 ## `lanes` with `upgrades` at `tap_rate`. tools/gen_levels.py sets his HP to hp_secs x this
-## (calibration.json `boss_dps`), so on that route he falls hp_secs after he halts the street
-## (review v2.1: the old rule took the squad's paper dps against him, while the fire went to
-## his escort first, and fights ran 12-25 s). Shots on the escort in front of him count as time
-## he is not hit, and a bomb's chunk of his health is left out. He gets endless health for the
+## (calibration.json `boss_dps`), so on that route he falls hp_secs after the squad's fire
+## reaches him (review v2.1: the old rule took the squad's paper dps against him at the halt,
+## when its fire still went to his escort). A bomb's chunk of his health is left out. He gets endless health for the
 ## run. A level with no boss (yet; a lieutenant slot): the squad's paper dps against boss armour
 ## when its last wave's first gang comes out. 0 if the squad falls first. `pilot` (optional)
 ## drives instead of a lane-route autopilot: tools/boss_dps.gd passes the calibration profile's
@@ -191,16 +191,17 @@ static func boss_dps(level: Dictionary, units_cfg: Dictionary, lanes: Array, upg
 		pilot.drive(sim)
 		sim.step(dt)
 		for e in sim.drain():
-			if e["type"] == "bomb" and t0 >= 0.0:
+			if e["type"] == "bomb":
 				bombed += float(e.get("boss_dmg", 0))
 		guard += 1
 		for h in sim.hordes:
 			if not has_boss and int(h["wave"]) == last_wave:
 				return sim.squad.dps(sim.stats, sim.weapons, int(bdef["armour"]), 1.0e9, 1)
-			if has_boss and h["boss"] and t0 < 0.0 and LevelSim.front_z(h) >= -sim.boss_halt:
-				t0 = sim.time
+			if has_boss and h["boss"] and boss_id < 0:
 				boss_id = int(h["id"])
 				hp0 = float(LevelSim.boss_hp(h))
+			if has_boss and int(h["id"]) == boss_id and t0 < 0.0 and float(LevelSim.boss_hp(h)) < hp0 - bombed - 1e-6:
+				t0 = sim.time   # the first hit that is not a bomb's
 		if t0 >= 0.0 and sim.time - t0 >= secs - 1e-9:
 			for h in sim.hordes:
 				if int(h["id"]) == boss_id:

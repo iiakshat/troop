@@ -22,8 +22,12 @@ const ENEMY_TRACER_SPEED := 50.0   # m/s: a gang 50 m up the street hits in abou
 const ENEMY_TRACER_MIN_S := 0.45
 const ENEMY_TRACER_MAX_S := 1.0
 const ENEMY_SCALE := {
-	"etracer": Vector3(1.0, 1.0, 1.7), "etracer_big": Vector3(2.0, 2.0, 2.2), "esniper": Vector3(1.0, 1.0, 5.0),
+	"etracer": Vector3(1.5, 1.5, 2.0), "etracer_big": Vector3(2.2, 2.2, 2.4), "esniper": Vector3(1.2, 1.2, 5.0),
 }
+## Review v2.1: incoming fire keeps a readable screen size far up the street (a 50 m volley was
+## 4 px specks): it grows with distance up to ENEMY_FAR_MAX and leaves a short glowing trail.
+const ENEMY_FAR_M := 9.0
+const ENEMY_FAR_MAX := 5.0
 const ENEMY_TRACER_COLOR := Color(1.0, 0.3, 0.1)   # clearly not the squad's pale yellow-white
 const ENEMY_CORE_COLOR := Color(1.0, 0.78, 0.35)
 
@@ -418,8 +422,11 @@ func _tick_list(list: Array, delta: float, grow: bool) -> void:
 		elif ENEMY_SCALE.has(kind):
 			if _n[4] < MAX_ENEMY_PROJ:
 				var es: Vector3 = ENEMY_SCALE[kind]
-				_etracer_mm.set_instance_transform(_n[4], Transform3D(basis.scaled_local(es * Vector3(far, far, sqrt(far))), p["pos"]))
+				var ef := clampf((-(p["pos"] as Vector3).z + 6.0) / ENEMY_FAR_M, 1.0, ENEMY_FAR_MAX) if grow else 1.0
+				_etracer_mm.set_instance_transform(_n[4], Transform3D(basis.scaled_local(es * Vector3(ef, ef, sqrt(ef))), p["pos"]))
 				_n[4] += 1
+				if randf() < 0.55:
+					burst(p["pos"], Color(1.0, 0.42 + randf() * 0.2, 0.1), 1, 0.3, 0.1 * ef, 0.16, 0.0, 0.0)
 		else:
 			if kind == "rocket" and randf() < 0.3:
 				# Light smoke: many launchers at once must not wall off the street.

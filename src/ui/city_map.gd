@@ -473,7 +473,8 @@ func _build_nodes() -> void:
 			if arch != "":
 				badge = UiKit.icon(arch, BADGE)
 				badge.size = Vector2(BADGE, BADGE)
-				badge.position = c + Vector2(-dia * 0.5 - 10, -dia * 0.5 - 10)
+				# Review v2.1: off the node, clear of its number.
+				badge.position = c + Vector2(-dia * 0.5 - BADGE * 0.62, -dia * 0.5 - BADGE * 0.5)
 				_layers["nodes"].add_child(badge)
 			# Recommended Squad Power (v1.1): a small pill under the nodes ahead of the player;
 			# red with a warning tint on the node when the squad is weaker than that.

@@ -7,11 +7,9 @@
   "archetype": "horde",
   "target_win": 0.47,
   "target_ratio": 0.58,
-  "stars": {"star2": 31, "star3": 60},
+  "stars": {"star2": 23, "star3": 44},
   "charges": {"shield": 1, "bomb": 1},
   "fire_k": 2.0,
-  "coin_ref": 97,
-  "route": [0, 0, 0, 1, 2, 0],
   "events": [
     {"at": 43, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 8}, {"lane": 1, "op": "num", "v": 8}, {"lane": 2, "op": "num", "v": -2, "step": 0.5, "max": 6}]},
     {"at": 95, "type": "wave", "groups": [{"enemy": "thug", "n": 4}]},
@@ -25,7 +23,7 @@
     {"at": 357, "type": "wave", "groups": [{"enemy": "thug", "n": 412}, {"enemy": "knifer", "n": 1113, "gap": 8}]},
     {"at": 406, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "swat", "n": 40}, {"lane": 2, "op": "mul", "k": 2}]},
     {"at": 406, "type": "obstacle", "kind": "pothole", "lane": 1, "fall_pct": 25},
-    {"at": 458, "type": "wave", "groups": [{"enemy": "thug", "n": 5238}, {"enemy": "gunman", "n": 12272, "gap": 10}], "label": "GANG WAR"},
+    {"at": 458, "type": "wave", "groups": [{"enemy": "thug", "n": 7459}, {"enemy": "gunman", "n": 17475, "gap": 10}], "label": "GANG WAR"},
     {"at": 496, "type": "finish"}
   ]
 }

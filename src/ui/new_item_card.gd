@@ -319,6 +319,12 @@ func _bind(ev: Dictionary) -> void:
 			func(o): return String(o.get("kind", "")) == String(_find["obstacle"])))
 		_bind_id = int(ob.get("id", -1))
 		_obj = ob
+	elif _find.has("cage"):
+		# Review v2.1: a hostage cage gets an obstacle-style tag over it (the nearest one ahead).
+		_kind = "cage"
+		var cg: Dictionary = _nearest(sim.cages.filter(func(c): return not bool(c.get("open", false))))
+		_bind_id = int(cg.get("id", -1))
+		_obj = cg
 	elif _find.has("gate") or _find.has("red_gate"):
 		_kind = "row"
 		var r: Dictionary = _by_id(sim.rows, int(ev["row"])) if ev.has("row") else _first_row(sim)
@@ -464,6 +470,14 @@ func _locate() -> void:
 			var base := Vector3(LevelView.LANE_X[int(ob["lane"])], 0.0, float(ob["z"]))
 			_pos = _project(base + Vector3(0, float(table().get("tag_y", 2.1)), 0))
 			_stem = _project(base + Vector3(0, 0.6, 0))
+		"cage":
+			var cg := _by_id(sim.cages, _bind_id)
+			if cg.is_empty() or bool(cg.get("open", false)) or float(cg["z"]) >= -0.5:
+				_gone = true
+				return
+			var cb := Vector3(LevelView.LANE_X[int(cg["lane"])], 0.0, float(cg["z"]))
+			_pos = _project(cb + Vector3(0, CageView.TAG_Y + 1.0, 0))
+			_stem = _project(cb + Vector3(0, CageView.H, 0))
 		"row":
 			var r := _by_id(sim.rows, _bind_id)
 			var lanes: Array = []
@@ -550,8 +564,13 @@ func _draw_marker() -> void:
 			_ring(_pos, _rad * (1.0 + 0.08 * pulse), col, a)
 		"horde":
 			_ring(_pos, _rad * (1.0 + 0.04 * pulse), col, a)
-			draw_chip(_canvas, _pos + Vector2(0, -_rad.y - 30.0 - 4.0 * pulse), 24.0, _tone, a)
-		"obstacle":
+			if bool(_obj.get("boss", false)):
+				# Review v2.1: beside a boss's or lieutenant's ring, never on his health bar or
+				# his escort's count above it.
+				draw_chip(_canvas, _pos + Vector2(-_rad.x - 30.0 - 4.0 * pulse, 0), 24.0, _tone, a)
+			else:
+				draw_chip(_canvas, _pos + Vector2(0, -_rad.y - 30.0 - 4.0 * pulse), 24.0, _tone, a)
+		"obstacle", "cage":
 			if _stem.x >= 0.0:
 				_canvas.draw_line(_pos + Vector2(0, 18), _stem, Color(UiKit.INK, 0.8 * a), 7.0)
 				_canvas.draw_line(_pos + Vector2(0, 18), _stem, Color(col, a), 3.0)

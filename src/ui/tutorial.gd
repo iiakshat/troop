@@ -268,7 +268,10 @@ func _look(delta: float) -> void:
 				_begin("barrel", sim.lane != _lane)
 				return
 	for id in ["shield", "bomb"]:
-		if int(sim.charges.get(id, 0)) > 0 and not _seen(id) and _gang_near():
+		# Review v2.1 (spec §5): the shield lesson comes when something really fires at the squad
+		# (L3's gunmen, a mark on its lane), the bomb lesson on a gang bigger than the squad.
+		var due := _threat_on_squad() if id == "shield" else _big_gang_near()
+		if int(sim.charges.get(id, 0)) > 0 and not _seen(id) and due:
 			_power = id
 			_charges_at = int(sim.charges[id])
 			_begin(id, false)
@@ -597,6 +600,26 @@ static func gate_value(g: Dictionary, n: float) -> float:
 func _gang_near() -> bool:
 	for h in view.sim.hordes:
 		if int(h.get("count", 0)) > 0 and float(h["z"]) > GANG_Z:
+			return true
+	return false
+
+
+## A gang is firing at the squad (its opening volley went out) or a telegraph marks its lane.
+func _threat_on_squad() -> bool:
+	var sim := view.sim
+	for a in sim.attacks:
+		if LevelSim.attack_lanes(a).has(sim.squad_lane()):
+			return true
+	for h in sim.hordes:
+		if LevelSim.fires_back(h) and bool(h.get("rf_open", false)):
+			return true
+	return false
+
+
+## A gang on the street that outnumbers the squad, near enough to bomb.
+func _big_gang_near() -> bool:
+	for h in view.sim.hordes:
+		if int(h.get("count", 0)) > maxi(view.sim.squad.total(), 12) and float(h["z"]) > GANG_Z and not h["boss"]:
 			return true
 	return false
 

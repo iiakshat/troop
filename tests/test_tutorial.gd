@@ -316,3 +316,34 @@ func test_first_build_hand_only_on_a_live_build_button() -> void:
 		eq(BuildingPanel.first_hand_shows(Game.building_state(String(c[0])), int(c[1])), c[2],
 			"%s with %d coins: hand %s" % [c[0], c[1], "on Build" if c[2] else "hidden"])
 	Game.save = keep
+
+
+## Review v2.1 (spec §5): the shield lesson waits until something really fires at the squad
+## (a gang's opening volley, a mark on its lane), not just a gang in range (L1's thugs never
+## shoot); the bomb lesson waits for a gang bigger than the squad.
+func test_power_lessons_wait_for_a_real_threat() -> void:
+	var keep := _fresh_hints(["tap", "swipe", "gate_pick", "red_gate", "barrel"])
+	var v := _view(1)
+	var t := _tut(v)
+	v._state = "play"
+	v.sim.charges["shield"] = 1
+	v.sim.charges["bomb"] = 1
+	var gang := {"id": 901, "enemy": "thug", "count": 5, "start": 5, "z": -30.0, "cols": 9, "per": 1,
+		"row_gap": 0.95, "melee": false, "boss": false, "rf_rate": 0.0, "rf_share": 0, "rf_range": 50.0,
+		"rf_open": false, "hp": 1.0}
+	v.sim.hordes.append(gang)
+	t._look(0.1)
+	check(t._step != "shield" and t._step != "bomb", "a small gang that does not fire: no power lesson (%s)" % t._step)
+	v.sim.attacks.append({"id": 5, "kind": "grenade", "lane": v.sim.squad_lane(), "lanes": [v.sim.squad_lane()],
+		"src": 901, "land": v.sim.time + 1.0, "base": -1, "pm": 100, "cause": "grenadier", "x": 0.0, "z": 0.0})
+	t._look(0.1)
+	eq(t._step, "shield", "a mark on the squad's lane opens the shield lesson")
+	t._end()
+	v.sim.attacks.clear()
+	gang["count"] = v.sim.squad.total() + 40
+	gang["start"] = gang["count"]
+	t._look(0.1)
+	eq(t._step, "bomb", "a gang bigger than the squad opens the bomb lesson")
+	t._end()
+	_free(v, t)
+	Game.save["seen_hints"] = keep

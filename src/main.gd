@@ -505,13 +505,35 @@ func _on_finished(r: Dictionary) -> void:
 			print("WIN ", _last_win)
 		if _autoplay() and current_level < int(_args.get("chain", "0")):
 			_after(2.0, func(): _leave_result(true))
-	elif not view.sim.revived and not _revive_offered and (not _autoplay() or _args.has("revive")):
+	elif not view.sim.revived and not _revive_offered and (not _autoplay() or _args.has("revive")) 			and revive_can_win(view.sim, (view.get("_level") as Dictionary).get("route", []) if view.get("_level") is Dictionary else []):
 		_offer_revive(r)
 		return
 	else:
 		_show_loss(r)
 	if hud:
 		hud.visible = false
+
+
+## Review v2.1 (ux): the revive is offered only when it can win. A headless copy of the lost
+## street is revived (LevelSim.revive) and played on by a pilot (the stored route's lanes for
+## the rows left, the free shield and bomb, stepping out of most marks, tapping 2/s) for at most
+## REVIVE_FORK_S sim seconds; it has to reach the stash. An ad that buys a dead end is never sold.
+const REVIVE_FORK_S := 90.0
+static func revive_can_win(sim: LevelSim, route: Array) -> bool:
+	var c := sim.clone()
+	if not c.revive(c.revive_troops()):
+		return false
+	c.drain()
+	var lanes: Array = route.duplicate()
+	while lanes.size() < c.rows_passed:
+		lanes.append(c.lane)
+	var pilot := Autopilot.new(lanes, true, true, 2.0, 0.7)
+	var t0 := c.time
+	while c.state == "run" and c.time - t0 < REVIVE_FORK_S:
+		pilot.drive(c)
+		c.step(1.0 / 30.0)
+		c.drain()
+	return c.state != "lost"
 
 
 ## Near miss: one revive per level for a rewarded ad (no countdown, X = give up).

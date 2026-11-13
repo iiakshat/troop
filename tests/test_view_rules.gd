@@ -41,11 +41,17 @@ func _drop(parts: Array) -> void:
 ## Spec v2 §3: no slow-downs during a level. L7 has a first rank join (the old 0.3x
 ## spotlight) and red gates (the old 0.3x lesson) in the first 20 s.
 func test_level_view_never_slows_time() -> void:
-	var parts := _view(7)
+	# (A level of its own: the generated L7 no longer has to put a recruit in its first 20 s.)
+	var lv := {"id": 7, "district": 1, "events": [
+		{"at": 30, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "sergeant", "n": 4},
+			{"lane": 1, "op": "num", "v": 6}, {"lane": 2, "op": "num", "v": -3, "step": 0.5, "max": 5}]},
+		{"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 10}]},
+		{"at": 110, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -5, "step": 1.0, "max": 6},
+			{"lane": 1, "op": "recruit", "unit": "inspector", "n": 3}, {"lane": 2, "op": "num", "v": 8}]},
+		{"at": 400, "type": "finish"}]}
+	var parts := _view(lv)
 	var view: LevelView = parts[0]
-	var lv := Config.level(7)
-	var route: Array = lv.get("route", [2, 1, 1, 0, 0])
-	var pilot := Autopilot.new(route if not route.is_empty() else [2, 1, 1, 0, 0], true)
+	var pilot := Autopilot.new([0, 0], true)
 	var slow := 0
 	var joined := [false]
 	view.rank_joined.connect(func(_u, _f): joined[0] = true)
@@ -433,7 +439,8 @@ func test_lieutenant_is_a_smaller_tinted_boss() -> void:
 	var lv: Dictionary = view._hordes[9001]
 	eq(String(lv["kind"]), "lieutenant", "drawn as the lieutenant")
 	near(view._boss_scale(lv), LevelView.LT_SCALE, "at the lieutenant's scale")
-	near(LevelView.LT_SCALE, 2.4, "2.4x")
+	near(LevelView.LT_SCALE, float(Game.units["lieutenant"]["scale"]), "the view's fallback is units.json lieutenant.scale")
+	check(LevelView.LT_SCALE >= 2.8, "drawn big enough to read at range (%.1fx)" % LevelView.LT_SCALE)
 	check(view._boss_scale(lv) < view._boss_scale(boss), "smaller than the district boss")
 	check(lv.has("bar"), "he has a health bar")
 	if lv.has("bar"):
@@ -734,3 +741,74 @@ func test_hint_shown_is_logged() -> void:
 		check(ev[0][1].has("t"), "the time into the level")
 	analytics.sink = Callable()
 	_drop(parts)
+
+
+# ---------------------------------------------------------------- v2.1 review fixes
+
+## Review v2.1 (code): a mark the sim called off (the squad fell or revived, the finish, a
+## sniper who died) goes quietly: no flash, no blast, no shake.
+func test_cancelled_attack_lands_silently() -> void:
+	var parts := _view(_fight_level(), {"squad": 40})
+	var view: LevelView = parts[0]
+	var fx: Fx = parts[2]
+	var id := _first_gang(view)
+	var t := view.sim.time
+	view._handle_events([{"type": "telegraph", "id": 77, "kind": "barrage", "lane": 1, "lanes": [1], "src": id,
+		"x": 0.0, "z": 0.0, "land_t": t + 1.0}])
+	_tick(view, fx, 1.0 / 60.0)
+	check(view.lane_marked(1), "the barrage marks the lane")
+	var shake0 := float(view.world.get("_shake")) if view.world.get("_shake") != null else 0.0
+	view._handle_events([{"type": "attack_land", "id": 77, "kind": "barrage", "lane": 1, "lanes": [1], "lost": 0,
+		"blocked": false, "hit": false, "cancelled": true}])
+	_tick(view, fx, 1.0 / 60.0)
+	check(not view.lane_marked(1), "the mark is gone")
+	eq(float((view._zones[1] as Dictionary)["flash"]), 0.0, "no landing flash")
+	if view.world.get("_shake") != null:
+		check(float(view.world.get("_shake")) <= shake0, "no shake")
+	_drop(parts)
+
+
+## Review v2.1 (code): a boss in melee swings his own fists; he never queues a thug-sized charge,
+## so his death later is his own big fall.
+func test_boss_melee_queues_no_charge() -> void:
+	var lvl := {"id": 10, "district": 1, "events": [
+		{"at": 60, "type": "wave", "groups": [{"enemy": "boss", "n": 1, "hp": 5000}]},
+		{"at": 400, "type": "finish"}]}
+	var parts := _view(lvl, {"squad": 40})
+	var view: LevelView = parts[0]
+	var fx: Fx = parts[2]
+	var id := _first_gang(view)
+	check(id >= 0, "the boss comes")
+	if id < 0:
+		_drop(parts)
+		return
+	var hv: Dictionary = view._hordes[id]
+	view._handle_events([{"type": "melee", "horde": id, "enemies": 1, "lost": 3, "shielded": false}])
+	eq(float(hv.get("strike", 0.0)), 0.0, "no strikers queued for him")
+	view.sim.hordes[0]["count"] = 0
+	_tick(view, fx, 0.2)
+	for c in view._charging:
+		check(String(c["kind"]) != String(hv["kind"]), "he never charges as a thug-sized figure")
+	_drop(parts)
+
+
+## Review v2.1 (honest numbers): a bar under every gang's count, measured against the squad's
+## firepower: full red when the people who would reach the squad are worth all of it, empty when
+## the squad's fire melts the gang first.
+func test_reach_bar_measures_against_firepower() -> void:
+	for case in [[6, false], [6000, true]]:
+		var lvl := {"id": 11, "district": 2, "events": [
+			{"at": 60, "type": "wave", "groups": [{"enemy": "thug", "n": int(case[0])}]},
+			{"at": 400, "type": "finish"}]}
+		var parts := _view(lvl, {"squad": 20})
+		var view: LevelView = parts[0]
+		var fx: Fx = parts[2]
+		var id := _first_gang(view)
+		_tick(view, fx, 0.1)
+		var hv: Dictionary = view._hordes.get(id, {})
+		check(hv.has("reach_bg"), "%d thugs: the gang has a reach bar" % int(case[0]))
+		if hv.has("reach_bg"):
+			check((hv["reach_bg"] as Node3D).visible, "%d thugs: shown in play" % int(case[0]))
+			eq((hv["reach_fill"] as Node3D).visible, bool(case[1]), "%d thugs vs 21: red only when some would reach" % int(case[0]))
+			eq(view.sim.reach_estimate(hv["h"]) > 0, bool(case[1]), "%d thugs: the estimate agrees" % int(case[0]))
+		_drop(parts)

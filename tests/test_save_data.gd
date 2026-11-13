@@ -7,7 +7,8 @@ func test_v1_save_migrates_to_station() -> void:
 	var s := SaveData.migrate({"coins": 120, "unlocked": 3, "upgrades": {"knife": 2, "speed": 1, "squad": 19}}, eco)
 	check(int(s["coins"]) >= 120, "coins kept")
 	var paid := SaveData.legacy_spent(eco, "armory", 2) + SaveData.legacy_spent(eco, "range", 1)
-	check(Armory.spent(s, "knives") >= paid, "knife + speed -> knife track worth what was paid")
+	check(Armory.spent(s, "knives") + int(s["coins"]) - 120 >= paid, "knife + speed -> knife track worth what was paid (coins back above the open tiers)")
+	check(Armory.tier_unlocked(Armory.level(s, "knives").x, int(s["unlocked"])), "never past a tier L%d has opened" % int(s["unlocked"]))
 	check(not s["station"].has("armory") and not s["station"].has("range"), "old rooms gone")
 	eq(s["station"]["training"], Economy.room_max("training", eco), "squad -> training, clamped to max")
 	check(not s.has("upgrades"), "old key dropped")
@@ -72,7 +73,8 @@ func test_v2_save_migrates_to_v4() -> void:
 	eq(SaveData.VERSION, 4, "v4")
 	check(int(s["coins"]) >= 900, "coins kept")
 	eq(s["unlocked"], 4, "progress kept")
-	check(Armory.spent(s, "knives") >= SaveData.legacy_spent(eco, "armory", 4), "armory 4 -> knife track")
+	check(Armory.spent(s, "knives") + int(s["coins"]) - 900 >= SaveData.legacy_spent(eco, "armory", 4),
+		"armory 4 -> knife track (or coins back above the open tiers)")
 	eq(s["station"]["evidence"], 3, "evidence kept")
 	eq([int(s["powers"]["shield"]["stored"]), int(s["powers"]["bomb"]["stored"])], [1, 1], "garage 2 -> stored shield 1, bomb 1")
 	eq(s["seen_hints"], ["swipe"], "hints kept")
@@ -90,6 +92,22 @@ func test_v2_save_migrates_to_v4() -> void:
 	eq(s["star_chests_opened"], 0, "no chests")
 	eq(s["rank_seen"], [], "no ranks seen")
 	eq(s["last_interstitial_level"], 0, "no interstitials yet")
+
+
+## Review v2.1: a v3 save's armory and range rooms become knife-track steps, but never past a tier
+## the player's furthest level has not opened (armory.json tier_unlock); the rest comes back as
+## coins, so a v1.x play-test save starts near the no-ad pace the levels are calibrated for.
+func test_v3_migration_respects_tier_gates() -> void:
+	for rooms in [3, 6, 10]:
+		var raw := {"version": 3, "coins": 0, "unlocked": 5, "station": {"armory": rooms, "range": rooms}}
+		var s := SaveData.migrate(raw, eco)
+		var l := Armory.level(s, "knives")
+		check(Armory.tier_unlocked(l.x, 5), "rooms %d at L5: knives tier %d is open at L5" % [rooms, l.x])
+		var paid := SaveData.legacy_spent(eco, "armory", rooms) + SaveData.legacy_spent(eco, "range", rooms)
+		check(Armory.spent(s, "knives") + int(s["coins"]) >= paid, "rooms %d: nothing paid is lost (%d spent + %d back >= %d)" % [
+			rooms, Armory.spent(s, "knives"), int(s["coins"]), paid])
+	var deep := SaveData.migrate({"version": 3, "coins": 0, "unlocked": 31, "station": {"armory": 6, "range": 6}}, eco)
+	check(Armory.level(deep, "knives").x >= 2, "at L31 the same spend reaches past tier 1")
 
 
 func test_v3_save_round_trips() -> void:
@@ -150,5 +168,6 @@ func test_v3_station_converts_without_loss() -> void:
 func test_huge_v3_armory_refunds_the_rest() -> void:
 	var s := SaveData.migrate({"version": 3, "coins": 0, "station": {"armory": 10, "range": 10}}, eco)
 	var paid := SaveData.legacy_spent(eco, "armory", 10) + SaveData.legacy_spent(eco, "range", 10)
-	check(Armory.is_maxed(s, "knives") or Armory.spent(s, "knives") >= paid, "track filled")
+	# Review v2.1: at L1 only tier 1 is open; the rest of the spend comes back as coins.
+	check(Armory.tier_unlocked(Armory.level(s, "knives").x, int(s["unlocked"])), "track filled up to the open tiers")
 	eq(Armory.spent(s, "knives") + int(s["coins"]) >= paid, true, "nothing lost: track + refund >= paid")

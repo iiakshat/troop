@@ -50,6 +50,13 @@ SHEETS = {
     "icons_e.png": {"inset": 30,
                     "grid": [["_", "_", "_"],
                              ["_", "_", "shield"]]},
+    # v2.1 review: card icons that no longer borrow the player's items (a civilian car, a
+    # grenade blast, the lieutenant), the rescue cage, the district hazards (docks crane, mill
+    # steam, uptown helicopter) and incoming gang fire. The road (cell 9) is a spare.
+    "icons_f.png": {"loose": True,
+                    "grid": [["car", "blast", "lieutenant"],
+                             ["cage", "crane", "steam"],
+                             ["chopper", "gang_fire", "_"]]},
     # v2 Armory: tier art per weapon track (config/armory.json "art": "armory/<id>_t<n>").
     "armory_a.png": {"loose": True, "out": "armory", "size": 256,
                      "grid": [[f"{w}_t{t}" for t in range(1, 5)] for w in

@@ -167,10 +167,15 @@ static func migrate(raw: Variant, economy: Dictionary) -> Dictionary:
 		Armory.set_index(s, id, Armory.index(s, id, acfg), acfg)  # clamps junk tiers / steps
 	if legacy_knife > 0:
 		var knife := String(economy.get("legacy_station_v3", {}).get("knife_track", "knives"))
-		var conv := Armory.steps_for_coins(knife, legacy_knife + Armory.spent(s, knife, acfg), acfg)
-		if int(conv["index"]) > Armory.index(s, knife, acfg):
-			Armory.set_index(s, knife, int(conv["index"]), acfg)
-		s["coins"] = int(s["coins"]) + int(conv["refund"])
+		var paid := legacy_knife + Armory.spent(s, knife, acfg)
+		var idx := int(Armory.steps_for_coins(knife, paid, acfg)["index"])
+		# Review v2.1: never past a tier the player's furthest level has not opened yet
+		# (armory.json tier_unlock, as Armory.buy); what the kept steps do not cost comes back.
+		while idx > 0 and not Armory.tier_unlocked(Armory.at_index(knife, idx, acfg).x, int(s["unlocked"]), acfg):
+			idx -= 1
+		if idx > Armory.index(s, knife, acfg):
+			Armory.set_index(s, knife, idx, acfg)
+		s["coins"] = int(s["coins"]) + maxi(paid - Armory.spent_at(knife, Armory.index(s, knife, acfg), acfg), 0)
 
 	# Daily calendar.
 	var d: Dictionary = src.get("daily", {}) if src.get("daily") is Dictionary else {}

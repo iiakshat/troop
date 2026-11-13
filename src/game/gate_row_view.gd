@@ -150,7 +150,7 @@ func refresh(gate: Dictionary, ticked := false) -> void:
 		icon.position.x = 0.0 if solo else -0.6 - (ICON_W - iw) * 0.5
 		icon.pixel_size = (1.35 if solo else 1.05 * iw / ICON_W) / 320.0
 		label.position.x = 0.0 if solo else 0.55 - (ICON_W - iw) * 0.5
-		set_size(label, fit_size(label, label.text, FIT_W - iw - 0.1, 130 if chars <= 2 else 100))
+		set_size(label, fit_size(label, label.text, FIT_W - iw - 0.1, 130 if chars <= 2 else 100, 28))
 	else:
 		label.position.x = 0.0
 		set_size(label, fit_size(label, label.text, FIT_W, label.font_size))

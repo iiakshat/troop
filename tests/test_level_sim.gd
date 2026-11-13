@@ -2019,3 +2019,184 @@ func test_bomb_silences_return_fire() -> void:
 	check(not after.is_empty(), "they fire again")
 	if not after.is_empty():
 		check(float(after[0]) >= sil - 0.05, "no return fire for %.1f s after the bomb (first at %.2f s)" % [sil, float(after[0])])
+
+
+# ---------------------------------------------------------------- v2.1 review fixes
+
+## Review v2.1 (code): a sniper who dies while aiming takes no shot. The sim calls his mark off
+## (a cancelled attack_land, no loss), the way the view already drops his laser.
+func test_dead_sniper_takes_no_shot() -> void:
+	var sim := _fight_sim([{"enemy": "sniper_foe", "n": 3, "hp": 100000}], 60)
+	var tg := _until_event(sim, "telegraph")
+	check(not tg.is_empty(), "the snipers aim")
+	if tg.is_empty():
+		return
+	var before := sim.squad.total()
+	var h: Dictionary = sim.hordes[0]
+	sim._kill(h, int(h["count"]))
+	var evs := sim.drain()
+	var off := _events_of(evs, "attack_land")
+	eq(off.size(), 1, "his mark is called off")
+	if not off.is_empty():
+		check(bool(off[0].get("cancelled", false)), "as a cancelled landing")
+		eq(int(off[0]["lost"]), 0, "costing nothing")
+	eq(sim.attacks.size(), 0, "nothing left in the air")
+	for i in 60:
+		sim.step(1.0 / 30.0)
+	eq(sim.squad.total(), before, "no round lands after he fell")
+
+
+## Review v2.1: the boss's second pattern. Every sweep_every-th barrage marks two lanes, the
+## squad's and the one beside it toward the middle, leaving one lane safe; from the middle lane
+## the side alternates. Standing in a marked lane costs barrage_pct; the safe lane costs nothing.
+func test_boss_sweep_leaves_one_lane_safe() -> void:
+	eq(LevelSim.sweep_lanes(0, 0), [0, 1], "from lane 0: lanes 0-1, lane 2 safe")
+	eq(LevelSim.sweep_lanes(2, 5), [1, 2], "from lane 2: lanes 1-2, lane 0 safe")
+	eq(LevelSim.sweep_lanes(1, 0), [0, 1], "from the middle: one side ...")
+	eq(LevelSim.sweep_lanes(1, 1), [1, 2], "... then the other")
+	var every := int(units["boss"]["sweep_every"])
+	check(every >= 2, "the boss alternates his patterns (sweep every %d)" % every)
+	check(float(units["boss"]["sweep_warn_s"]) > float(units["boss"]["warn_s"]), "a sweep warns longer (two lanes may be needed)")
+	var sim := _fight_sim([{"enemy": "boss", "n": 1, "hp": 1000000}], 1000)
+	var kinds: Array = []
+	var landed := {}
+	for i in 30 * 40:
+		sim.step(1.0 / 30.0)
+		for e in sim.drain():
+			if e["type"] == "telegraph" and String(e["kind"]) in ["barrage", "sweep"]:
+				kinds.append(String(e["kind"]))
+				if String(e["kind"]) == "sweep":
+					eq((e["lanes"] as Array).size(), 2, "a sweep marks two lanes")
+					check((e["lanes"] as Array).has(int(e["lane"])), "one of them the squad's")
+					# Step into the safe lane: the third one.
+					for l in 3:
+						if not (e["lanes"] as Array).has(l):
+							sim.set_lane(l)
+			if e["type"] == "attack_land" and String(e["kind"]) == "sweep":
+				landed[int(e["id"])] = int(e["lost"])
+		if kinds.size() >= 2 * every and not landed.is_empty():
+			break
+	check(kinds.has("sweep") and kinds.has("barrage"), "both patterns come (%s)" % str(kinds))
+	if kinds.size() >= every:
+		eq(kinds[every - 1], "sweep", "the %d-th mark is a sweep" % every)
+	for id in landed:
+		eq(int(landed[id]), 0, "the safe lane takes nothing")
+
+
+## Review v2.1: a boss in contact grinds the squad like a gang (melee_cap_pct of the squad he met
+## per tick, never more than his power); he no longer takes a whole revived squad in one tick.
+func test_boss_fists_grind_not_wipe() -> void:
+	var cap := int(units["world"]["melee_cap_pct"])
+	eq(LevelSim.boss_swing(1000, 999, cap), 1000 * cap / 100, "a share of the squad he met")
+	eq(LevelSim.boss_swing(10, 999, cap), 1, "at least one")
+	eq(LevelSim.boss_swing(100000, 50, cap), 50, "never more than his power")
+	eq(LevelSim.boss_swing(500, 999, 0), 999, "cap 0: his whole power (the old strike)")
+	var sim := _fight_sim([{"enemy": "boss", "n": 1, "hp": 100000000}], 400)
+	var first := {}
+	for i in 30 * 60:
+		sim.step(1.0 / 30.0)
+		for e in sim.drain():
+			if e["type"] == "melee" and first.is_empty():
+				first = e
+		if not first.is_empty() or sim.state != "run":
+			break
+	check(not first.is_empty(), "he reaches the squad")
+	if not first.is_empty():
+		check(int(first["lost"]) <= maxi(400 * cap / 100, 1), "one tick takes at most %d %% (%d)" % [cap, int(first["lost"])])
+
+
+## Review v2.1: a revive is a real second chance. The gang that won is shoved back to revive.push
+## and pays the troops it took in that clash; a boss goes back to his halt line.
+func test_revive_pushes_the_winner_back_and_it_pays() -> void:
+	var sim := _fight_sim([{"enemy": "thug", "n": 400, "hp": 1000}], 30)
+	for i in 30 * 60:
+		sim.step(1.0 / 30.0)
+		sim.drain()
+		if sim.state != "run":
+			break
+	eq(sim.state, "lost", "the big gang wins the clash")
+	var h: Dictionary = sim.hordes[0]
+	var took := int(h.get("took", 0))
+	var left := int(h["count"])
+	check(took > 0, "it took troops in the clash (%d)" % took)
+	check(sim.revive(sim.revive_troops()), "revived")
+	eq(int(h["count"]), maxi(left - took, 0), "it paid what it took")
+	near(LevelSim.front_z(h), -float(units["revive"]["push"]), "and stands revive.push metres off")
+	check(not h["melee"], "out of the clash")
+	var bs := _fight_sim([{"enemy": "boss", "n": 1, "hp": 100000000}], 20)
+	for i in 30 * 120:
+		bs.step(1.0 / 30.0)
+		bs.drain()
+		if bs.state != "run":
+			break
+	eq(bs.state, "lost", "the boss wins")
+	check(bs.revive(bs.revive_troops()), "revived")
+	near(LevelSim.front_z(bs.hordes[0]), -bs.boss_halt, "the boss goes back to his halt line")
+
+
+## Review v2.1 (return fire on screen): a gang's shots go out together, one volley every volley_s
+## (the opening one at once), each event carrying its shooters for the view's tracers.
+func test_return_fire_comes_in_volleys() -> void:
+	var vs := float(units["return_fire"]["volley_s"])
+	var sim := _fight_sim([{"enemy": "gunman", "n": 30, "hp": 100000, "return_fire": {"rate": 0.5, "share": 100, "from_district": 1}}], 500)
+	var times: Array = []
+	for i in 30 * 30:
+		sim.step(1.0 / 30.0)
+		for e in sim.drain():
+			if e["type"] == "return_fire":
+				times.append(sim.time)
+				check(int(e.get("shooters", 0)) >= 1, "the event names its shooters")
+		if times.size() >= 4 or sim.state != "run":
+			break
+	check(times.size() >= 4, "volleys measured (%d)" % times.size())
+	for i in range(1, times.size()):
+		check(float(times[i]) - float(times[i - 1]) >= vs - 0.05, "volleys %.2f s apart (>= %.1f)" % [float(times[i]) - float(times[i - 1]), vs])
+
+
+## Review v2.1 (variety): a district hazard strikes n times on the squad's lane (two lanes for the
+## steam, one left safe), dodged by changing lane, blocked by the shield, and ends.
+func test_district_hazard_strikes_and_ends() -> void:
+	for kind in ["crane", "steam", "chopper"]:
+		var cfg: Dictionary = units["hazards"][kind]
+		var sim := _fight_sim([], 1000, 3, 70, [{"at": 5, "type": "hazard", "kind": kind, "n": 3, "every": 2.2}])
+		var marks := 0
+		var hits := 0
+		var started := false
+		var ended := false
+		var lost := 0
+		for i in 30 * 30:
+			sim.step(1.0 / 30.0)
+			for e in sim.drain():
+				match String(e["type"]):
+					"hazard_start":
+						started = true
+						eq(int(e["n"]), 3, "%s: three strikes" % kind)
+					"hazard_end":
+						ended = true
+					"telegraph":
+						if String(e["kind"]) == kind:
+							marks += 1
+							eq((e["lanes"] as Array).size(), int(cfg["lanes"]), "%s marks %d lane(s)" % [kind, int(cfg["lanes"])])
+					"attack_land":
+						if String(e["kind"]) == kind and bool(e["hit"]):
+							hits += 1
+							lost += int(e["lost"])
+			if ended:
+				break
+		check(started and ended, "%s starts and ends" % kind)
+		eq(marks, 3, "%s strikes three times" % kind)
+		eq(hits, 3, "%s: a squad that stands still is hit every time" % kind)
+		check(lost > 0 and lost <= 3 * maxi(1000 * int(cfg["pct"]) / 100, 1), "%s costs at most pct %% a strike (%d)" % [kind, lost])
+		# Dodging: step out of the marked lane(s) on every mark.
+		var sd := _fight_sim([], 1000, 3, 70, [{"at": 5, "type": "hazard", "kind": kind, "n": 3, "every": 2.2}])
+		var before := sd.squad.total()
+		for i in 30 * 30:
+			sd.step(1.0 / 30.0)
+			for e in sd.drain():
+				if e["type"] == "telegraph":
+					# A lane no mark in the air covers.
+					for l in 3:
+						if not sd.attacks.any(func(a): return LevelSim.attack_lanes(a).has(l)):
+							sd.set_lane(l)
+							break
+		eq(sd.squad.total(), before, "%s: stepping out dodges every strike" % kind)

@@ -37,7 +37,9 @@ const BOSS_FAR_SCALE := 1.6     # a far boss is drawn up to this much bigger aga
 const BOSS_RIM := 0.3           # extra rim light on the boss: his dark suit never melts into the stash
 ## Spec v2.1 §1.3: the lieutenant is the boss's rig, smaller (BOSS_SCALE's convention), in a cream
 ## suit and black shirt (the Kingpin wears black and red), under a smaller bar with a silver crown.
-const LT_SCALE := 2.4
+const LT_SCALE := 2.9           # units.json lieutenant.scale (review v2.1: 2.4 read as a big thug at range)
+const LT_HAT := Color("efe6cf")   # his cream fedora with a black band, and a red ring at his feet
+const LT_AURA := Color(1.0, 0.18, 0.12, 0.85)
 const LT_BAR := 0.72
 const LT_COLORS := {Color("151515"): Color("e9e1cd"), Color("b3282d"): Color("1c1c22")}
 const LT_CROWN := Color(0.78, 0.84, 0.95)
@@ -65,7 +67,15 @@ const LASER_NEAR_W := 0.1        # ... and this wide where it meets the lane (a 
 const SPOT_Z := -2.0             # where a grenade, bottle or sniper round lands: just ahead of the hero
 const THREAT_TINT := {"snipe": Color(1.0, 0.1, 0.1), "grenade": Color(1.0, 0.4, 0.06),
 	"firebomb": Color(1.0, 0.58, 0.05), "barrage": Color(1.0, 0.06, 0.18), "lt_barrage": Color(1.0, 0.16, 0.5),
-	"sweep": Color(1.0, 0.04, 0.3)}
+	"sweep": Color(1.0, 0.04, 0.3), "crane": Color(1.0, 0.5, 0.06), "steam": Color(1.0, 0.86, 0.6),
+	"chopper": Color(1.0, 0.12, 0.08)}
+## Review v2.1: the district hazards (units.json hazards) on screen. The docks' container drops
+## from CRANE_Y onto the marked lane; the mill's vents burst steam from the road; uptown's
+## helicopter hovers CHOPPER_Z up the street over the marked lane and strafes it.
+const HAZARD_KINDS := ["crane", "steam", "chopper"]
+const CRANE_Y := 16.0
+const CHOPPER_Y := 8.5
+const CHOPPER_Z := -20.0
 const SHELLS := {"barrage": 5, "lt_barrage": 3, "sweep": 3}
 const ZONE_SHADER := """
 shader_type spatial;
@@ -190,6 +200,8 @@ var _laser_mat: StandardMaterial3D
 var _threats: Array = []       # pending telegraphs: {kind, lane, src, from, start, land, points}
 var _zones: Array = []         # per lane {node, mat, fill, flash}: the telegraph's lane mark
 var _tele_ring: MeshInstance3D  # the countdown ring over the squad while its lane is marked
+var _choppers: Dictionary = {}  # hazard id -> {node, x, t (0..1 in), leave}
+var _crates: Array = []         # falling or landed containers: {node, lane, start, land, id, gone}
 var _tele_ring_mat: ShaderMaterial
 var _impacts: Array = []       # incoming shots in the air: {at, lost, blocked, points (x by the squad)}
 var _pending_lost := 0         # troops the sim took whose shots have not landed on screen yet
@@ -685,6 +697,11 @@ func _handle_events(events: Array) -> void:
 				_on_pothole(e)
 			"barricade_hit":
 				_on_barricade_hit(e)
+			"hazard_start":
+				_on_hazard_start(e)
+			"hazard_end":
+				if _choppers.has(int(e["id"])):
+					_choppers[int(e["id"])]["leave"] = true
 			"telegraph":
 				_on_telegraph(e)
 			"attack_land":
@@ -816,6 +833,16 @@ func _on_horde_spawn(h: Dictionary, lieutenant := false) -> void:
 			add_child(q)
 		hv["reach_bg"] = bg
 		hv["reach_fill"] = fill
+	if lt:
+		# Review v2.1: a silhouette of his own at range, not only a tint: a wide cream fedora and
+		# a red ring at his feet.
+		var hat := Node3D.new()
+		hat.add_child(_part(Vector3(0.62, 0.05, 0.62), LT_HAT, Vector3(0, 0.0, 0)))
+		hat.add_child(_part(Vector3(0.36, 0.2, 0.34), LT_HAT, Vector3(0, 0.12, 0)))
+		hat.add_child(_part(Vector3(0.38, 0.06, 0.36), Color(0.08, 0.08, 0.09), Vector3(0, 0.05, 0)))
+		add_child(hat)
+		hv["prop"] = hat
+		hv["aura"] = _ground_ring(LT_AURA)
 	if hv["bossy"]:
 		_build_boss_bar(hv)
 		_boss_music = true
@@ -1047,7 +1074,7 @@ func _boss_gun(hv: Dictionary) -> Vector3:
 
 ## Muzzle flashes grow with distance so a gang 50 m up the street visibly opens fire.
 static func _flash_k(at: Vector3) -> float:
-	return clampf(-at.z / 22.0, 1.0, 2.4)
+	return clampf(-at.z / 16.0, 1.0, 3.5)   # review v2.1: a volley 50 m out reads at a glance
 
 
 ## Fires `froms.size()` incoming tracers at the squad (onto the shield when `blocked`). The
@@ -1269,6 +1296,29 @@ func _on_telegraph(e: Dictionary) -> void:
 		"firebomb":
 			fx.enemy_lob("lob", from, spot, dur, 2.5)
 			Sfx.play("swoosh", -5.0, 0.7)
+		"crane":
+			# A container swings out over the marked lane and falls onto it.
+			var crate := _crate_node()
+			crate.position = Vector3(LANE_X[lane], CRANE_Y, SHELL_Z - 0.6)
+			add_child(crate)
+			_crates.append({"node": crate, "lane": lane, "start": sim.time, "land": sim.time + dur,
+				"id": int(e.get("id", -1)), "gone": -1.0})
+			Sfx.play("swoosh", -6.0, 0.55)
+		"steam":
+			# The vents under the marked lanes hiss: thin wisps first, the burst on landing.
+			for l in lanes:
+				if int(l) != lane:
+					var th3 := th.duplicate()
+					th3["lane"] = int(l)
+					_threats.append(th3)
+			for l in lanes:
+				fx.burst(Vector3(LANE_X[int(l)], 0.2, SHELL_Z - 1.0), Color(0.95, 0.95, 0.95), 8, 1.6, 0.35, 0.8, -1.5)
+			_sfx("fire", "swoosh", -9.0, 2.0)
+		"chopper":
+			var ch: Dictionary = _choppers.get(src, {})
+			if not ch.is_empty():
+				ch["x"] = LANE_X[lane]
+			Sfx.play("tick", -8.0, 1.6)
 		"barrage", "lt_barrage", "sweep":
 			# A sweep (his second pattern) puts its shells on both marked lanes.
 			for l in lanes:
@@ -1299,6 +1349,9 @@ func _on_attack_land(e: Dictionary) -> void:
 		# The sim called it off (the squad fell or revived, the finish, a sniper who died): its
 		# marks go quietly, with no impact, sound or shake.
 		_drop_threat(int(e.get("id", -1)), kind, lane)
+		for c in _crates:
+			if int(c["id"]) == int(e.get("id", -2)):
+				c["gone"] = sim.time
 		return
 	var lanes: Array = e.get("lanes", [lane])
 	if lanes.size() > 1:
@@ -1312,8 +1365,9 @@ func _on_attack_land(e: Dictionary) -> void:
 					other = t
 			if not other.is_empty():
 				_threats.erase(other)
-				for p in other["points"]:
-					fx.explosion((p as Vector3) + Vector3(0, 0.4, 0), 0.8)
+				if kind != "steam":
+					for p in other["points"]:
+						fx.explosion((p as Vector3) + Vector3(0, 0.4, 0), 0.8)
 			(_zones[int(l)] as Dictionary)["flash"] = 0.18
 	var th: Dictionary = {}
 	for t in _threats:
@@ -1360,6 +1414,33 @@ func _on_attack_land(e: Dictionary) -> void:
 			else:
 				fx.fire(Vector3(spot.x, 0.1, spot.z))
 			_sfx("fire", "boom", -5.0, 1.6)
+		"crane":
+			for c in _crates:
+				if int(c["id"]) == int(e.get("id", -2)):
+					c["gone"] = sim.time + 0.7
+			var at := Vector3(LANE_X[lane], 0.3, SHELL_Z - 0.6)
+			fx.burst(at, Color(0.62, 0.58, 0.52), 26, 7.0, 0.5, 0.7, 1.0, 2.0)
+			fx.ring(at, Color(1.0, 0.7, 0.3), 32, 9.0, 0.26)
+			Sfx.play("boom", -2.0, 0.6)
+			world.shake(0.9)
+		"steam":
+			for l in lanes:
+				var v := Vector3(LANE_X[int(l)], 0.2, SHELL_Z - 1.0)
+				fx.burst(v, Color(1, 1, 1), 34, 7.5, 0.6, 0.9, -3.0, 1.0)
+				fx.burst(v, Color(1.0, 0.6, 0.2), 10, 4.0, 0.3, 0.4, -1.0)
+			_sfx("fire", "swoosh", -2.0, 0.7)
+			world.shake(0.6)
+		"chopper":
+			var from := Vector3(LANE_X[lane], CHOPPER_Y - 0.6, CHOPPER_Z)
+			var ch: Dictionary = _choppers.get(int(e.get("src", -1)), {})
+			if not ch.is_empty():
+				from = (ch["node"] as Node3D).position + Vector3(0, -0.8, 1.2)
+			fx.muzzle_big(from, 2.0)
+			for i in 6:
+				var to := Vector3(LANE_X[lane] + randf_range(-1.0, 1.0), 0.6 + randf() * 0.6, randf_range(-2.0, 1.0))
+				fx.enemy_shoot(from, to, false, "etracer", 0.18 + 0.04 * i)
+			_sfx("shot_rifle", "shot", -3.0, 0.8)
+			world.shake(0.5)
 		"barrage", "lt_barrage", "sweep":
 			for p in pts:
 				fx.explosion((p as Vector3) + Vector3(0, 0.4, 0), 0.85 if kind != "lt_barrage" else 0.7)
@@ -1416,6 +1497,9 @@ func _clear_threats() -> void:
 		l.visible = false
 	if _tele_ring != null:
 		_tele_ring.visible = false
+	for c in _crates:
+		if float(c["gone"]) < 0.0 and float(c["land"]) > sim.time:
+			c["gone"] = sim.time
 	fx.clear_enemy()
 
 
@@ -1561,6 +1645,78 @@ func _build_lasers() -> void:
 	add_child(_tele_ring)
 
 
+## A district hazard begins (review v2.1): uptown's helicopter flies in and hovers up the street.
+func _on_hazard_start(e: Dictionary) -> void:
+	if String(e.get("kind", "")) != "chopper":
+		return
+	var node := _chopper_node()
+	node.position = Vector3(8.0, CHOPPER_Y + 3.0, CHOPPER_Z - 25.0)
+	add_child(node)
+	_choppers[int(e["id"])] = {"node": node, "x": 0.0, "leave": false, "t": 0.0}
+	_sfx("boss_roar", "swoosh", -10.0, 1.8)
+
+
+## Falling containers and hovering helicopters, on the street's clock.
+func _update_hazards(d: float) -> void:
+	for i in range(_crates.size() - 1, -1, -1):
+		var c: Dictionary = _crates[i]
+		var node: Node3D = c["node"]
+		if float(c["gone"]) >= 0.0 and sim.time >= float(c["gone"]):
+			node.queue_free()
+			_crates.remove_at(i)
+			continue
+		var span := maxf(float(c["land"]) - float(c["start"]), 0.05)
+		var u := clampf((sim.time - float(c["start"])) / span, 0.0, 1.0)
+		# Hangs and sways for the first part of the warning, then drops (accelerating).
+		var drop := clampf((u - 0.45) / 0.55, 0.0, 1.0)
+		node.position.y = lerpf(CRANE_Y, 0.7, drop * drop)
+		node.rotation.z = 0.12 * sin(_anim_t * 3.0) * (1.0 - drop)
+	for id in _choppers.keys():
+		var ch: Dictionary = _choppers[id]
+		var node: Node3D = ch["node"]
+		ch["t"] = minf(float(ch["t"]) + d * 0.8, 1.0)
+		var want := Vector3(float(ch["x"]), CHOPPER_Y + 0.4 * sin(_anim_t * 2.2), CHOPPER_Z)
+		if ch["leave"]:
+			want = Vector3(-14.0, CHOPPER_Y + 6.0, CHOPPER_Z - 30.0)
+		node.position = node.position.lerp(want, clampf(d * 2.5, 0.0, 1.0))
+		node.rotation = Vector3(0.18, PI + 0.25 * signf(want.x - node.position.x), 0.0)
+		var rotor: Node3D = node.get_child(0)
+		rotor.rotation.y += d * 40.0
+		if ch["leave"] and node.position.distance_to(want) < 2.0:
+			node.queue_free()
+			_choppers.erase(id)
+
+
+## A shipping container (red-orange, ribbed) for the docks' crane drop.
+func _crate_node() -> Node3D:
+	var n := Node3D.new()
+	n.add_child(_part(Vector3(2.2, 1.3, 1.3), Color("c4472b"), Vector3.ZERO))
+	for k in 5:
+		n.add_child(_part(Vector3(0.08, 1.36, 1.36), Color("8f2f1c"), Vector3(-0.9 + 0.45 * k, 0, 0)))
+	n.add_child(_part(Vector3(0.06, 4.0, 0.06), Color("2a2d33"), Vector3(0, 2.6, 0)))   # the cable
+	n.add_child(_part(Vector3(0.4, 0.3, 0.2), Color("f2c230"), Vector3(0, 0.8, 0)))     # the hook
+	return n
+
+
+## A dark attack helicopter: body, cockpit glass, tail boom, stub wings and a rotor (child 0).
+func _chopper_node() -> Node3D:
+	var n := Node3D.new()
+	var rotor := Node3D.new()
+	rotor.position = Vector3(0, 1.0, 0)
+	rotor.add_child(_part(Vector3(7.0, 0.06, 0.32), Color(0.12, 0.12, 0.14), Vector3.ZERO))
+	rotor.add_child(_part(Vector3(0.32, 0.06, 7.0), Color(0.12, 0.12, 0.14), Vector3.ZERO))
+	n.add_child(rotor)
+	n.add_child(_part(Vector3(1.5, 1.2, 3.0), Color("2b2f36"), Vector3.ZERO))
+	n.add_child(_part(Vector3(1.2, 0.8, 1.0), Color("7fb8e6"), Vector3(0, 0.1, 1.5)))
+	n.add_child(_part(Vector3(0.35, 0.4, 3.6), Color("2b2f36"), Vector3(0, 0.25, -3.0)))
+	n.add_child(_part(Vector3(0.1, 1.0, 0.7), Color("2b2f36"), Vector3(0, 0.75, -4.6)))
+	n.add_child(_part(Vector3(3.0, 0.12, 0.6), Color("1d2026"), Vector3(0, -0.15, 0.2)))
+	n.add_child(_part(Vector3(0.3, 0.3, 1.0), Color("6b6f78"), Vector3(1.4, -0.35, 0.3)))
+	n.add_child(_part(Vector3(0.3, 0.3, 1.0), Color("6b6f78"), Vector3(-1.4, -0.35, 0.3)))
+	n.add_child(_part(Vector3(1.3, 0.08, 0.08), Color("1d2026"), Vector3(0, -0.85, 0.6)))
+	return n
+
+
 ## A sniper's laser beam: a box along -z that tapers from LASER_FAR_W (at +z, his end) to
 ## LASER_NEAR_W (at -z, the lane), so it reads 50 m up the street without a slab at the squad.
 func _laser_mesh() -> ArrayMesh:
@@ -1584,6 +1740,7 @@ func _laser_mesh() -> ArrayMesh:
 ## clock, so it waits with a paused or held street), a short white flash where one landed, and
 ## each aiming sniper's laser from his figures to the lane he aims at.
 func _update_telegraphs(d: float) -> void:
+	_update_hazards(d)
 	# A dead sniper takes no shot; anything the sim never landed goes after a moment.
 	for i in range(_threats.size() - 1, -1, -1):
 		var th: Dictionary = _threats[i]
@@ -1666,7 +1823,9 @@ func _update_telegraphs(d: float) -> void:
 
 ## How much bigger than a thug's figure a boss (BOSS_SCALE) or lieutenant (LT_SCALE) is drawn.
 func _boss_scale(hv: Dictionary) -> float:
-	return LT_SCALE if hv.get("lt", false) else BOSS_SCALE
+	if hv.get("lt", false):
+		return float(Game.units.get("lieutenant", {}).get("scale", LT_SCALE))
+	return BOSS_SCALE
 
 
 ## Spec v2.1 §1.3: the lieutenant's crowd, the boss's bake recoloured (LT_COLORS). Built once.
@@ -2140,6 +2299,19 @@ func _update_visuals(d: float) -> void:
 			_dying.append({"kind": hv["kind"], "pos": p, "t": 0.0, "foe": true,
 				"basis": Basis(Vector3.UP, PI).scaled(Vector3.ONE * esc * crowd_scale(offs.size() + 1))})
 			fx.puff(p)
+		if hv.has("prop"):
+			var shown := not offs.is_empty() and int(h["count"]) > 0
+			(hv["prop"] as Node3D).visible = shown
+			(hv["aura"] as Node3D).visible = shown
+			if shown:
+				var at := _fig_pos(hv, offs[0])
+				var k := esc * crowd_scale(offs.size())
+				var hat: Node3D = hv["prop"]
+				hat.position = at + Vector3(0, CHAR_H * k * 0.95, 0)
+				hat.scale = Vector3.ONE * k
+				var aura: Node3D = hv["aura"]
+				aura.position = at + Vector3(0, 0.06, 0)
+				aura.scale = Vector3(k * 0.55, 0.15, k * 0.55) * (1.0 + 0.06 * sin(_anim_t * 6.0))
 		var crowd: Crowd = _crowds[hv["kind"]]
 		var clip := "shoot" if h["stopped"] else ("idle" if h.has("cage") else "run")
 		var speed := 1.0 if h["stopped"] else RUN_SPEED * clampf(float(h["vrel"]) / 10.0, 0.8, 1.6)
@@ -2189,8 +2361,11 @@ func _update_visuals(d: float) -> void:
 			if not bv.has("bar") or not (bv["bar"] as Node3D).visible:
 				continue
 			if absf(float(bv["h"]["z"]) - lz) < 7.0:
+				# Stacked over the bar at the bar's own depth (review v2.1: at the escort's depth,
+				# nearer the camera, its count slid down over the boss's health number).
 				var bar_top: float = (bv["bar"] as Node3D).position.y + 0.4 * (bv["bar"] as Node3D).scale.y
-				ly = maxf(ly, bar_top + 0.7 * ls)
+				ly = maxf(ly, bar_top + 0.75 * ls)
+				lz = (bv["bar"] as Node3D).position.z
 			elif float(bv["h"]["z"]) < lz and int(bv["h"]["count"]) > 0:
 				ly = minf(ly, CHAR_H * ENEMY_SCALE * crowd_scale(offs.size()) + 0.45 * ls)
 				# Seen from above and behind the squad, that can still land on the boss's
@@ -2484,7 +2659,7 @@ func _free_horde(id: int) -> void:
 	(hv["sub"] as Node).queue_free()
 	if hv.has("bar"):
 		(hv["bar"] as Node).queue_free()
-	for k in ["reach_bg", "reach_fill"]:
+	for k in ["reach_bg", "reach_fill", "prop", "aura"]:
 		if hv.has(k):
 			(hv[k] as Node).queue_free()
 	_hordes.erase(id)

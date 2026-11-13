@@ -15,9 +15,11 @@ def badge(color: str, glyph: str) -> str:
 
 W = 'fill="none" stroke-width="10"'
 ICONS = {
-    # crossed night-sticks
-    "gauntlet": ("#3d6fd6", f'<path {W} d="M38 38 L90 90 M90 38 L38 90"/>'
-                            '<circle cx="38" cy="38" r="8" stroke="none"/><circle cx="90" cy="38" r="8" stroke="none"/>'),
+    # the road ahead with one chevron (review v2.1: crossed night-sticks read as the close X)
+    "gauntlet": ("#3d6fd6", '<path stroke="none" d="M50 30 L78 30 L94 100 L34 100 Z"/>'
+                            '<g fill="#3d6fd6" stroke="none"><rect x="61" y="36" width="6" height="10" rx="2"/>'
+                            '<rect x="60" y="84" width="8" height="12" rx="2"/></g>'
+                            '<path fill="none" stroke="#3d6fd6" stroke-width="9" d="M47 74 L64 57 L81 74"/>'),
     # double chevrons up the street
     "rush": ("#ff8a1f", f'<path {W} d="M38 70 L64 46 L90 70 M38 92 L64 68 L90 92"/>'),
     # crosshair
