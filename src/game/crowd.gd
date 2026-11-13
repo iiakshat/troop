@@ -82,13 +82,15 @@ func begin() -> void:
 	_n = 0
 
 
-## `t` is seconds into `clip` (looping clips wrap, one-shots hold their last frame).
-func push(xf: Transform3D, clip: String, t: float, flash := 0.0) -> void:
+## `t` is seconds into `clip` (looping clips wrap, one-shots hold their last frame). False when
+## the crowd is full (that figure is not drawn).
+func push(xf: Transform3D, clip: String, t: float, flash := 0.0) -> bool:
 	if _n >= _cap:
-		return
+		return false
 	multimesh.set_instance_transform(_n, xf)
 	multimesh.set_instance_custom_data(_n, pose(clip, t, flash))
 	_n += 1
+	return true
 
 
 func finish() -> void:

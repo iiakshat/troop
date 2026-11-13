@@ -54,6 +54,20 @@ const REACH_SIZE := Vector2(1.7, 0.22)  # the reach bar under a gang's count (m,
 const REACH_BG := Color(0.93, 0.95, 1.0, 0.5)   # its empty part: pale, so "melts first" reads too
 const RF_TRACER_MIN := 3         # a volley draws at least this many tracers (its shooters; the rest miss)
 const MINUS_Z := 0.8
+## Owner play-test 2026-11-13: every loss says what did it. The red -N carries the cause's icon
+## (CAUSE_ICON by attack kind; obstacles by their own kind), MINUS_ICON_W wide at scale 1.
+const MINUS_ICON_W := 0.85
+const GUN_ICON := "pistol"       # gunfire (a gang's volley, the boss's gun): the same gun over the shooter
+const CAUSE_ICON := {"snipe": "aim", "grenade": "blast", "firebomb": "fire", "barrage": "blast",
+	"lt_barrage": "blast", "sweep": "blast", "crane": "crane", "steam": "steam", "chopper": "chopper",
+	"melee": "fist", "gun": GUN_ICON}
+## The stash (FinaleStash.facade) is built STASH_FACE m behind its front face, which stands
+## LevelSim.stash_front m past the finish line. No gang figure is drawn closer to that face than
+## STASH_PAD: a deep gang's back rows close up in front of it instead of standing inside it.
+const STASH_FACE := 4.0
+const FIRST_FIRE_HINT := "first_gunfire"   # Game.hint_seen: the first-ever volley got its ring
+const STASH_PAD := 0.4
+const STASH_OUT := 1.5          # a gang still inside the stash shows as a block this deep at its door
 ## Spec v2.1 §1.2-1.3: a telegraph marks its lane where the squad stands, in its kind's colour,
 ## while its countdown sweeps towards the squad (on the street's clock, so it is honest).
 ## Review v2.1: the mark runs up the lane in front of the squad (1.5-13.5 m ahead), so the
@@ -227,6 +241,10 @@ var _minus_n := 0
 var _minus_t0 := -10.0         # when the current -N window opened (_anim_t)
 var _minus_last := -10.0       # the last loss added to it
 var _minus_pop := 0.0
+var _minus_icon: Sprite3D       # the cause of the current -N (CAUSE_ICON)
+var _minus_cause := ""
+var _minus_w := 0.0             # the -N's text width (m, at scale 1)
+var cues: LossCues              # who shot: gun icons over firing gangs, volley lines, first-fire ring
 var _hit_sfx_t := 0.0          # the squad's hurt sound plays at most this often
 var _shown_count: Dictionary = {}  # ally kind -> figures drawn (updated on squad changes)
 var _boss_music := false
@@ -303,6 +321,17 @@ func _ready() -> void:
 	_minus_label.modulate = MINUS_RED
 	_minus_label.visible = false
 	add_child(_minus_label)
+	_minus_icon = Sprite3D.new()
+	_minus_icon.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_minus_icon.shaded = false
+	_minus_icon.no_depth_test = true
+	_minus_icon.render_priority = 9
+	_minus_icon.pixel_size = MINUS_ICON_W / 320.0
+	_minus_icon.visible = false
+	_minus_icon.add_child(LossCues.badge(MINUS_ICON_W, 8))
+	add_child(_minus_icon)
+	cues = LossCues.new().setup()
+	add_child(cues)
 	_build_shield()
 	_build_heat_ring()
 	_prewarm()
@@ -765,6 +794,7 @@ func _handle_events(events: Array) -> void:
 					fx.burst(bp, Color(0.08, 0.07, 0.06), 12, 4.0, 0.3, 0.7, 2.0)
 				# Exactly the figures that stood on its footprint fall; the rest close ranks.
 				_kill_overlap(e, hole)
+				_add_loss(int(e.get("lost", 0)), false, String(hit_ob.get("kind", "")))
 				# A pothole stays in the road and rides away; anything solid was smashed.
 				_free_obstacle(int(hit_ob["id"]), hole)
 			"obstacle_pass":
@@ -953,7 +983,7 @@ func _on_melee(e: Dictionary) -> void:
 		Sfx.play("blocked", -4.0, randf_range(0.9, 1.1))
 	elif lost > 0:
 		Sfx.play("hurt", -6.0, randf_range(0.85, 1.15))
-		_add_loss(lost, true)
+		_add_loss(lost, true, CAUSE_ICON["melee"])
 	var front: Array = []
 	for x in [-1.2, -0.6, 0.0, 0.6, 1.2]:
 		front.append(Vector3(_squad_x + x, 0, -1.4))
@@ -1111,9 +1141,29 @@ func _on_return_fire(e: Dictionary) -> void:
 	for f in froms:
 		fx.muzzle_big(f, _flash_k(f) * (1.8 if opening else 1.4))
 	_volley(froms, int(e.get("lost", 0)), bool(e.get("blocked", false)), "egun", mini(shots, n))
+	_who_shot(hv, int(e.get("horde", -1)), froms)
 	if _rf_sfx_t <= 0.0 or opening:
 		_rf_sfx_t = 0.09
 		Sfx.play("shot", -4.0 if opening else -8.0, randf_range(0.8, 0.95))
+
+
+## Owner play-test 2026-11-13: one bold line from the shooters to the squad per volley, their
+## gun icon kicks, and the first time a gang ever fires at the player (once per save) a ring
+## circles it and a line ties it to the squad for a moment (no pause, no slow motion).
+func _who_shot(hv: Dictionary, id: int, froms: Array) -> void:
+	if demo or froms.is_empty():
+		return
+	var mid := Vector3.ZERO
+	for f in froms:
+		mid += f
+	cues.volley(mid / froms.size())
+	if hv.is_empty():
+		return
+	hv["gun_kick"] = 1.0
+	hv["gun_t"] = 1.2
+	if cues.focus_id < 0 and not Game.hint_seen(FIRST_FIRE_HINT):
+		Game.mark_hint(FIRST_FIRE_HINT)
+		cues.focus_on(id)
 
 
 ## Spec v2.1 §1.3: the boss's (or lieutenant's) gun: a big flash at his gun hand and two heavy
@@ -1126,6 +1176,7 @@ func _on_boss_shot(e: Dictionary) -> void:
 		from = _boss_gun(hv)
 	fx.muzzle_big(from, _flash_k(from) * 1.6)
 	_volley([from, from + Vector3(0.25, -0.15, 0.1)], int(e.get("lost", 0)), bool(e.get("blocked", false)), "egun_big")
+	_who_shot(hv, int(e.get("horde", -1)), [from])
 	Sfx.play("blast", -3.0, 0.85)
 
 
@@ -1172,7 +1223,7 @@ func _volley(froms: Array, lost: int, blocked: bool, kind: String, hits := -1) -
 	for p in targets:
 		rel.append((p as Vector3) - Vector3(_squad_x, 0, 0))
 	_impacts.append({"at": _anim_t + (first if first < INF else 0.0), "lost": maxi(lost, 0), "blocked": blocked,
-		"points": rel})
+		"points": rel, "cause": GUN_ICON})
 	_pending_lost += maxi(lost, 0)
 
 
@@ -1240,19 +1291,23 @@ func _land_impact(im: Dictionary) -> void:
 		_hit_sfx_t = 0.12
 		Sfx.play("hurt", -5.0)
 	world.shake(clampf(0.12 + lost * 0.01, 0.12, 0.5))
-	_add_loss(lost)
+	_add_loss(lost, false, String(im.get("cause", GUN_ICON)))
 	_sync_allies(Vector3(_squad_x, 0, 0), pts)
 
 
 ## Spec v2.1 §1.1: the red -N over the squad. Losses within MINUS_WINDOW s add up; a later one
 ## starts a new number (with a short buzz, through the vibration setting). `run`: a crowd clash
-## tick (§1.4), which keeps the number counting while the ticks keep coming.
-func _add_loss(n: int, run := false) -> void:
+## tick (§1.4), which keeps the number counting while the ticks keep coming. `cause` (owner
+## play-test 2026-11-13): the icon of what took them (CAUSE_ICON, an obstacle's kind) beside the
+## number; a loss with another cause starts its own number.
+func _add_loss(n: int, run := false, cause := "") -> void:
 	if n <= 0:
 		return
 	var fresh := _anim_t - _minus_t0 > MINUS_WINDOW
 	if run and _anim_t - _minus_last <= MINUS_WINDOW + 0.05:
 		fresh = false
+	if cause != _minus_cause and _minus_label.visible:
+		fresh = true
 	if fresh:
 		_minus_t0 = _anim_t
 		_minus_n = 0
@@ -1262,6 +1317,16 @@ func _add_loss(n: int, run := false) -> void:
 	_minus_pop = 1.0
 	_minus_label.text = "-" + NumFormat.fmt(_minus_n)
 	_minus_label.visible = true
+	_minus_w = GateRowView.text_w(_minus_label, _minus_label.text)
+	if cause != _minus_cause:
+		_minus_cause = cause
+		_minus_icon.texture = UiKit.icon_texture(cause) if cause != "" else null
+	_minus_icon.visible = cause != ""
+
+
+## The cause icon beside the red -N (tests): "" when none shows.
+func minus_cause() -> String:
+	return _minus_cause if _minus_icon.visible else ""
 
 
 func _tick_minus(d: float) -> void:
@@ -1270,6 +1335,7 @@ func _tick_minus(d: float) -> void:
 	var age := _anim_t - _minus_last
 	if age > MINUS_HOLD:
 		_minus_label.visible = false
+		_minus_icon.visible = false
 		return
 	_minus_pop = maxf(_minus_pop - d * 5.0, 0.0)
 	var a := clampf((MINUS_HOLD - age) / 0.3, 0.0, 1.0)
@@ -1279,6 +1345,15 @@ func _tick_minus(d: float) -> void:
 	# camera (never up the street into a clashing gang's number, where it read as their loss).
 	_minus_label.position = Vector3(_squad_x, MINUS_Y - 0.35 * minf(age, MINUS_HOLD), MINUS_Z + 0.9 * minf(age, MINUS_HOLD))
 	_minus_label.scale = Vector3.ONE * (1.0 + 0.6 * _minus_pop)
+	if _minus_icon.visible:
+		# The cause sits just left of the number, the same size as its digits.
+		var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
+		var right := cam.global_basis.x if cam else Vector3.RIGHT
+		var sc := _minus_label.scale.x
+		_minus_icon.position = _minus_label.position - right * (_minus_w * 0.5 + MINUS_ICON_W * LossCues.BADGE_K * 0.5) * sc
+		_minus_icon.scale = Vector3.ONE * sc
+		_minus_icon.modulate = Color(1, 1, 1, a)
+		(_minus_icon.get_child(0) as Sprite3D).modulate = Color(1, 1, 1, a)
 
 
 # ---------------------------------------------------------------- v1 threats and moments
@@ -1292,10 +1367,8 @@ func _on_pothole(e: Dictionary) -> void:
 	var hole := _obstacle_pos(e["ob"])
 	_sfx("pothole", "thunk", 0.0, 0.8)
 	fx.burst(hole + Vector3(0, 0.3, 0), Color(0.42, 0.36, 0.3), 16, 4.0, 0.22, 0.5)
-	var lost := int(e["lost"])
-	if lost > 0:
-		fx.float_text("-" + NumFormat.fmt(lost), hole + Vector3(0, 2.6, 0), Color("ff5a5f"), 0.9)
-		Game.vibrate(70)
+	if int(e["lost"]) > 0:
+		Game.vibrate(70)   # (its red -N, with the pothole's icon, is the squad's: obstacle_hit)
 	# The troops the hole took drop into it (obstacle_hit picks exactly which ones).
 	_death_at = hole
 
@@ -1306,9 +1379,7 @@ func _on_barricade_hit(e: Dictionary) -> void:
 	_sfx("crash", "boom", -2.0, 0.9)
 	world.shake(0.8)
 	Game.vibrate(90)
-	var lost := int(e["lost"])
-	if lost > 0:
-		fx.float_text("-" + NumFormat.fmt(lost), p + Vector3(0, 2.8, 0), Color("ff5a5f"), 0.9)
+	# (Its red -N, with the barricade's icon, is the squad's: obstacle_hit.)
 	var g = e.get("blocked_gate")
 	if g == null:
 		return
@@ -1540,7 +1611,7 @@ func _on_attack_land(e: Dictionary) -> void:
 			fx.burst(Vector3(_squad_x, 1.6, -2.2), Color("9fc6ff"), 16, 6.0, 0.2, 0.4)
 	elif lost > 0:
 		Sfx.play("hurt", -3.0)
-		_add_loss(lost)
+		_add_loss(lost, false, String(CAUSE_ICON.get(kind, "")))
 		var near: Array = []
 		for p in pts:
 			near.append(Vector3((p as Vector3).x, 0, (p as Vector3).z))
@@ -1575,6 +1646,8 @@ func _land_time(e: Dictionary) -> float:
 ## ever shown landing after them.
 func _clear_threats() -> void:
 	_threats.clear()
+	if cues != null:
+		cues.clear()
 	for z in _zones:
 		(z["node"] as Node3D).visible = false
 		z["fill"] = 0.0
@@ -2453,18 +2526,38 @@ func _update_visuals(d: float, steered := false) -> void:
 		if h["melee"] and not hv["bossy"] and not offs.is_empty():
 			hv["clash_t"] = maxf(float(hv.get("clash_t", 0.0)) - d, 0.0)
 			punch_z = (offs[0] as Vector3).z + float(h["row_gap"]) * 1.5
+		_squash(hv)
 		var plen := Crowd.clip_length("punch")
+		var drawn := 0
 		for o in offs:
+			var ok := false
 			if o.z <= punch_z:
-				crowd.push(Transform3D(face, _fig_pos(hv, o)), "punch", fmod(_anim_t * 1.5 + o.y * plen, plen), flash)
+				ok = crowd.push(Transform3D(face, _fig_pos(hv, o)), "punch", fmod(_anim_t * 1.5 + o.y * plen, plen), flash)
 			else:
-				crowd.push(Transform3D(face, _fig_pos(hv, o)), clip, (_anim_t + o.y * 3.0) * speed, flash)
+				ok = crowd.push(Transform3D(face, _fig_pos(hv, o)), clip, (_anim_t + o.y * 3.0) * speed, flash)
+			if ok:
+				drawn += 1
+		hv["drawn"] = drawn
+		hv["gun_kick"] = maxf(float(hv.get("gun_kick", 0.0)) - d * 3.0, 0.0)
+		if cues.focus_id == int(id) and not offs.is_empty():
+			var f0 := _fig_pos(hv, offs[0])
+			var span := minf(_fig_pos(hv, offs[0]).z - _fig_pos(hv, offs.back()).z, 4.0)
+			cues.focus_at(Vector3(clampf(f0.x * 0.3, -1.5, 1.5), CHAR_H * ENEMY_SCALE * 0.55, f0.z - span * 0.5),
+				3.2 if hv["bossy"] else 5.0)
 		if hv.has("bar"):
 			_update_boss_bar(hv, d)
+			if _state == "play" and float(hv.get("gun_t", 0.0)) > 0.0 and int(h["count"]) > 0:
+				# His gun beside his bar (right of it; the crown is on its left) for a beat after
+				# each shot, never over his health number or his body.
+				hv["gun_t"] = maxf(float(hv["gun_t"]) - d, 0.0)
+				var bar: Node3D = hv["bar"]
+				var bright := cam.global_basis.x if cam else Vector3.RIGHT
+				cues.gun(int(id), bar.position + bright * 2.5 * bar.scale.x, bar.scale.x * 0.7, float(hv["gun_kick"]))
 			continue
 		var lab: Label3D = hv["label"]
-		var depth := (offs.back().z if not offs.is_empty() else 0.0) as float
-		var lz := float(h["z"]) - depth * 0.5
+		var lz := float(h["z"])
+		if not offs.is_empty():
+			lz = (_fig_pos(hv, offs[0]).z + _fig_pos(hv, offs.back()).z) * 0.5
 		# Grows with distance (like the boss bar) so a far gang's count still reads.
 		var ls := 1.0
 		if cam:
@@ -2504,6 +2597,7 @@ func _update_visuals(d: float, steered := false) -> void:
 		if shown != int(hv["shown"]):
 			hv["shown"] = shown
 			lab.text = NumFormat.fmt(shown)
+			hv["lab_w"] = GateRowView.text_w(lab, lab.text)
 		# Closing in while the squad's fire goes elsewhere (a red gate, an obstacle): the count
 		# pulses so the threat behind the gate is visible before it arrives.
 		var ignored: bool = _state == "play" and not is_same(sim.target_ref, h) and LevelSim.front_z(h) > -18.0 and not h["melee"]
@@ -2520,6 +2614,13 @@ func _update_visuals(d: float, steered := false) -> void:
 			lab.modulate = lab.modulate.lerp(Color(1.0, 0.12, 0.05), k)
 			lab.scale = Vector3.ONE * ls * (1.0 + 0.25 * k)
 		_update_reach(hv, lab.position, ls)
+		if _state == "play" and LevelSim.fires_back(h):
+			# Owner play-test 2026-11-13: a gang whose guns reach the squad wears a bright gun
+			# beside its count (it kicks with each volley): that is who is shooting.
+			var right := cam.global_basis.x if cam else Vector3.RIGHT
+			var gw := LossCues.GUN_W * ls
+			cues.gun(int(id), lab.position - right * (float(hv.get("lab_w", 1.0)) * lab.scale.x * 0.5 + gw * LossCues.BADGE_K * 0.55),
+				ls, float(hv["gun_kick"]))
 
 	# People waiting at troop pickups, facing the squad.
 	for id in _rows:
@@ -2666,14 +2767,56 @@ func _update_visuals(d: float, steered := false) -> void:
 	_squad_label.scale = Vector3.ONE * (1.0 + 0.5 * _label_pop)
 	_shield_fx.update(d, sim.shield_t if _state == "play" and sim.state == "run" else 0.0, _allies,
 		CHAR_H, CHAR_H * troop_k)
+	cues.squad_at = Vector3(_squad_x, 1.1, -0.9)
+	cues.update(d, cam)
 
 
 func _fig_pos(hv: Dictionary, o: Vector3) -> Vector3:
 	var h: Dictionary = hv["h"]
-	var z := float(h["z"]) + float(hv.get("dz", 0.0)) - o.z
+	var oz := o.z
+	var sq := float(hv.get("sq", 1.0))
+	if sq < 1.0:
+		var o0 := float(hv.get("sq0", 0.0))
+		oz = o0 + maxf(o.z - o0, 0.0) * sq - float(hv.get("sq_out", 0.0))
+	var z := float(h["z"]) + float(hv.get("dz", 0.0)) - oz
+	if sq < 1.0:
+		z = maxf(z, sim.stash_z() + STASH_PAD)
 	var k := clampf((z + 16.0) / 14.0, 0.0, 1.0)
 	var x := lerpf(o.x, _squad_x + o.x * 0.45, k)
 	return Vector3(x, 0, z)
+
+
+## Owner play-test 2026-11-13: a gang is never drawn inside or behind the stash. When its
+## figures (front to back, a metre a row) would reach past the stash's front face, its rows
+## close up in front of the face instead (`sq` < 1: the share of their depth they keep, from the
+## front figure `sq0`). A gang whose front is still behind the face (a walking gang that came out
+## late: LevelSim keeps its schedule) is inside the stash: it is drawn coming out of the door, a
+## block STASH_OUT m deep at most, moved `sq_out` m forward. A gang that stops to attack always
+## stands in front of the face (LevelSim.hold_m, stop_line).
+func _squash(hv: Dictionary) -> void:
+	hv["sq"] = 1.0
+	hv["sq_out"] = 0.0
+	var offs: Array = hv["offs"]
+	if offs.is_empty() or not _finish_live or sim.finish_at <= 0.0:
+		return
+	var o0 := (offs[0] as Vector3).z
+	var depth := maxf((offs.back() as Vector3).z - o0, 0.0)
+	var front := float(hv["h"]["z"]) + float(hv.get("dz", 0.0)) - o0
+	var face := sim.stash_z() + STASH_PAD
+	var room := front - face
+	var need := minf(STASH_OUT, depth)
+	if room >= depth or (depth <= 0.0 and room >= 0.0):
+		return
+	hv["sq0"] = o0
+	if room < need:
+		hv["sq_out"] = need - room   # still (partly) inside: the block at the door
+		room = need
+	hv["sq"] = clampf(room / depth, 0.0, 1.0) if depth > 0.0 else 0.0
+
+
+## Figures of gang `id` drawn on the last frame (tests: a living gang is always on screen).
+func drawn_figures(id: int) -> int:
+	return int((_hordes.get(id, {}) as Dictionary).get("drawn", 0))
 
 
 func _horde_front(hv: Dictionary) -> Vector3:
@@ -3075,6 +3218,9 @@ func _prewarm() -> void:
 	beam.position = _warm_at + Vector3(1.0, 0.5, -2.0)
 	add_child(beam)
 	_warm.append_array([zone, beam])
+	for n in cues.warm_nodes(_warm_at + Vector3(-1.0, 0.5, -2.0)):
+		add_child(n)
+		_warm.append(n)
 	# The boss bar (see-through backing, crown sprite, big number): first drawn when the boss
 	# walked in, a 54 ms frame on L10 with a cold shader cache.
 	var boss_lab := Label3D.new()
@@ -3196,7 +3342,7 @@ func _build_finish() -> void:
 	# The gang's stash front, themed per district (bar, carnival stall, docks, factory, rooftop
 	# lounge) with its neon bottle sign: where Bottle Shot happens once the squad bursts in.
 	_hq = FinaleStash.facade(district)
-	_hq.position = Vector3(0, 0, -16)
+	_hq.position = Vector3(0, 0, -(sim.stash_front + STASH_FACE))
 	_finish.add_child(_hq)
 	# (No bar over it, owner 2026-11-13: a full red "life bar" on the stash that nothing ever
 	# drained, left over from the v1 HQ, read as health the squad had to shoot down.)
