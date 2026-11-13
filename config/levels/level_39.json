@@ -11,6 +11,8 @@
   "charges": {"shield": 1, "bomb": 1},
   "floor_bound": true,
   "fire_k": 2.0,
+  "coin_ref": 35128,
+  "route": [1, 0, 0, 0, 0, 2, 2, 1, 0, 1, 2, 1],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -1, "step": 0.5, "max": 4}, {"lane": 1, "op": "recruit", "unit": "commando", "n": 32}, {"lane": 2, "op": "num", "v": 205}]},
     {"at": 52, "type": "wave", "groups": [{"enemy": "knifer", "n": 377}, {"enemy": "biker", "n": 93, "gap": 8}, {"enemy": "molotov", "n": 56, "gap": 16}]},

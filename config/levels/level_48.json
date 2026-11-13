@@ -12,6 +12,8 @@
   "look": "storm",
   "floor_bound": true,
   "fire_k": 1.6,
+  "coin_ref": 176002,
+  "route": [0, 1, 2, 2, 1, 1, 2, 1, 2, 2],
   "events": [
     {"at": 30, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 550}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 4}, {"lane": 2, "op": "num", "v": 480}]},
     {"at": 64, "type": "wave", "groups": [{"enemy": "thug", "n": 1983}]},

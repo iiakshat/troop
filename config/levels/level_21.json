@@ -7,10 +7,12 @@
   "archetype": "gauntlet",
   "target_win": 0.5,
   "target_ratio": 0.5,
-  "stars": {"star2": 40, "star3": 75},
+  "stars": {"star2": 41, "star3": 78},
   "charges": {"shield": 1, "bomb": 1},
   "floor_bound": true,
   "fire_k": 2.0,
+  "coin_ref": 2473,
+  "route": [0, 0, 0, 0, 0, 0, 2, 2],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 20}, {"lane": 1, "op": "recruit", "unit": "swat", "n": 6}, {"lane": 2, "op": "num", "v": -1, "step": 0.5, "max": 5}]},
     {"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 2}]},
@@ -31,7 +33,7 @@
     {"at": 375, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "foe_div", "k": 2}, {"lane": 2, "op": "num", "v": 580}]},
     {"at": 409, "type": "wave", "groups": [{"enemy": "thug", "n": 4048}]},
     {"at": 436, "type": "gates", "gates": [{"lane": 0, "op": "foe_div", "k": 2}, {"lane": 1, "op": "num", "v": 930}, {"lane": 2, "op": "mul", "k": 2}]},
-    {"at": 470, "type": "wave", "groups": [{"enemy": "riot", "n": 2840}, {"enemy": "brute", "n": 4141, "gap": 8}, {"enemy": "gunman", "n": 4969, "gap": 16}], "label": "LAST STAND"},
+    {"at": 470, "type": "wave", "groups": [{"enemy": "riot", "n": 2272}, {"enemy": "brute", "n": 3313, "gap": 8}, {"enemy": "gunman", "n": 3976, "gap": 16}], "label": "LAST STAND"},
     {"at": 508, "type": "finish"}
   ]
 }

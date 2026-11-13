@@ -11,6 +11,8 @@
   "charges": {"shield": 1, "bomb": 1},
   "look": "night",
   "fire_k": 2.0,
+  "coin_ref": 12917,
+  "route": [2, 0, 1, 1, 1, 1, 2, 1, 0],
   "events": [
     {"at": 24, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "commando", "n": 70}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 6}, {"lane": 2, "op": "num", "v": 380}]},
     {"at": 50, "type": "wave", "groups": [{"enemy": "thug", "n": 619}]},

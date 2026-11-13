@@ -9,6 +9,8 @@
   "target_ratio": 0.45,
   "stars": {"star2": 34, "star3": 65},
   "charges": {"shield": 1, "bomb": 1},
+  "coin_ref": 33602,
+  "route": [1, 2, 1, 0, 2, 2, 0, 1, 0, 0, 0, 1, 2],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -2, "step": 0.5, "max": 5}, {"lane": 1, "op": "num", "v": 170}, {"lane": 2, "op": "num", "v": 195}]},
     {"at": 70, "type": "cage", "lane": 2, "hostages": 125, "guards": {"enemy": "knifer", "n": 765}},

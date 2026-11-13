@@ -9,6 +9,8 @@
   "target_ratio": -1.0,
   "stars": {"star2": 24, "star3": 45},
   "charges": {"shield": 1, "bomb": 1},
+  "coin_ref": 163,
+  "route": [2, 2, 2, 1, 1, 2, 2, 0, 2],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 6}, {"lane": 1, "op": "num", "v": -2, "step": 0.5, "max": 6}, {"lane": 2, "op": "num", "v": 6}]},
     {"at": 40, "type": "hint", "id": "cage", "icon": "cage"},

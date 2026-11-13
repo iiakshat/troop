@@ -11,6 +11,8 @@
   "charges": {"shield": 1, "bomb": 1},
   "need_upgrades": true,
   "floor_bound": true,
+  "coin_ref": 52736,
+  "route": [2, 2, 1, 0, 1, 1, 1],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 630}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 6}, {"lane": 2, "op": "num", "v": 770}]},
     {"at": 80, "type": "wave", "groups": [{"enemy": "thug", "n": 4952}]},

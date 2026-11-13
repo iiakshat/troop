@@ -11,6 +11,8 @@
   "charges": {"shield": 1, "bomb": 2},
   "fire_k": 1.0101,
   "boss_k": 1.25,
+  "coin_ref": 538,
+  "route": [0, 0, 2, 2, 2, 0, 2, 2, 2],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -2, "step": 0.5, "max": 5}, {"lane": 1, "op": "recruit", "unit": "swat", "n": 2}, {"lane": 2, "op": "recruit", "unit": "swat", "n": 2}]},
     {"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 4}]},

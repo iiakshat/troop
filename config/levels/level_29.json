@@ -11,6 +11,8 @@
   "charges": {"shield": 1, "bomb": 1},
   "need_upgrades": true,
   "floor_bound": true,
+  "coin_ref": 193,
+  "route": [0, 0, 1, 0, 0, 2, 0, 1, 0, 1],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "commando", "n": 4}, {"lane": 1, "op": "recruit", "unit": "commando", "n": 4}, {"lane": 2, "op": "num", "v": -1, "step": 0.5, "max": 5}]},
     {"at": 52, "type": "wave", "groups": [{"enemy": "biker", "n": 2}]},

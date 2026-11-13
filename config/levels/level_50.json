@@ -12,6 +12,8 @@
   "need_upgrades": true,
   "floor_bound": true,
   "boss_k": 0.8,
+  "coin_ref": 144948,
+  "route": [0, 2, 1, 2, 2, 1, 2, 2, 1, 2],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 370}, {"lane": 1, "op": "recruit", "unit": "swat", "n": 100}, {"lane": 2, "op": "num", "v": -2, "step": 0.5, "max": 6}]},
     {"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 483}]},

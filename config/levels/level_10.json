@@ -11,6 +11,8 @@
   "charges": {"shield": 1, "bomb": 2},
   "floor_bound": true,
   "boss_k": 0.8,
+  "coin_ref": 303,
+  "route": [1, 0, 2, 0, 1, 0, 0, 0],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 5}, {"lane": 1, "op": "num", "v": 5}, {"lane": 2, "op": "num", "v": -2, "step": 0.5, "max": 5}]},
     {"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 22}]},

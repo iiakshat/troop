@@ -12,6 +12,8 @@
   "look": "rush",
   "scroll_speed": 9.6,
   "fire_k": 1.6,
+  "coin_ref": 7275,
+  "route": [0, 2, 0, 0, 1, 0, 1, 0, 0, 2, 0, 0],
   "events": [
     {"at": 28, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 36}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 5}, {"lane": 2, "op": "num", "v": 34}]},
     {"at": 54, "type": "wave", "groups": [{"enemy": "thug", "n": 59}]},

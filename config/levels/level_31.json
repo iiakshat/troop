@@ -9,6 +9,7 @@
   "target_ratio": 0.45,
   "stars": {"star2": 30, "star3": 57},
   "charges": {"shield": 1, "bomb": 1},
+  "floor_bound": true,
   "coin_ref": 6048,
   "route": [0, 0, 0, 0, 2, 0, 2, 1, 2, 1],
   "events": [

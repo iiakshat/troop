@@ -7,9 +7,9 @@
   "archetype": "ambush",
   "target_win": 0.57,
   "target_ratio": 0.58,
-  "stars": {"star2": 15, "star3": 28},
+  "stars": {"star2": 22, "star3": 43},
   "charges": {"shield": 1, "bomb": 1},
-  "coin_ref": 587,
+  "coin_ref": 683,
   "route": [0, 0, 2, 0, 0, 1, 2],
   "events": [
     {"at": 11, "type": "hint", "id": "swat", "icon": "swat"},
@@ -28,7 +28,7 @@
     {"at": 345, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "num", "v": 260}, {"lane": 2, "op": "power", "id": "shield", "n": 1}]},
     {"at": 384, "type": "wave", "groups": [{"enemy": "biker", "n": 1338}]},
     {"at": 414, "type": "gates", "gates": [{"lane": 0, "op": "pct", "v": 40}, {"lane": 1, "op": "power", "id": "shield", "n": 1}, {"lane": 2, "op": "num", "v": 375}]},
-    {"at": 453, "type": "wave", "groups": [{"enemy": "knifer", "n": 4391}, {"enemy": "biker", "n": 6177, "gap": 8}, {"enemy": "molotov", "n": 1976, "gap": 16}], "label": "BIG GANG"},
+    {"at": 453, "type": "wave", "groups": [{"enemy": "knifer", "n": 3733}, {"enemy": "biker", "n": 5250, "gap": 8}, {"enemy": "molotov", "n": 1679, "gap": 16}], "label": "BIG GANG"},
     {"at": 496, "type": "finish"}
   ]
 }
