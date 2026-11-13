@@ -111,6 +111,47 @@ func _run() -> void:
 	_check(not (map._bld["cafe"]["bubble"] as Control).visible, "bubble gone after collecting")
 	_check(_lobby._flying == 1, "coins are flying to the counter")
 
+	# Owner play-test: one storage, so one bubble shows its whole total (what a tap pays) and a
+	# tap on any bubble collects every building's coins.
+	_g().save["coins"] = 5000
+	for id in ["newsstand", "pharmacy"]:
+		_check(_g().start_build(id), id + " build starts")
+		var b: Dictionary = _g().save["city"][id]
+		b["built_at"] = _g().now() - 7200
+		b["ready_at"] = _g().now() - 3600
+	_g().save["city_bank"] = 0.0
+	_g().save["city_collected_at"] = _g().now() - 3600
+	map.refresh_buildings()
+	var total: int = _g().city_pending()
+	var lead: String = map.bubble_lead()
+	_check(lead != "", "a lead bubble")
+	_check(map.bubble_text(lead) == str(total), "the lead bubble shows the whole storage (%s vs %d)" % [map.bubble_text(lead), total])
+	var others := 0
+	for id in ["cafe", "newsstand", "pharmacy"]:
+		if id != lead:
+			others += 1
+			_check(map.bubble_text(id) == "coin", id + ": a coin-only bubble")
+	_check(others == 2, "three earning buildings")
+	_check(map.bubble_points().size() == 3, "three bubbles on show")
+	var other := "cafe" if lead != "cafe" else "newsstand"
+	var bub: Control = map._bld[other]["bubble"]
+	var coins2 := int(_g().save["coins"])
+	_tap_at(map, (map._bld[other]["over"] as Control).position + bub.position + bub.size * 0.5)
+	_check(int(_g().save["coins"]) == coins2 + total, "a tap on a coin-only bubble collects the whole storage")
+	map.refresh_buildings()
+	_check(map.bubble_points().is_empty(), "every bubble gone after one tap")
+
+	# Earned while away: back on the map, a pill shows what the storage gained meanwhile.
+	_g().mark_away()
+	_g().save["city_collected_at"] = _g().now() - 1800
+	var away: int = _g().city_pending()
+	_check(away > 0, "the city earned while away")
+	_lobby._show_away()
+	_check(int(_lobby.away_shown().get("coins", 0)) == away, "the away pill shows the coins earned meanwhile")
+	_g().mark_away()
+	_lobby._show_away()
+	_check(_lobby.away_shown().is_empty() or int(_lobby.away_shown()["coins"]) == away, "no +0 pill")
+
 	# After a win the pin hops on; the new level stays selected.
 	_g().save["stars"] = {"1": 3}
 	_g().save["unlocked"] = 2

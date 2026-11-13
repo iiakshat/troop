@@ -8,16 +8,18 @@ extends Control
 ## - Each district has a banner: district number, crown / boss crown / lock, levels beaten
 ##   "7/10" and stars "21/30". Districts not reached yet are greyed out with a big lock.
 ## - The 25 buildings stand on their plots, ruined or rebuilt (art changes with the save).
-##   A coin bubble floats over earning buildings (tap: the city storage is collected and coins
-##   fly to the counter), a price tag sits on ruins you can rebuild (a hammer bobs over it when
-##   you can afford it), and a hammer + timer shows while one is being built.
+##   A coin bubble floats over earning buildings. The city has one storage, so a tap on any
+##   bubble collects all of it (coins fly from every bubble to the counter): one bubble, the
+##   best earner on screen, shows that total (exactly what a tap pays, updated live), the
+##   others show a coin only. A price tag sits on ruins you can rebuild (a hammer bobs over it
+##   when you can afford it), and a hammer + timer shows while one is being built.
 ## Drag to scroll with inertia (mouse wheel on PC). All taps are hit-tested here, so a drag
 ## that starts on a node never presses it. Tapping the selected node again asks to play it.
 
 signal level_selected(level: int)              ## an open level was tapped; it is now `selected`
 signal play_requested(level: int)              ## the selected level was tapped again
 signal building_pressed(id: String)
-signal collected(coins: int, from: Vector2)    ## a bubble was tapped: these coins are collected right after; from = bubble (global)
+signal collected(coins: int, from: Vector2)    ## a bubble was tapped: these coins are collected right after; from = bubble (global). bubble_points() still holds every bubble then
 
 const LAYOUT_PATH := "res://assets/city/map_layout.json"
 const BASE_W := 720.0          ## the map is laid out at this width, then scaled to the screen
@@ -37,6 +39,8 @@ void fragment() {
 }
 """
 
+const BUBBLE_W := 156.0        ## the coin bubble with the storage total
+const BUBBLE_W_SMALL := 84.0   ## a coin-only bubble
 const COLOR_LIBERATED := Color("43a047")
 const COLOR_OCCUPIED := Color("e5463b")
 const COLOR_LOCKED := Color("5b6170")
@@ -384,7 +388,7 @@ func _build_buildings() -> void:
 		wic.pivot_offset = Vector2(25, 40)
 		_swing(wic, 26.0, 0.3)
 		var bubble := _bubble()
-		bubble.position = Vector2(-78, -_bw * 0.7)
+		bubble.position = Vector2(-BUBBLE_W * 0.5, -_bw * 0.7)
 		over.add_child(bubble)
 		_bob(bubble, 7.0, 0.7)
 		_bld[id] = {
@@ -538,6 +542,7 @@ func _bubble() -> Control:
 	tail.color = UiKit.CREAM
 	b.add_child(tail)
 	b.move_child(tail, 0)
+	b.set_meta("tail", tail)
 	var sb: StyleBoxFlat = b.get_theme_stylebox("panel")
 	sb.shadow_color = Color(0, 0, 0, 0.3)
 	sb.shadow_size = 6
@@ -717,7 +722,10 @@ func refresh_buildings() -> void:
 	var save: Dictionary = Game.save
 	var eco: Dictionary = Game.economy
 	var t: int = Game.now()
-	var pend := City.pending_by_building(save, t, eco)
+	# Owner play-test: a bubble showed its building's share (1) while a tap paid the whole
+	# storage (5-10). The storage is one pot, so the lead bubble shows the whole of it.
+	var total := City.pending_income(save, t, eco)
+	var lead := bubble_lead()
 	var coins := int(save.get("coins", 0))
 	for id in _bld:
 		var e: Dictionary = _bld[id]
@@ -751,14 +759,64 @@ func refresh_buildings() -> void:
 			sb.bg_color = Color(0.12, 0.55, 0.2, 0.92) if can else Color(0.05, 0.1, 0.25, 0.78)
 		(e["hammer"] as Control).visible = can
 		var bubble: Panel = e["bubble"]
-		var amount := int(pend.get(id, 0))
-		bubble.visible = amount >= 1
+		bubble.visible = total >= 1 and City.income_at(id, earning, eco) > 0.0
 		if bubble.visible:
-			(bubble.get_meta("label") as Label).text = UiKit.fmt_coins(amount)
+			_bubble_face(bubble, id == lead, total)
 		e["status"] = st
 	if not pointing and String(best.get("kind", "")) == "building" and _bld.has(String(best["id"])):
 		cheapest = String(best["id"])
 	_point_hand(cheapest)
+
+
+## The lead bubble shows the storage total; the others shrink to a coin.
+func _bubble_face(bubble: Panel, lead: bool, total: int) -> void:
+	var l: Label = bubble.get_meta("label")
+	l.visible = lead
+	l.text = UiKit.fmt_coins(total)
+	var w := BUBBLE_W if lead else BUBBLE_W_SMALL
+	if not is_equal_approx(bubble.size.x, w):
+		bubble.size.x = w
+		bubble.position.x = -w * 0.5
+		(bubble.get_meta("tail") as Node2D).position.x = (w - BUBBLE_W) * 0.5
+
+
+## The building whose bubble carries the storage total: the best earner on screen (the one at
+## the bottom on a tie), else the best earner anywhere. "" when nothing earns.
+func bubble_lead() -> String:
+	var save: Dictionary = Game.save
+	var t: int = Game.now()
+	var view := Rect2(0.0, _scroll / _k, BASE_W, size.y / _k) if size.y > 0.0 else Rect2()
+	var best := ""
+	var best_key := Vector3(-1, -1, -INF)   # (on screen, income, y)
+	for id in _bld_order:
+		var inc := City.income_at(id, City.level(save, id, t), Game.economy)
+		if inc <= 0.0:
+			continue
+		var pos: Vector2 = _bld[id]["pos"]
+		var key := Vector3(1.0 if view.has_point(pos - Vector2(0, _bw * 0.5)) else 0.0, inc, pos.y)
+		if key > best_key:
+			best_key = key
+			best = id
+	return best
+
+
+## Global centres of the coin bubbles on show (the lobby flies coins from each).
+func bubble_points() -> Array:
+	var out := []
+	for id in _bld_order:
+		var bub: Control = _bld[id]["bubble"]
+		if bub.visible:
+			out.append(bub.get_global_rect().get_center())
+	return out
+
+
+## The coins a bubble tap pays right now: the whole storage (tests).
+func bubble_text(id: String) -> String:
+	var bub: Control = _bld[id]["bubble"]
+	if not bub.visible:
+		return ""
+	var l: Label = bub.get_meta("label")
+	return l.text if l.visible else "coin"
 
 
 # ---------------------------------------------------------------- scrolling and input
@@ -948,13 +1006,19 @@ func collect_any() -> bool:
 
 
 func _collect(bubble: Control) -> void:
-	var from := bubble.get_global_rect().get_center()
+	collect_from(bubble.get_global_rect().get_center())
+
+
+## Collects the whole city storage, the coins flying from `from` (global) and every bubble.
+## False when the storage is empty.
+func collect_from(from: Vector2) -> bool:
 	var amount: int = Game.city_pending()
 	if amount <= 0:
-		return
+		return false
 	Sfx.play("collect")
 	collected.emit(amount, from)  # first, so the counter can hold its number while coins fly
 	Game.city_collect(1)
+	return true
 
 
 func _on_coins(_c: int) -> void:

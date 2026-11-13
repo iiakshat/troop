@@ -68,7 +68,7 @@
     "pre_liberation_max_level": 2,
     "liberation_bonus": [250, 500, 750, 1000, 1500],
     "storage": { "base_hours": 3, "city_hall": "city_hall", "hours_per_level": 1 },
-    "welcome_back": { "_note": "The welcome-back popup shows when at least min_coins wait in storage and the player was away min_away_seconds.", "min_coins": 20, "min_away_seconds": 600 },
+    "welcome_back": { "_note": "The welcome-back popup shows when at least min_coins wait in storage and the player was away min_away_seconds. Every other return to the map (from a level, or the app from the background) shows a small pill with the coins the storage gained since the player left the map. There is no separate away-time cap: the storage holds storage.base_hours (+hours_per_level per City Hall level) of income, which caps both the amount and the time that counts.", "min_coins": 20, "min_away_seconds": 600 },
     "speedup_ad": { "_note": "A rewarded ad cuts a build timer by fraction of what is left, at least min_seconds (never past done).", "fraction": 0.5, "min_seconds": 600 },
     "districts": [
       { "id": 1, "name": "Downtown",   "buildings": ["cafe", "newsstand", "pharmacy", "bus_stop", "police_post"] },

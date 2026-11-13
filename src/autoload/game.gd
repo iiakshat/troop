@@ -48,7 +48,7 @@ extends Node
 ##   weapon_locked(id)  buy_weapon(id) -> {ok, evolved, tier, step, cost}
 ## City: city_pending(t)  city_collect(mult := 1, t) -> coins  welcome_back(t) -> coins or 0
 ##   building_state(id, t) -> dict  start_build(id, t) -> bool  speed_up_build(id, t) -> seconds
-##   city_income(t)  city_storage_cap(t)
+##   city_income(t)  city_storage_cap(t)  mark_away(t)  take_away_gain(t) -> {coins, seconds, fill}
 ## Daily: daily_state() -> dict (incl. rewards for the 7 days)  claim_daily() -> reward
 ## Missions: missions() -> list  claim_mission(i) -> reward  mission_bonus_ready()
 ##   claim_mission_bonus() -> reward
@@ -121,6 +121,12 @@ func boot(raw: Variant = null) -> void:
 	else:
 		save = SaveData.migrate(raw, economy)
 	_last_tick = now()
+	_away = {}
+	# A cold start after the app was closed: the city has earned since it went to the
+	# background (nothing touched the save since), so the away gain counts from then.
+	var left := int(save.get("left_at", 0)) if save.get("left_at") is int or save.get("left_at") is float else 0
+	if left > 0 and left >= int(save.get("city_collected_at", 0)) and left <= _last_tick:
+		_away = {"t": left, "coins": City.pending_income(save, left, economy)}
 	refresh_day()
 
 
@@ -156,6 +162,7 @@ func _notification(what: int) -> void:
 		# Spec v2.1 section 3.4: the welcome-back "away" time starts here.
 		if save:
 			save["left_at"] = now()
+			mark_away()
 			write_save()
 
 
@@ -713,6 +720,7 @@ func city_storage_cap(t := -1) -> int:
 ## Empties the city storage into coins (mult 2 after the x2 rewarded ad). Returns coins added.
 func city_collect(mult := 1, t := -1) -> int:
 	var got := City.collect(save, _t(t), economy) * maxi(mult, 1)
+	_away = {}  # the storage is empty: nothing left to count as earned while away
 	save["coins"] = int(save["coins"]) + got
 	if got > 0:
 		_record({"city_coins": got})
@@ -722,6 +730,36 @@ func city_collect(mult := 1, t := -1) -> int:
 	city_changed.emit()
 	alerts_changed.emit()
 	return got
+
+
+## Away earnings (owner play-test): what the city stored while the player was off the map (in
+## a level, or the app in the background). mark_away() notes the time and the storage when the
+## player leaves the map (only the first call counts until the gain is taken); take_away_gain()
+## returns {coins, seconds, fill} once the map is back (fill = storage / its cap, 1 = full) and
+## forgets the mark. The storage cap (income x city.storage hours, more with City Hall) is
+## also the cap on the away time and the amount. {} when there is no mark.
+var _away: Dictionary = {}
+
+
+func mark_away(t := -1) -> void:
+	if _away.is_empty() and save:
+		var tt := _t(t)
+		_away = {"t": tt, "coins": City.pending_income(save, tt, economy)}
+
+
+func take_away_gain(t := -1) -> Dictionary:
+	if _away.is_empty():
+		return {}
+	var tt := _t(t)
+	var now_c := City.pending_income(save, tt, economy)
+	var cap := City.storage_cap(save, tt, economy)
+	var out := {
+		"coins": maxi(now_c - int(_away["coins"]), 0),
+		"seconds": maxi(tt - int(_away["t"]), 0),
+		"fill": clampf(float(now_c) / float(cap), 0.0, 1.0) if cap > 0 else 0.0,
+	}
+	_away = {}
+	return out
 
 
 ## Coins for the welcome-back popup, or 0 when it should not show. Spec v2.1 section 3.4: "away"

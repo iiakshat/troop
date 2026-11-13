@@ -52,6 +52,7 @@ var _overlay: Control = null
 var _level := 1
 var _shown_coins := 0
 var _flying := 0
+var _away: Control = null   # the earned-while-away pill on show
 
 
 func _ready() -> void:
@@ -83,6 +84,8 @@ func _ready() -> void:
 	_shown_coins = int(Game.save["coins"])
 	refresh()
 	_debug_args()
+	# After main.gd's boot popups have had their turn (the welcome-back one collects all).
+	get_tree().create_timer(1.2).timeout.connect(_show_away)
 
 
 func _build_top() -> void:
@@ -264,6 +267,7 @@ func _on_panel_closed() -> void:
 	if is_inside_tree():
 		refresh()
 		map.refresh()
+		get_tree().create_timer(0.6).timeout.connect(_show_away)
 
 
 func _start(n: int) -> void:
@@ -285,20 +289,137 @@ func _on_stars(_t: int) -> void:
 	refresh()
 
 
-## Storage collected on the map: coins fly from the bubble to the counter, which then counts up.
+## Storage collected on the map (the whole city at once): coins fly from every bubble (and the
+## tapped spot) to the counter, a +N rises from the tapped spot, then the counter counts up.
 func _on_collected(coins: int, from: Vector2) -> void:
 	_flying += 1
 	var before := _shown_coins
 	var to := _coin_icon.get_global_rect().get_center()
+	var points: Array = [from]
+	for p in map.bubble_points():
+		if (p as Vector2).distance_to(from) > 40.0:
+			points.append(p)
+	var per := maxi(int(ceil(CityMap.fly_count(coins) / float(points.size()))), 1)
+	var left := [points.size()]
 	var land := func():
 		Sfx.play("coin")
 		UiKit.bump(_coin_icon, 1.25)
 	var done := func():
+		left[0] -= 1
+		if left[0] > 0:
+			return
 		_flying -= 1
 		var now := int(Game.save["coins"])
 		UiKit.pill_count(_coins, before, now)
 		_shown_coins = now
-	UiKit.fly_coins(self, from, to, CityMap.fly_count(coins), land, done)
+	for p in points:
+		UiKit.fly_coins(self, p, to, per if p == from else 1, land, done)
+	_rise_gain(coins, from)
+
+
+## "+N" with a coin rising from a collection spot and fading.
+func _rise_gain(coins: int, at: Vector2) -> void:
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.top_level = true
+	row.z_index = 51
+	row.add_theme_constant_override("separation", 4)
+	row.add_child(UiKit.icon("coin", 44))
+	row.add_child(UiKit.label("+" + UiKit.fmt_coins(coins), 46, UiKit.YELLOW, 12))
+	add_child(row)
+	row.size = row.get_combined_minimum_size()
+	row.global_position = at - Vector2(row.size.x * 0.5, row.size.y)
+	var tw := row.create_tween().set_parallel()
+	tw.tween_property(row, "global_position:y", row.global_position.y - 110.0, 1.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(row, "modulate:a", 0.0, 0.4).set_delay(0.7)
+	tw.chain().tween_callback(row.queue_free)
+
+
+# ---------------------------------------------------------------- earned while away
+
+## Owner play-test: each return to the map (from a level, or the app from the background)
+## shows what the city stored meanwhile, a pill under the top bar: clock, coin, +N counting up
+## and the storage's fill bar under it (full = the cap; it stops earning until collected).
+## Tapping it collects the whole storage like a bubble. Waits while a panel is open (the
+## welcome-back popup collects and so shows nothing more), and never shows +0.
+func _show_away() -> void:
+	if not is_inside_tree() or is_instance_valid(_overlay):
+		return
+	var g: Dictionary = Game.take_away_gain()
+	var n := int(g.get("coins", 0))
+	if n < 1:
+		return
+	if is_instance_valid(_away):
+		_away.queue_free()
+	var box := PanelContainer.new()
+	var sb := UiKit.flat_box(Color(0.05, 0.12, 0.3, 0.88), 34, 4)
+	sb.content_margin_left = 16
+	sb.content_margin_right = 22
+	sb.content_margin_top = 6
+	sb.content_margin_bottom = 8
+	box.add_theme_stylebox_override("panel", sb)
+	box.mouse_filter = Control.MOUSE_FILTER_STOP
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_theme_constant_override("separation", 2)
+	box.add_child(col)
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 8)
+	col.add_child(row)
+	row.add_child(RetentionPanel.icon_safe("clock", 48))
+	row.add_child(UiKit.icon("coin", 48))
+	var num := UiKit.label("+0", 44, UiKit.YELLOW, 10)
+	row.add_child(num)
+	var bar := ProgressBar.new()
+	bar.show_percentage = false
+	bar.custom_minimum_size = Vector2(0, 12)
+	bar.max_value = 1.0
+	bar.step = 0.0
+	bar.value = float(g.get("fill", 0.0))
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.add_theme_stylebox_override("background", UiKit.flat_box(Color(0, 0, 0, 0.45), 6, 2))
+	bar.add_theme_stylebox_override("fill", UiKit.flat_box(UiKit.RED if bar.value >= 0.999 else UiKit.YELLOW, 6, 2))
+	col.add_child(bar)
+	_chrome.add_child(box)
+	_away = box
+	box.set_meta("label", num)
+	box.set_meta("coins", n)
+	box.size = box.get_combined_minimum_size()
+	box.position = Vector2((_chrome.size.x - box.size.x) * 0.5, 128.0)
+	box.pivot_offset = box.size * 0.5
+	box.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+			box.accept_event()
+			var at := box.get_global_rect().get_center()
+			box.queue_free()
+			map.collect_from(at))
+	Sfx.play("coin")
+	box.modulate.a = 0.0
+	var tw := box.create_tween()
+	tw.tween_property(box, "modulate:a", 1.0, 0.2)
+	tw.parallel().tween_method(func(v: float): num.text = "+" + UiKit.fmt_coins(int(round(v))), 0.0, float(n), 0.8)
+	tw.tween_callback(func(): UiKit.bump(box, 1.12))
+	tw.tween_interval(2.6)
+	tw.tween_property(box, "modulate:a", 0.0, 0.5)
+	tw.tween_callback(box.queue_free)
+
+
+## The earned-while-away pill on show: {coins, text}, or {} (tests).
+func away_shown() -> Dictionary:
+	if not is_instance_valid(_away) or _away.is_queued_for_deletion():
+		return {}
+	return {"coins": int(_away.get_meta("coins")), "text": (_away.get_meta("label") as Label).text}
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_RESUMED:
+		_show_away.call_deferred()  # after main.gd's welcome-back popup, which waits for it
+
+
+func _exit_tree() -> void:
+	Game.mark_away()  # off to a level (or the app closes): the away earnings count from here
 
 
 func refresh() -> void:
