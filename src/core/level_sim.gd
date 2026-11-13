@@ -57,6 +57,15 @@ extends RefCounted
 ## boss's or lieutenant's gun and barrage share). Every shot and attack is still capped, and
 ## at most telegraph.max_in_air marks are in the air, at least telegraph.min_gap_s apart (an
 ## attack that is due waits for a free slot).
+##
+## The clear run (owner 2026-11-13): once nothing is left between the squad and the stash (no
+## gang, cage, hazard, attack, bomb, gate row or obstacle, and nothing more to spawn) the street
+## is `clear` (event `street_clear`, once): nobody fires, a tap does nothing, the tap heat stops
+## counting towards the level's mean heat, and the squad runs world.clear_run_speed x faster to
+## the stash. Nothing hostile is left, so no count changes: the same squad reaches the stash.
+## A level with no gang at all never has one. pace_time() is the time the run would have taken
+## at the old pace (a shadow of the old run from the clear on), so the calibration's time budget
+## (tests/tune.gd MAX_TIME) and every stored route measure exactly what they did before.
 
 var S: float            # current scroll speed, m/s
 var S_base: float       # running speed
@@ -76,6 +85,7 @@ var _last_mark := -1.0e9  # sim time of the last telegraph
 var bomb_silence := 0.0 # powers.bomb.silence_s: a bombed gang's guns stay quiet this long
 var volley_s := 0.0     # return_fire.volley_s: a gang's shots go out together this often (0 = every tick)
 var finish_hold: float
+var clear_rush := 1.0   # world.clear_run_speed: the run to the stash once the street is clear
 var boss_hit_every: float
 var lane_w := 2.8          # metres between lane centres
 var form_half := 1.25      # widest a formation gets either side of its centre
@@ -119,6 +129,9 @@ var state := "run"      # run | strike | lost
 var lose_cause := ""
 var finish_at := 0.0
 var halted := false     # the squad is standing its ground (boss fight or waiting at the HQ)
+var clear := false      # nothing left to fight before the stash (see the header: the clear run)
+var _has_foes := false  # the level has a gang or cage at all (an empty street has no clear run)
+var _pace: Dictionary = {}  # the clear run's shadow at the old pace: {t, S, trav, done}
 var peak_squad := 0
 var revived := false
 
@@ -175,6 +188,7 @@ func _init(level: Dictionary = {}, units_cfg: Dictionary = {}, upgrades: Diction
 	bomb_silence = float(units_cfg["powers"].get("bomb", {}).get("silence_s", 0.0))
 	volley_s = maxf(float(units_cfg.get("return_fire", {}).get("volley_s", 0.0)), 0.0)
 	finish_hold = float(w.get("finish_hold", 14.0))
+	clear_rush = maxf(float(w.get("clear_run_speed", 1.0)), 1.0)
 	boss_hit_every = float(w.get("boss_hit_every", 0.1))
 	lane_w = float(w.get("lane_width", lane_w))
 	form_half = float(w.get("formation_half_width", form_half))
@@ -227,6 +241,7 @@ func _init(level: Dictionary = {}, units_cfg: Dictionary = {}, upgrades: Diction
 	charges["shield"] = int(charges["shield"]) + int(upgrades.get("shield", 0))
 	charges["bomb"] = int(charges["bomb"]) + int(upgrades.get("bomb", 0))
 	_build_spawns(level.get("events", []))
+	_has_foes = _pending_hordes > 0
 	peak_squad = squad.total()
 	# A hero-alone opening (levels 2-3) starts half warm (gen_levels.py START_HEAT).
 	tap_heat = clampf(float(level.get("start_heat", 0.0)), 0.0, 1.0)
@@ -261,6 +276,8 @@ func coin_troops() -> int:
 
 ## One tap on the fire zone: the hero heats up (spec v2 section 2).
 func tap() -> void:
+	if clear:
+		return   # nobody left to throw at
 	tap_heat = minf(tap_heat + tap_per, 1.0)
 	_tap_hold = tap_hold_s
 	squad.hero_rate = hero_rate_mult()
@@ -613,17 +630,30 @@ func stars() -> int:
 func step(dt: float) -> void:
 	if state != "run":
 		return
+	var t_before := time
 	time += dt
+	if not clear and street_clear():
+		clear = true
+		_pace = {"t": t_before, "S": S, "trav": traveled, "done": false}
+		out.append({"type": "street_clear"})
+	if clear:
+		_pace_step(dt)
 	_update_speed(dt)
 	traveled += S * dt
 	shield_t = maxf(shield_t - dt, 0.0)
-	_cool(dt)
+	if not clear:
+		_cool(dt)   # the clear run is not part of the level's tapping
 	_armour_note_t = maxf(_armour_note_t - dt, 0.0)
 	_spawn_due()
 	_move(dt)
 	_land_bombs(dt)
 	_check_barrels()
-	_shoot(dt)
+	if clear:
+		target_kind = ""
+		target_ref = null
+		snipe_ref = null
+	else:
+		_shoot(dt)
 	_gunfire(dt)
 	if state != "run":
 		return
@@ -656,6 +686,8 @@ func step(dt: float) -> void:
 			_blast(b, float(b["z"]), null)
 		_end_attacks()  # nothing lands after the finish
 		state = "strike"
+		while clear and not _pace["done"]:
+			_pace_step(dt)   # the old pace's run to the stash, played out for pace_time()
 		out.append({"type": "finish"})
 
 
@@ -699,9 +731,50 @@ func standoff() -> bool:
 	return false
 
 
-## Running speed: stop for a standoff, and stop short of the HQ while gangs live.
+## True when nothing is left between the squad and the stash: the finish is set, no gang or
+## cage is on the street or yet to come, no hazard is at work, no attack or bomb is in the air,
+## no gate row or obstacle is still ahead, and nothing but hints and the finish is left to
+## spawn. Then nothing can change the squad any more (the clear run, see the header).
+func street_clear() -> bool:
+	if not _has_foes or finish_at <= 0.0 or not hordes.is_empty() or _pending_hordes > 0 or not cages.is_empty():
+		return false
+	if not (hazards.is_empty() and attacks.is_empty() and bombs.is_empty() and rows.is_empty() and obstacles.is_empty()):
+		return false
+	for i in range(_next_spawn, _spawns.size()):
+		if not String(_spawns[i]["kind"]) in ["finish", "hint"]:
+			return false
+	return true
+
+
+## One step of the clear run's shadow at the old pace: the old _update_speed with nothing left
+## (run at S_base), the old finish test (reached the finish).
+func _pace_step(dt: float) -> void:
+	if _pace.is_empty() or _pace["done"]:
+		return
+	_pace["t"] = float(_pace["t"]) + dt
+	var ps := float(_pace["S"])
+	if ps > S_base:
+		ps = maxf(S_base, ps - 2.0 * accel * dt)
+	else:
+		ps = minf(S_base, ps + accel * dt)
+	_pace["S"] = ps
+	_pace["trav"] = float(_pace["trav"]) + ps * dt
+	if float(_pace["trav"]) >= finish_at:
+		_pace["done"] = true
+
+
+## The run's time at the old pace: the sim's clock, except that the clear run counts as long
+## as it took before it ran faster (see the header). Exactly the old clock for every result.
+func pace_time() -> float:
+	if clear and not _pace.is_empty() and _pace["done"]:
+		return float(_pace["t"])
+	return time
+
+
+## Running speed: stop for a standoff, and stop short of the HQ while gangs live; once the
+## street is clear, run clear_rush x faster to the stash.
 func _update_speed(dt: float) -> void:
-	var target := S_base
+	var target := S_base * clear_rush if clear else S_base
 	var boss := standoff()
 	if boss:
 		target = 0.0
@@ -1869,7 +1942,7 @@ func clone() -> LevelSim:
 			"powers", "rf_cfg", "boss_cfg", "lt_cfg", "revive_cfg", "star_cfg", "lane", "squad_x", "_x_driven", "lane_w", "form_half",
 			"fig_cap", "fig_r", "gate_clear_s", "gang_priority", "gang_figs", "district", "caps",
 			"coin_ref", "tap_heat", "tap_auto", "tap_per", "heat_sum", "heat_t",
-			"tap_hold_s", "tap_decay_s", "_tap_hold", "traveled", "time", "state", "lose_cause",
+			"tap_hold_s", "tap_decay_s", "_tap_hold", "traveled", "time", "state", "lose_cause", "clear", "clear_rush", "_has_foes",
 			"finish_at", "halted", "peak_squad", "revived", "shield_t", "kills", "rows_passed",
 			"_spawns", "_next_spawn", "_pending_hordes", "_wave_ats", "_next_id", "_armour_note_t"]:
 		c.set(p, get(p))
@@ -1888,6 +1961,7 @@ func clone() -> LevelSim:
 	c._joined = _joined.duplicate()
 	c._enemy_hints = _enemy_hints.duplicate()
 	c._hints_done = _hints_done.duplicate()
+	c._pace = _pace.duplicate()
 	return c
 
 
