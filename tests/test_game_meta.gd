@@ -199,6 +199,62 @@ func test_city_through_game() -> void:
 	g.free()
 
 
+## Owner play-test: each return to the map shows what the city stored while the player was
+## away; the storage cap bounds the amount (and so the time).
+func test_away_gain_counts_the_storage_since_leaving_the_map() -> void:
+	var g := _game()
+	g.save["coins"] = 1000
+	check(g.start_build("cafe"), "rebuild the cafe")
+	var t := T0 + City.build_time("cafe", 1, g.economy)
+	g.city_collect(1, t)
+	eq(g.take_away_gain(t), {}, "no mark: nothing to show")
+	g.mark_away(t)
+	g.mark_away(t + 600)   # a second mark (the app paused during the level) keeps the first
+	var inc := City.income_at("cafe", 1, g.economy)
+	var r: Dictionary = g.take_away_gain(t + 3600)
+	eq(int(r["coins"]), floori(inc), "an hour away: an hour of income")
+	eq(int(r["seconds"]), 3600, "away time")
+	near(float(r["fill"]), float(g.city_pending(t + 3600)) / g.city_storage_cap(t + 3600), "storage fill")
+	eq(g.take_away_gain(t + 3600), {}, "shown once")
+	# Already some coins waiting: only what came in while away counts.
+	g.mark_away(t + 3600)
+	eq(int(g.take_away_gain(t + 5400)["coins"]), g.city_pending(t + 5400) - g.city_pending(t + 3600), "only the new coins")
+	# A week away: the storage cap is the limit.
+	g.mark_away(t + 5400)
+	var far := t + 7 * 86400
+	var w: Dictionary = g.take_away_gain(far)
+	eq(g.city_pending(far), g.city_storage_cap(far), "the storage is full")
+	eq(int(w["coins"]), g.city_storage_cap(far) - g.city_pending(t + 5400), "capped by the storage")
+	near(float(w["fill"]), 1.0, "full")
+	# Collecting (the welcome-back popup, a bubble) empties the storage: nothing left to show.
+	g.mark_away(far)
+	g.city_collect(1, far + 60)
+	eq(g.take_away_gain(far + 120), {}, "collected: no away pill")
+	# The clock moved back: never a negative gain.
+	g.mark_away(far + 120)
+	eq(int(g.take_away_gain(far - 7200)["coins"]), 0, "clock back: +0")
+	g.free()
+
+
+func test_away_gain_after_a_cold_start() -> void:
+	var g := _game()
+	g.save["coins"] = 1000
+	check(g.start_build("cafe"), "rebuild the cafe")
+	var t := T0 + City.build_time("cafe", 1, g.economy)
+	g.city_collect(1, t)
+	g.save["left_at"] = t + 600   # the app went to the background and was closed
+	var raw: Dictionary = g.save.duplicate(true)
+	g.free()
+	var h: Node = GameScript.new()
+	h.save_path = ""
+	h.clock_override = t + 600 + 7200
+	h.date_override = "2026-11-08"
+	h.boot(raw)
+	var inc := City.income_at("cafe", 1, h.economy)
+	eq(int(h.take_away_gain()["coins"]), h.city_pending() - floori(inc * 600 / 3600.0), "two hours since the app closed")
+	h.free()
+
+
 func test_daily_through_game() -> void:
 	var g := _game()
 	var st: Dictionary = g.daily_state()

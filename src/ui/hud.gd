@@ -23,6 +23,8 @@ var _power: HBoxContainer
 var _power_shown := -1.0
 var _power_text := ""
 var _power_pop := 0.0
+var _power_base := -1.0      # the steady firepower (hero at full tap rate) last frame
+var _power_delta: PowerDelta # owner play-test: +N / -N under the firepower for 2.5 s
 var _cap_bar: ProgressBar
 var _power_buttons: Dictionary = {}
 var _power_ready_ms: Dictionary = {}   # v2: power id -> ticks when its free charge is back
@@ -104,6 +106,8 @@ func _ready() -> void:
 	_minus.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_minus.visible = false
 	add_child(_minus)
+	_power_delta = PowerDelta.make(_power, 30, 2.0)
+	add_child(_power_delta)
 	_cap_bar = ProgressBar.new()
 	_cap_bar.show_percentage = false
 	_cap_bar.custom_minimum_size = Vector2(0, 16)
@@ -250,7 +254,16 @@ func set_troops(n: int) -> void:
 ## Live firepower (LevelSim.live_power), called every frame, in the lobby's Squad Power format
 ## (Economy.fmt_power: one decimal below 100, then 12.3K / 1.25M): the label only changes when
 ## the shown number does, and a gain (troops joining, tapping) pops it.
-func set_firepower(v: float) -> void:
+## Owner play-test: every change of the squad's firepower (a gate taken, troops joining or
+## falling, a weapon picked up) shows as a green +N / red -N under it for 2.5 s; changes within
+## that time add up. `steady` is the firepower with the hero at full tap rate (steady_power):
+## the hint follows it, so the hero heating up and cooling down between taps does not flash a
+## number all the time. Without it the hint follows `v`.
+func set_firepower(v: float, steady := -1.0) -> void:
+	var base := steady if steady >= 0.0 else v
+	if _power_base >= 0.0 and absf(base - _power_base) > 0.0001:
+		_power_delta.add(base - _power_base)
+	_power_base = base
 	var txt := Economy.fmt_power(v)
 	if txt == _power_text:
 		return
@@ -263,6 +276,24 @@ func set_firepower(v: float) -> void:
 
 func firepower_text() -> String:
 	return (_power.get_meta("label") as Label).text
+
+
+## The +N / -N under the firepower ("" when none shows; tests).
+func firepower_delta_text() -> String:
+	return _power_delta.shown()
+
+
+## A LevelSim's firepower with the hero at full tap rate (its live_power without the tap heat):
+## the squad's own strength, for set_firepower's change hint. Reads the sim and leaves it as it was.
+static func steady_power(sim: Object) -> float:
+	var sq: Object = sim.get("squad")
+	if sq == null:
+		return float(sim.call("live_power"))
+	var rate: float = sq.get("hero_rate")
+	sq.set("hero_rate", 1.0)
+	var p := float(sim.call("live_power"))
+	sq.set("hero_rate", rate)
+	return p
 
 
 func set_capacity(cap: int) -> void:

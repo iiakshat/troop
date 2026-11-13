@@ -352,6 +352,13 @@ static func bump(c: Control, amount := 1.15) -> void:
 	tw.tween_property(c, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
+## Finger-drag scrolling for a ScrollContainer whose rows are cards and buttons (TouchScroll): a
+## drag that starts on a card or a button scrolls, and its release never presses the button.
+static func touch_scroll(s: ScrollContainer) -> ScrollContainer:
+	TouchScroll.attach(s)
+	return s
+
+
 ## Sideways shake: "not yet" (locked level, not enough coins).
 static func shake(c: Control) -> void:
 	if not c.has_meta("shake_x"):

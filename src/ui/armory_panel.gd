@@ -19,6 +19,7 @@ var _cards: Dictionary = {}     # id -> {card, art, name, calibre, stats: [...],
 var _coins: HBoxContainer
 var _power: HBoxContainer
 var _scroll: ScrollContainer
+var _power_delta: PowerDelta   # owner play-test: +N in green under the power pill after a buy
 
 const ART_DIR := "res://assets/armory/"
 ## Fallback icons when a tier has no art file.
@@ -72,12 +73,15 @@ func _ready() -> void:
 	col.add_child(pills)
 	_power = UiKit.pill("power", Economy.fmt_power(Game.squad_power()), Color.WHITE)
 	pills.add_child(_power)
+	_power_delta = PowerDelta.make(_power, 30, 2.0)
+	add_child(_power_delta)
 	_coins = UiKit.pill("coin", str(int(Game.save["coins"])))
 	pills.add_child(_coins)
 	_scroll = ScrollContainer.new()
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	col.add_child(_scroll)
+	UiKit.touch_scroll(_scroll)
 	var list := VBoxContainer.new()
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list.add_theme_constant_override("separation", 12)
@@ -432,6 +436,8 @@ func buy(id: String) -> void:
 		_evolve(id)
 	else:
 		UiKit.pop(_cards[id]["card"], 0.9)
+	if absf(after - before) >= 0.05:
+		_power_delta.add(after - before)
 	if after >= before + 0.05:
 		UiKit.pill_count(_power, before, after, 0.6, Economy.fmt_power)
 		UiKit.bump(_power, 1.3)
