@@ -1,0 +1,209 @@
+<!doctype html>
+<!--
+  Siren Squad privacy policy (the page the Play Console links to).
+  Source of truth: docs/PRIVACY.md. Keep the two in step, and update docs/play_data_safety.md
+  whenever an SDK or setting changes. Hosting: docs/privacy/README.md.
+
+  OWNER, before publishing:
+    1. Replace every "TODO: contact email" (3 places) with the address players should write to.
+    2. Set the "Last updated" date to the day you publish.
+    3. Check it still matches the build you ship (AdMob + Firebase Analytics for older players).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="Privacy policy for Siren Squad, an offline arcade game for Android by axnex.">
+<title>Siren Squad Privacy Policy</title>
+<style>
+  :root {
+    --bg: #f6f7fb;
+    --card: #ffffff;
+    --text: #1b2033;
+    --muted: #5a6178;
+    --line: #e2e5ef;
+    --accent: #2453d6;
+    --accent-2: #d62b3a;
+    --chip: #eef2ff;
+    --todo-bg: #fff3c4;
+    --todo-text: #6b4b00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b1020;
+      --card: #141a2e;
+      --text: #e7eaf4;
+      --muted: #a2a9c2;
+      --line: #263052;
+      --accent: #7fa2ff;
+      --accent-2: #ff6b78;
+      --chip: #1d2645;
+      --todo-bg: #4a3a05;
+      --todo-text: #ffe28a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b1020;
+    --card: #141a2e;
+    --text: #e7eaf4;
+    --muted: #a2a9c2;
+    --line: #263052;
+    --accent: #7fa2ff;
+    --accent-2: #ff6b78;
+    --chip: #1d2645;
+    --todo-bg: #4a3a05;
+    --todo-text: #ffe28a;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", Arial, sans-serif;
+  }
+  .bar { height: 4px; background: linear-gradient(90deg, var(--accent-2) 0 50%, var(--accent) 50% 100%); }
+  main { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { margin-bottom: 20px; }
+  .studio { font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  h1 { font-size: 28px; line-height: 1.2; margin: 6px 0 10px; }
+  .meta { color: var(--muted); font-size: 14px; margin: 0; }
+  .summary {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 16px 18px; margin: 20px 0 8px;
+  }
+  .summary h2 { margin-top: 0; }
+  .summary ul { margin-bottom: 0; }
+  section { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 24px; }
+  h2 { font-size: 20px; line-height: 1.3; margin: 16px 0 8px; }
+  h3 { font-size: 16px; margin: 16px 0 4px; }
+  p, ul { margin: 8px 0; }
+  ul { padding-left: 22px; }
+  li { margin: 4px 0; }
+  a { color: var(--accent); overflow-wrap: anywhere; }
+  code { background: var(--chip); border-radius: 6px; padding: 1px 6px; font-size: 0.9em; overflow-wrap: anywhere; }
+  .two { display: grid; grid-template-columns: 1fr; gap: 12px; margin: 12px 0; }
+  @media (min-width: 600px) { .two { grid-template-columns: 1fr 1fr; } }
+  .box { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .box h3 { margin-top: 0; }
+  .box ul { margin-bottom: 0; }
+  .todo {
+    background: var(--todo-bg); color: var(--todo-text); border-radius: 6px;
+    padding: 1px 6px; font-weight: 600;
+  }
+  footer { color: var(--muted); font-size: 14px; margin-top: 32px; border-top: 1px solid var(--line); padding-top: 12px; }
+</style>
+</head>
+<body>
+<div class="bar" aria-hidden="true"></div>
+<main>
+  <header>
+    <p class="studio">axnex</p>
+    <h1>Siren Squad Privacy Policy</h1>
+    <p class="meta">Last updated: 13 November 2026 &middot; App: Siren Squad for Android (<code>com.iiakshat.sirensquad</code>)</p>
+    <p class="meta">Developer: axnex, Gurugram, India &middot; Contact: <span class="todo">TODO: contact email</span></p>
+  </header>
+
+  <div class="summary">
+    <h2>In short</h2>
+    <ul>
+      <li>No account, and we never ask for your name, email, phone number, contacts, photos or precise location.</li>
+      <li>The game plays fully offline. Your progress stays on your phone.</li>
+      <li>When the phone is online, ads come from <strong>Google AdMob</strong>. Older players' gameplay statistics go to <strong>Google Analytics for Firebase</strong>.</li>
+      <li>Younger players get non-personalised, child-directed ads only, and <strong>no analytics leave the phone</strong>.</li>
+      <li>Uninstalling the game deletes everything it stored on your phone.</li>
+    </ul>
+  </div>
+
+  <section id="age">
+    <h2>1. The age question</h2>
+    <p>On first launch the game asks for a <strong>birth year</strong> (a number wheel). The year stays <strong>on your phone only</strong>, in the game's save file, and is never sent anywhere. The game uses it to decide which rules below apply:</p>
+    <ul>
+      <li><strong>Younger players:</strong> under 13, or under 18 when the phone's region, language setting or time zone points to India (India's Digital Personal Data Protection Act, 2023).</li>
+      <li><strong>Older players:</strong> everyone else.</li>
+    </ul>
+    <p>Until the question is answered, the game treats the player as a younger player and starts no online service at all.</p>
+  </section>
+
+  <section id="device">
+    <h2>2. What stays on your phone</h2>
+    <ul>
+      <li>Your progress, coins, settings and birth year (the save file).</li>
+      <li>A small local log of game events (levels played, ads watched, taps per level) that helps us find problems. It never leaves the phone by itself, and the game deletes old entries as it grows.</li>
+      <li>To choose its graphics quality, the game reads your phone's memory size and graphics chip name. It uses them on the phone only and never stores or sends them.</li>
+    </ul>
+    <p>Uninstalling the game, or clearing its data in Android settings, deletes all of this.</p>
+  </section>
+
+  <section id="ads">
+    <h2>3. Ads (Google AdMob)</h2>
+    <p>The game shows ads through <strong>Google AdMob</strong>. Rewarded ads play only when you tap an ad button for a bonus. Short interstitial ads may appear between levels, never during play, and can always be closed.</p>
+    <div class="two">
+      <div class="box">
+        <h3>Younger players</h3>
+        <p>Every ad request is marked as directed at children and as under the age of consent. So:</p>
+        <ul>
+          <li>ads are <strong>not personalised</strong> (no interest-based ads, no remarketing)</li>
+          <li>the highest ad content rating is <strong>G</strong></li>
+          <li>Google's SDK does <strong>not</strong> send the Android advertising ID</li>
+          <li>no consent form is shown, because nothing is personalised</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3>Older players</h3>
+        <p>AdMob may use the advertising ID, the IP address (to estimate a rough location) and how you interact with ads, to serve and measure ads and to prevent fraud.</p>
+        <ul>
+          <li>In the EEA, the UK and Switzerland, Google's consent form asks you first, and you can choose non-personalised ads.</li>
+          <li>The highest ad content rating is <strong>PG</strong>.</li>
+        </ul>
+      </div>
+    </div>
+    <p>How Google uses this data: <a href="https://policies.google.com/technologies/partner-sites">policies.google.com/technologies/partner-sites</a>. You can reset or delete your advertising ID in Android <strong>Settings &rarr; Privacy &rarr; Ads</strong>.</p>
+  </section>
+
+  <section id="analytics">
+    <h2>4. Analytics (Google Analytics for Firebase), older players only</h2>
+    <p><strong>For younger players, Firebase is never started.</strong> No analytics data leaves the phone.</p>
+    <p><strong>For older players</strong>, the game sends anonymous gameplay events to Google Analytics for Firebase, so we can see where the game is too hard or too easy. For example: a level started or ended, stars won, how many times per 10 seconds the hero was tapped, an ad button shown or watched, a building upgraded. Firebase also records basic device information (model, Android version, language, rough location from the IP address) and a random app-instance ID that resets when you reinstall the game.</p>
+    <p>We have turned <strong>off</strong>:</p>
+    <ul>
+      <li>advertising-ID collection by Firebase</li>
+      <li>Android ID (SSAID) collection by Firebase</li>
+      <li>the use of analytics data for ads (ad storage, ad user data and ad personalisation are denied)</li>
+    </ul>
+    <p>We do not use Firebase Crashlytics, Cloud Messaging or any other Firebase product.</p>
+  </section>
+
+  <section id="sharing">
+    <h2>5. Sharing and selling</h2>
+    <p>We do not sell personal data. We share it with no one except Google, which runs AdMob and Firebase as described above. We never combine it with data from other apps or sources.</p>
+  </section>
+
+  <section id="security">
+    <h2>6. Security and retention</h2>
+    <p>Google's SDKs send data over encrypted connections (TLS). Firebase Analytics keeps event data for 2 months. The local save and log stay on your phone until you uninstall the game or clear its data.</p>
+  </section>
+
+  <section id="choices">
+    <h2>7. Your choices and rights</h2>
+    <ul>
+      <li><strong>Delete everything on the phone:</strong> uninstall the game, or clear its data in Android settings.</li>
+      <li><strong>Stop the analytics:</strong> clear the game's data in Android settings and answer the age question again on the next launch. A younger player's answer keeps Firebase off.</li>
+      <li><strong>Ads:</strong> reset or delete your advertising ID in Android settings. In the EEA, the UK and Switzerland, change your ad consent from the consent form.</li>
+      <li><strong>Questions, access or deletion:</strong> email <span class="todo">TODO: contact email</span>. We never collect your name or email, so tell us roughly when you played. We will delete what we can identify within 30 days.</li>
+    </ul>
+    <p>If you are a parent and believe your child's data reached us, email us and we will delete it.</p>
+  </section>
+
+  <section id="changes">
+    <h2>8. Changes</h2>
+    <p>If this policy changes, we update this page and the "Last updated" date. Material changes will also be noted in the app's store listing.</p>
+  </section>
+
+  <footer>
+    <p>Siren Squad &middot; axnex &middot; <span class="todo">TODO: contact email</span></p>
+  </footer>
+</main>
+</body>
+</html>

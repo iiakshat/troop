@@ -4,10 +4,11 @@
 > host it (GitHub Pages on the public repo works) and paste the URL into the Play Console. It
 > describes the build as of spec v2 (2026-11-12): AdMob and Firebase Analytics, a mixed audience,
 > and a neutral age screen. If an SDK or setting changes, update this page and
-> `docs/play_data_safety.md` together.
+> `docs/play_data_safety.md` together. The page to host is `docs/privacy/index.html` (same text,
+> mobile-friendly HTML; hosting steps in `docs/privacy/README.md`): keep it in step with this file.
 
 **Last updated:** [date of publishing]
-**Developer:** iiakshat (Gurugram, India). **Contact:** [contact email]
+**Developer:** axnex (Gurugram, India). **Contact:** [contact email]
 
 Siren Squad is an offline arcade game. You need no account, and we never ask for your name, email,
 phone number, contacts, photos or precise location. The game plays fully offline. When the phone is
@@ -31,6 +32,8 @@ online service at all.
 - Your progress, coins, settings and birth year (the save file).
 - A small local log of game events (levels played, ads watched, taps per level) that helps us debug.
   It never leaves the phone by itself, and the game deletes old entries as it grows.
+- To choose its graphics quality, the game reads the phone's memory size and graphics chip name. It
+  uses them on the phone only and never stores or sends them.
 
 Uninstalling the game, or clearing its data in Android settings, deletes all of this.
 
