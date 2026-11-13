@@ -60,7 +60,7 @@ const MINUS_ICON_W := 0.85
 const GUN_ICON := "pistol"       # gunfire (a gang's volley, the boss's gun): the same gun over the shooter
 const CAUSE_ICON := {"snipe": "aim", "grenade": "blast", "firebomb": "fire", "barrage": "blast",
 	"lt_barrage": "blast", "sweep": "blast", "crane": "crane", "steam": "steam", "chopper": "chopper",
-	"melee": "fist", "gun": GUN_ICON}
+	"melee": "thug", "gun": GUN_ICON}   # clash: the gang itself (the fist-bump read as "join")
 ## The stash (FinaleStash.facade) is built STASH_FACE m behind its front face, which stands
 ## LevelSim.stash_front m past the finish line. No gang figure is drawn closer to that face than
 ## STASH_PAD: a deep gang's back rows close up in front of it instead of standing inside it.

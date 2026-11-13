@@ -147,7 +147,7 @@ func test_every_loss_carries_its_cause() -> void:
 	var fx: Fx = parts[2]
 	var id := _first_gang(view)
 	view._handle_events([{"type": "melee", "horde": id, "enemies": 2, "lost": 2, "shielded": false}])
-	eq(view.minus_cause(), "fist", "a clash: the fist")
+	eq(view.minus_cause(), "thug", "a clash: the gang's thug")
 	eq(view._minus_label.text, "-2", "its -2")
 	for kind in ["firebomb", "grenade", "snipe", "barrage", "crane"]:
 		_tick(view, fx, 1.2)
