@@ -40,6 +40,15 @@ var tutor := false   # a Tutorial runs this level: it owns the hints in Tutorial
 func _ready() -> void:
 	UiKit.safe_rect(self)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Owner play-test 2026-11-13: under a notch / punch-hole the street showed as a bright strip
+	# above the bar. A dark scrim runs from the very top of the screen (y = 0, above this safe
+	# rect) over the cut-out and fades out under the bar; none where the screen has no cut-out.
+	var ins := UiKit.safe_insets(self)
+	if ins.x > 0.0:
+		var scrim := UiKit.top_scrim(ins.x, 70.0, 0.75)
+		scrim.offset_top = -ins.x
+		scrim.offset_bottom = 70.0
+		add_child(scrim)
 
 	var top := HBoxContainer.new()
 	top.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)

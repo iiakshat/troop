@@ -92,24 +92,11 @@ func _ready() -> void:
 
 func _build_top() -> void:
 	# A dark fade behind the top bar, so map pills scrolling under it never mix with its numbers.
-	var fade := TextureRect.new()
-	var gt := GradientTexture2D.new()
-	gt.fill_from = Vector2(0, 0)
-	gt.fill_to = Vector2(0, 1)
-	gt.width = 4
-	gt.height = 64
-	var gr := Gradient.new()
-	gr.set_color(0, Color(0.02, 0.04, 0.1, 0.92))
-	gr.set_color(1, Color(0.02, 0.04, 0.1, 0.0))
-	gr.add_point(0.6, Color(0.02, 0.04, 0.1, 0.8))
-	gt.gradient = gr
-	fade.texture = gt
-	fade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	fade.stretch_mode = TextureRect.STRETCH_SCALE
-	fade.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	fade.offset_bottom = 150
-	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_chrome.add_child(fade)
+	# It starts at the very top of the screen (under a notch / punch-hole camera too), solid over
+	# the cut-out, and fades out 150 px below it; the bar itself sits in the safe area.
+	var fade := UiKit.top_scrim(UiKit.safe_insets(self).x, 150.0)
+	add_child(fade)
+	move_child(fade, _chrome.get_index())
 	var top := HBoxContainer.new()
 	top.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	top.offset_left = 20

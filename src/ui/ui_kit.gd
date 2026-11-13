@@ -21,6 +21,9 @@ const BUTTON_TEX := {
 }
 
 static var _icons: Dictionary = {}
+## Debug (main.gd args safe_top=N safe_bottom=N): pretend the phone has a cut-out / gesture bar
+## this many UI px high, so the notch layout can be checked and screenshot on a PC. -1 = off.
+static var debug_safe := Vector2(-1, -1)
 
 
 ## Glossy full-colour icon (assets/icons/gloss, AI-painted) when there is one, else the
@@ -256,18 +259,85 @@ static func safe_rect(c: Control) -> Control:
 	return c
 
 
-## (top, bottom) unsafe margins in UI units. Desktop: none.
+## (top, bottom) unsafe margins in UI units. Desktop: none (unless debug_safe simulates one).
+## Only the buttons and numbers keep out of them: backings (the lobby's top fade, the HUD's top
+## scrim, panel dims, the bottom strip) run to the very screen edge (owner play-test
+## 2026-11-13: the map showed above the top bar's dark fade on a punch-hole phone).
 static func safe_insets(c: Control) -> Vector2:
+	if debug_safe.x >= 0.0 or debug_safe.y >= 0.0:
+		return Vector2(maxf(debug_safe.x, 0.0), maxf(debug_safe.y, 0.0))
 	if not OS.has_feature("mobile"):
 		return Vector2.ZERO
-	var win := Vector2(DisplayServer.window_get_size())
-	var safe := Rect2(DisplayServer.get_display_safe_area())
+	return insets_for(Vector2(DisplayServer.window_get_size()), Rect2(DisplayServer.get_display_safe_area()),
+		c.get_viewport().get_visible_rect().size.y)
+
+
+## The safe-area maths (pure, tested): window px and the display's safe rect (px) -> (top,
+## bottom) in UI units for a viewport `view_h` UI px high. At least 24 / 12 (status and gesture
+## bars that report no cut-out); 48 / 24 when the platform reports nothing usable.
+static func insets_for(win: Vector2, safe: Rect2, view_h: float) -> Vector2:
 	if win.y <= 0.0 or safe.size.y <= 0.0:
 		return Vector2(48, 24)
-	var k := c.get_viewport().get_visible_rect().size.y / win.y
+	var k := view_h / win.y
 	var top := maxf(safe.position.y, 0.0) * k
 	var bottom := maxf(win.y - safe.end.y, 0.0) * k
 	return Vector2(maxf(top, 24.0), maxf(bottom, 12.0))
+
+
+## A dark fade for the top of the screen, from y = 0 (under the notch) to `inset + below`: solid
+## over the cut-out, then fading out. Add it to a full-screen parent, under the buttons.
+static func top_scrim(inset: float, below: float, alpha := 0.92) -> TextureRect:
+	var fade := TextureRect.new()
+	var gt := GradientTexture2D.new()
+	gt.fill_from = Vector2(0, 0)
+	gt.fill_to = Vector2(0, 1)
+	gt.width = 4
+	gt.height = 128
+	var col := Color(0.02, 0.04, 0.1)
+	var h := maxf(inset + below, 1.0)
+	var solid := clampf(inset / h, 0.0, 0.95)
+	var gr := Gradient.new()
+	gr.set_color(0, Color(col, alpha))
+	gr.set_color(1, Color(col, 0.0))
+	if solid > 0.0:
+		gr.add_point(solid, Color(col, alpha))
+	gr.add_point(solid + 0.6 * (1.0 - solid), Color(col, alpha * 0.87))
+	gt.gradient = gr
+	fade.texture = gt
+	fade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	fade.stretch_mode = TextureRect.STRETCH_SCALE
+	fade.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	fade.offset_top = 0
+	fade.offset_bottom = h
+	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fade.name = "TopScrim"
+	return fade
+
+
+## (top, bottom) y of a panel `half_h` UI px either side of the centre of a `view_h` high
+## screen, kept `margin` clear of the insets: moved, then shortened only if it cannot fit.
+static func center_span(view_h: float, half_h: float, ins: Vector2, margin := 12.0) -> Vector2:
+	var lo := ins.x + margin
+	var hi := view_h - ins.y - margin
+	var top := view_h * 0.5 - half_h
+	var bottom := view_h * 0.5 + half_h
+	if bottom - top > hi - lo:
+		return Vector2(lo, hi)
+	if top < lo:
+		return Vector2(lo, lo + 2.0 * half_h)
+	if bottom > hi:
+		return Vector2(hi - 2.0 * half_h, hi)
+	return Vector2(top, bottom)
+
+
+## Keeps a centre-anchored panel (offsets ±half_h) clear of the cut-out and gesture bar.
+static func fit_center(p: Control, half_h: float) -> void:
+	if not p.is_inside_tree():
+		return
+	var h := p.get_viewport().get_visible_rect().size.y
+	var span := center_span(h, half_h, safe_insets(p))
+	p.offset_top = span.x - h * 0.5
+	p.offset_bottom = span.y - h * 0.5
 
 
 static func pop(c: Control, from := 0.6) -> void:

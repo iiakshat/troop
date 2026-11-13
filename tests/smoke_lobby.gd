@@ -173,6 +173,29 @@ func _run() -> void:
 	_check(map.selected == 2, "advance keeps the new level selected")
 	_lobby.refresh()
 	_check(_lobby._play_label.text == "2", "Play shows the selected level")
+	_notch()
+
+
+## Owner play-test 2026-11-13: on a punch-hole phone the map showed above the top bar's dark
+## fade. Under a simulated 80 px cut-out the fade starts at the screen's top edge and covers it,
+## while every lobby button sits below it.
+func _notch() -> void:
+	var kit: Script = load("res://src/ui/ui_kit.gd")
+	kit.set("debug_safe", Vector2(80, 30))
+	var lob: Control = load("res://src/ui/lobby.gd").new()
+	root.add_child(lob)
+	var fade := lob.find_child("TopScrim", true, false) as Control
+	_check(fade != null, "notch: the lobby has a top fade")
+	if fade:
+		_check(absf(fade.get_global_rect().position.y) < 0.5, "notch: the fade starts at the top edge (%.0f)" % fade.get_global_rect().position.y)
+		_check(fade.get_global_rect().end.y >= 229.5, "notch: and covers the cut-out plus 150 px")
+	var top := INF
+	for b in (lob.get("_chrome") as Control).find_children("*", "Button", true, false):
+		top = minf(top, (b as Control).get_global_rect().position.y)
+	_check(top >= 80.0, "notch: no lobby button under the cut-out (top one at %.0f)" % top)
+	kit.set("debug_safe", Vector2(-1, -1))
+	root.remove_child(lob)
+	lob.free()
 
 
 ## The Game autoload (not a compile-time global in a SceneTree script).

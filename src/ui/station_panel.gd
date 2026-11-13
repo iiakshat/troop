@@ -41,6 +41,7 @@ func _ready() -> void:
 	p.offset_top = -520
 	p.offset_bottom = 520
 	add_child(p)
+	UiKit.fit_center(p, 520)  # clear of a notch / gesture bar on short screens
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 14)
 	p.add_child(col)
