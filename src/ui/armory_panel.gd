@@ -34,7 +34,7 @@ const STATS := {
 	"dmg": ["fist", false], "rate": ["fire_rate", false], "mag": ["pistol", false],
 	"reload_s": ["clock", true], "draw_s": ["clock", true], "cycle_s": ["clock", true],
 	"kick_deg": ["aim", true], "shake_deg": ["aim", true], "sway_deg": ["aim", true],
-	"steady_s": ["shield", false], "swipe_fast": ["swipe", true], "ricochet_len": ["broken_bottle", false],
+	"steady_s": ["shield", false], "assist_deg": ["swipe", false], "ricochet_len": ["broken_bottle", false],
 }
 const TIER_TINT := [Color("8a94a6"), Color("4f8de0"), Color("f2b73a"), Color("ffd75a")]
 const BAR_W := 104.0
