@@ -72,10 +72,67 @@ func test_melee_trades_row_by_row() -> void:
 	var sim := LevelSim.new(lvl, tough)
 	var seen := _step_until(sim, func(): return sim.state != "run")
 	var melees := seen.filter(func(e): return e["type"] == "melee")
-	eq(melees.size(), 2, "10 brutes in rows of 5 strike in two rows")
-	eq(int(melees[0]["lost"]), 20, "a row of 5 brutes takes 4 each")
+	# The crowd clash: 5 % of the 61 troops it met is 3, less than one brute's 4, so one brute
+	# strikes per tick (at least one enemy) and the rest of his row waits.
+	eq(melees.size(), 10, "10 brutes strike one per tick")
+	eq(int(melees[0]["lost"]), 4, "each brute takes 4")
+	eq(int(melees[0]["enemies"]), 1, "one striker per tick")
 	eq(sim.squad.total(), 61 - 40, "squad paid 4 per brute")
 	eq(sim.state, "strike", "survived")
+
+
+## Spec v2.1 §1.4, the crowd clash (owner 2026-11-13): a gang that reaches the squad grinds
+## into it at melee_cap_pct % of the squad it met per tick, 1:1, both numbers falling together;
+## a 10,000 gang still kills a 2,000 squad, over 20 ticks instead of one.
+func test_crowd_clash_is_paced_and_exact() -> void:
+	var cap := int(units["world"]["melee_cap_pct"])
+	eq(cap, 5, "melee_cap_pct 5")
+	eq(LevelSim.clash_strikers(2000, 1000, 1, 5), 100, "5 % of 2,000")
+	eq(LevelSim.clash_strikers(2000, 60, 1, 5), 60, "never more than the row")
+	eq(LevelSim.clash_strikers(1, 9, 1, 5), 1, "at least one striker")
+	eq(LevelSim.clash_strikers(2000, 1000, 4, 5), 25, "a power-4 brute: 100 troops are 25 brutes")
+	eq(LevelSim.clash_strikers(2000, 1000, 1, 0), 1000, "cap 0: the whole row")
+	var sim := _fight_sim([{"enemy": "thug", "n": 10000, "hp": 100000}], 2000)
+	var melees: Array = []
+	var counts: Array = []
+	for i in 9000:
+		sim.step(1.0 / 30.0)
+		for e in sim.drain():
+			if e["type"] == "melee":
+				melees.append(e)
+				for h in sim.hordes:
+					counts.append(int(h["count"]))
+		if sim.state != "run":
+			break
+	eq(sim.state, "lost", "10,000 thugs still beat 2,000 troops")
+	eq(melees.size(), 20, "over 20 ticks (%.1f s), not one" % (20 * float(units["world"]["melee_tick"])))
+	var ok := true
+	for i in melees.size():
+		ok = ok and int(melees[i]["lost"]) == 100 and int(melees[i]["enemies"]) == 100
+	check(ok, "every tick 100 troops for 100 thugs (exact, 1:1)")
+	if counts.size() >= 2:
+		eq(counts[0] - counts[1], 100, "the gang's number falls with the squad's")
+	# The hero alone: one thug takes him (the opening lesson is unchanged).
+	var solo := _fight_sim([{"enemy": "thug", "n": 3, "hp": 100000}], 1)
+	var first := _until_event(solo, "melee")
+	eq(int(first.get("lost", -1)), 1, "a lone hero loses his one troop to the first striker")
+	eq(solo.state, "lost", "and falls")
+	# The shield: the whole front row breaks on it and nobody is lost.
+	var sh := _fight_sim([{"enemy": "thug", "n": 500, "hp": 100000}], 400)
+	sh.charges["shield"] = 1
+	var guard := 0
+	while guard < 9000 and sh.state == "run":
+		guard += 1
+		sh.step(1.0 / 30.0)
+		var hit := _events_of(sh.drain(), "melee")
+		for h in sh.hordes:
+			if LevelSim.front_z(h) > -3.0 and sh.shield_t <= 0.0 and int(sh.charges["shield"]) > 0:
+				sh.use_power("shield")
+		if not hit.is_empty():
+			check(bool(hit[0]["shielded"]), "the first strike meets the shield")
+			eq(int(hit[0]["lost"]), 0, "nobody lost on the shield")
+			eq(int(hit[0]["enemies"]), mini(500, 9 * 3), "the whole row (9 figures of 3) breaks")
+			break
 
 
 func test_bigger_gang_wipes_the_squad() -> void:
@@ -803,6 +860,11 @@ func test_generated_levels_follow_the_rules() -> void:
 					hint_ids[e["id"]] = true
 				"wave":
 					for g in e["groups"]:
+						# A lieutenant (spec v2.1 §1.3: slot 5) is a boss group of his own; he
+						# comes before the district boss unlocks and is no district boss.
+						if bool(g.get("lieutenant", false)):
+							eq(n % 10, 5, "L%d: a lieutenant on slot 5" % n)
+							continue
 						check(int(units["enemies"][g["enemy"]]["unlock"]) <= n, "L%d: %s before its unlock" % [n, g["enemy"]])
 						if g["enemy"] == "boss":
 							bosses += 1
@@ -1826,9 +1888,13 @@ func test_fire_k_scales_return_fire_and_attacks_but_not_bosses() -> void:
 					t += 1
 		shots[fk] = n
 		telegraphs[fk] = t
-		eq(first_open, int(round(float(units["return_fire"]["open"]) * fk)), "opening volley x fire_k %.0f" % fk)
+		eq(first_open, int(units["return_fire"]["open"]), "the opening volley is the same at fire_k %.0f" % fk)
 	check(absf(float(shots[2.0]) / maxf(float(shots[1.0]), 1.0) - 2.0) < 0.15, "fire_k 2 doubles the shots (%d vs %d)" % [shots[2.0], shots[1.0]])
-	check(telegraphs[2.0] >= 2 * telegraphs[1.0] - 1 and telegraphs[1.0] > 0, "fire_k 2 doubles the attacks (%d vs %d)" % [telegraphs[2.0], telegraphs[1.0]])
+	# Specials attack at most telegraph.fire_k_max (1.5) x as often: a fire_k 2 level is not a storm.
+	var fkm := float(units["telegraph"]["fire_k_max"])
+	eq(fkm, 1.5, "fire_k_max 1.5")
+	var ratio := float(telegraphs[2.0]) / maxf(float(telegraphs[1.0]), 1.0)
+	check(telegraphs[1.0] > 0 and ratio >= 1.3 and ratio <= 1.65, "fire_k 2 attacks 1.5x as often (%d vs %d)" % [telegraphs[2.0], telegraphs[1.0]])
 	var boss := LevelSim.new({"district": 1, "fire_k": 3.0, "events": [
 		{"at": 30, "type": "wave", "groups": [{"enemy": "molotov", "n": 2}]},
 		{"at": 70, "type": "wave", "groups": [{"enemy": "boss", "n": 1, "hp": 1000}]}, {"at": 600, "type": "finish"}]}, units)
@@ -1843,3 +1909,95 @@ func test_fire_k_scales_return_fire_and_attacks_but_not_bosses() -> void:
 			break
 	eq(float(every.get("boss", -1.0)), float(units["enemies"]["boss"]["shoot_every"]), "a boss keeps his own gun rate")
 	eq(float(every.get("molotov", -1.0)), float(units["enemies"]["molotov"]["throw_every"]), "the opening gang keeps its own rate")
+
+
+## Spec v2.1 §1.2 cadence (advisor A3): at most telegraph.max_in_air marks in the air and at
+## least min_gap_s between two, however many specials are firing; an attack that is due waits.
+func test_telegraph_cadence_is_readable() -> void:
+	var tg: Dictionary = units["telegraph"]
+	eq(int(tg["max_in_air"]), 2, "at most 2 marks in the air")
+	near(float(tg["min_gap_s"]), 0.9, "0.9 s between marks")
+	var sim := LevelSim.new({"district": 3, "fire_k": 2.0, "events": [
+		{"at": 30, "type": "wave", "groups": [{"enemy": "thug", "n": 1}]},
+		{"at": 80, "type": "wave", "groups": [{"enemy": "sniper_foe", "n": 40, "hp": 100000}]},
+		{"at": 80, "type": "wave", "groups": [{"enemy": "grenadier", "n": 40, "hp": 100000}]},
+		{"at": 80, "type": "wave", "groups": [{"enemy": "molotov", "n": 40, "hp": 100000}]},
+		{"at": 900, "type": "finish"}]}, units)
+	sim.squad.cap = 0
+	sim.squad.add("constable", 100000 - 1)
+	sim.set_lane(1)
+	var times: Array = []
+	var most := 0
+	for i in 40 * 30:
+		sim.step(1.0 / 30.0)
+		for e in sim.drain():
+			if e["type"] == "telegraph":
+				times.append(sim.time)
+		most = maxi(most, sim.attacks.size())
+	check(times.size() >= 10, "the specials attack (%d marks)" % times.size())
+	check(most <= 2, "never more than 2 marks in the air (%d)" % most)
+	var short := 0
+	for i in range(1, times.size()):
+		if float(times[i]) - float(times[i - 1]) < 0.9 - 1e-6:
+			short += 1
+	eq(short, 0, "every gap at least 0.9 s")
+
+
+## Spec v2.1 §1.3 (advisor R4): a level's boss_k scales its boss's barrage and gun share, in
+## per mille, exact; 1 changes nothing.
+func test_boss_k_scales_barrage_and_gun() -> void:
+	var pct: Array = units["boss"]["barrage_pct"]
+	for bk in [1.0, 0.6, 1.5]:
+		var sim := LevelSim.new({"district": 1, "boss_k": bk, "events": [
+			{"at": 60, "type": "wave", "groups": [{"enemy": "boss", "n": 1, "hp": 1000000}]},
+			{"at": 900, "type": "finish"}]}, units)
+		sim.squad.cap = 0
+		sim.squad.add("constable", 10000 - 1)
+		sim.peak_squad = sim.squad.total()
+		sim.set_lane(1)
+		var landed := {}
+		var shot := {}
+		for i in 60 * 30:
+			var before := sim.squad.total()
+			sim.step(1.0 / 30.0)
+			for e in sim.drain():
+				if e["type"] == "attack_land" and bool(e["hit"]) and landed.is_empty():
+					landed = {"lost": int(e["lost"]), "before": before}
+				elif e["type"] == "boss_shot" and shot.is_empty() and int(e["lost"]) > 0:
+					shot = {"lost": int(e["lost"]), "before": before}
+			if not landed.is_empty() and not shot.is_empty():
+				break
+		check(not landed.is_empty() and not shot.is_empty(), "boss_k %.1f: a barrage and a shot land" % bk)
+		if landed.is_empty() or shot.is_empty():
+			continue
+		var pm := int(floor(int(pct[0]) * 10.0 * bk + 0.5))
+		eq(int(landed["lost"]), int(landed["before"]) * pm / 1000, "boss_k %.1f barrage = %d per mille" % [bk, pm])
+		var gm := int(floor(int(units["boss"]["gun_pct"]) * 10.0 * bk + 0.5))
+		eq(int(shot["lost"]), int(shot["before"]) * gm / 1000, "boss_k %.1f gun = %d per mille" % [bk, gm])
+
+
+## Spec v2.1 §1.1 (advisor R6): a bomb that lands on a gang silences its guns for silence_s.
+func test_bomb_silences_return_fire() -> void:
+	var sil := float(units["powers"]["bomb"]["silence_s"])
+	eq(sil, 2.0, "silence_s 2")
+	var sim := _fight_sim([{"enemy": "gunman", "n": 400, "hp": 40}], 300, 2)
+	sim.charges["bomb"] = 1
+	var thrown := false
+	var bomb_t := -1.0
+	var after: Array = []
+	for i in 60 * 30:
+		sim.step(1.0 / 30.0)
+		for e in sim.drain():
+			if e["type"] == "return_fire" and int(e["shots"]) > 0:
+				if not thrown and int(e.get("lost", 0)) >= 0:
+					thrown = sim.use_power("bomb")
+				elif bomb_t >= 0.0:
+					after.append(sim.time - bomb_t)
+			elif e["type"] == "bomb" and int(e["horde"]) >= 0:
+				bomb_t = sim.time
+		if bomb_t >= 0.0 and sim.time > bomb_t + sil + 1.5:
+			break
+	check(bomb_t >= 0.0, "the bomb landed on the gunmen")
+	check(not after.is_empty(), "they fire again")
+	if not after.is_empty():
+		check(float(after[0]) >= sil - 0.05, "no return fire for %.1f s after the bomb (first at %.2f s)" % [sil, float(after[0])])

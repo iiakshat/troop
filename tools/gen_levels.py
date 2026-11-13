@@ -60,6 +60,14 @@ RF_FIGS = max(int(RF.get("figures_shown", W.get("formation_figures", 72))), 1)
 BOSS_CFG = UNITS.get("boss", {})
 LT_CFG = UNITS.get("lieutenant", {})
 LT_BANNER = "LIEUTENANT"
+# Spec v2.1 section 1.4, the crowd clash (owner 2026-11-13; mirrors LevelSim._contacts): a melee
+# tick takes at most MELEE_CAP % of the squad the gang met. Telegraph cadence (LevelSim.mark_free):
+# at most MARK_MAX marks in the air, MARK_GAP s apart; fire_k speeds the specials up to FK_EVERY_MAX.
+MELEE_CAP = max(int(W.get("melee_cap_pct", 0)), 0)
+TG = UNITS.get("telegraph", {})
+MARK_MAX = max(int(TG.get("max_in_air", 0)), 0)
+MARK_GAP = max(float(TG.get("min_gap_s", 0.0)), 0.0)
+FK_EVERY_MAX = max(float(TG.get("fire_k_max", 1.5)), 0.01)
 
 
 def cap_of(d: int) -> int:
@@ -86,12 +94,30 @@ def volley_loss(total: int, shots: int, figs: int = RF_FIGS, cap_pct: int = RF_C
 
 def share_loss(total: int, pct: int, base: int = -1) -> int:
     """LevelSim.share_loss: pct % of the squad (at least 1), never more than base (-1 = none)."""
-    if total <= 0 or pct <= 0:
+    return share_loss_pm(total, pct * 10, base)
+
+
+def share_loss_pm(total: int, pm: int, base: int = -1) -> int:
+    """LevelSim.share_loss_pm: pm per mille of the squad (at least 1), at most base."""
+    if total <= 0 or pm <= 0:
         return 0
-    n = max(total * pct // 100, 1)
+    n = max(total * pm // 1000, 1)
     if base >= 0:
         n = min(n, base)
     return min(n, total)
+
+
+def boss_pm(pct: int, boss_k: float) -> int:
+    """LevelSim.boss_pm: a boss's share in per mille, pct % x the level's boss_k."""
+    return int(math.floor(pct * 10.0 * boss_k + 0.5))
+
+
+def clash_strikers(met: int, row: int, power: int, cap_pct: int = MELEE_CAP) -> int:
+    """LevelSim.clash_strikers: cap_pct % of the squad the gang met, in troops of `power` each
+    (at least 1, at most the row; cap_pct 0 = the whole row)."""
+    if cap_pct <= 0 or row <= 0:
+        return max(row, 0)
+    return min(max(met * cap_pct // 100 // max(power, 1), 1), row)
 
 
 def boss_hp(d: int, dps: float, lieutenant: bool = False) -> int:
@@ -373,13 +399,14 @@ def enemy_def(grp: dict) -> dict:
 
 # ------------------------------------------------------------------ rough battle model
 
-def fight(sq: Sq, groups: list[dict], dt: float = 0.05, fire_k: float = 1.0) -> bool:
+def fight(sq: Sq, groups: list[dict], dt: float = 0.05, fire_k: float = 1.0, boss_k: float = 1.0) -> bool:
     """Plays one wave against `sq` (changed in place) with a simplified copy of LevelSim's
     battle rules: no gates, no powers, no dodging (every telegraphed attack lands, capped).
     `fire_k` is the level's enemy fire intensity (LevelSim.fire_k: return-fire shots x fire_k,
-    specials attack fire_k x as often; bosses and the level's first gang keep their numbers).
-    The plan sizes waves at 1; calibration.json fire_k is applied on top, like k. Returns True
-    if the hero lives."""
+    specials attack min(fire_k, FK_EVERY_MAX) x as often; bosses and the level's first gang
+    keep their numbers), `boss_k` the boss's gun and barrage scale (LevelSim.boss_k). The plan
+    sizes waves at 1; calibration.json fire_k and boss_k are applied on top, like k. Contact is
+    the crowd clash (clash_strikers). Returns True if the hero lives."""
     hs = []
     x0 = 0.0
     for g in groups:
@@ -399,9 +426,10 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05, fire_k: float = 1.0) -> 
         attack = str(atk.get("kind", "")) if atk else ("gun" if boss else "")
         every = float(d.get("throw_every", d.get("shoot_every", 0.0)))
         first = float(d.get("first_shot", every))
-        if not boss and every > 0 and fire_k > 0:
-            every /= fire_k
-            first /= max(fire_k, 1.0)
+        fe = min(fire_k, FK_EVERY_MAX)
+        if not boss and every > 0 and fe > 0:
+            every /= fe
+            first /= max(fe, 1.0)
         rf = d.get("return_fire", {})
         rf_on = sq.d >= int(rf.get("from_district", RF.get("from_district", 2)))
         hs.append({"n": n, "start": n, "hp": float(d["hp"]), "armour": int(d["armour"]),
@@ -421,8 +449,12 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05, fire_k: float = 1.0) -> 
                    "rf_share": int(rf.get("share", 0)),
                    "rf_max": int(by_district(RF.get("max_shooters", 1 << 30), sq.d)), "rf_open": False,
                    "rf_range": float(rf.get("range", RF.get("range", 50.0))), "rf_acc": 0.0})
-    pending: list[list] = []  # telegraphed attacks in the air: [land time, base, pct]
+    pending: list[list] = []  # telegraphed attacks in the air: [land time, base, per mille]
     had = sq.total() > 1      # return fire never takes a hero who never had followers
+    last_mark = [-1.0e9]
+
+    def mark_free() -> bool:
+        return (MARK_MAX <= 0 or len(pending) < MARK_MAX) and t - last_mark[0] >= MARK_GAP - 1e-9
 
     def row_size(h):
         return max(h["cols"], 1) * h["per"]
@@ -455,7 +487,9 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05, fire_k: float = 1.0) -> 
             if h["stopped"]:
                 # The rows behind walk up to the stop line as the front falls (LevelSim._move).
                 line = -h["stop"] + ((h["start"] - h["n"]) // row_size(h)) * h["gap"]
-                if h["z"] < line:
+                if front(h) < -FIRE:
+                    h["z"] += speed * dt   # beyond reach: the street carries the squad to it
+                elif h["z"] < line:
                     h["z"] = min(line, h["z"] + (speed + h["v"]) * dt)
                 continue
             h["z"] += (speed + h["v"]) * dt
@@ -482,20 +516,29 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05, fire_k: float = 1.0) -> 
             if h["every"] > 0 and (h["stopped"] or (h["range"] > 0 and front(h) >= -h["range"])):
                 h["st"] += dt
                 while h["st"] >= h["every"]:
+                    if not h["boss"] and not mark_free():
+                        h["st"] = h["every"]   # due: it goes when a mark is free
+                        break
                     h["st"] -= h["every"]
                     if h["boss"]:
-                        n = share_loss(sq.total(), int(cfg.get("gun_pct", 0)))
+                        n = share_loss_pm(sq.total(), boss_pm(int(cfg.get("gun_pct", 0)), boss_k))
                         sq.lose(n if had else min(n, sq.total() - 1))
                     else:
-                        pending.append([t + h["warn"], h["n"] * h["hit"], h["cap"]])
+                        pending.append([t + h["warn"], h["n"] * h["hit"], h["cap"] * 10])
+                        last_mark[0] = t
             bevery = float(cfg.get("barrage_every", 0.0))
             if h["boss"] and bevery > 0 and front(h) >= -float(W["boss_halt"]):
                 if h["bt"] < 0:
                     h["bt"] = max(bevery - float(cfg.get("barrage_first", 1.0)), 0.0)
                 h["bt"] += dt
                 while h["bt"] >= bevery:
+                    if not mark_free():
+                        h["bt"] = bevery
+                        break
                     h["bt"] -= bevery
-                    pending.append([t + float(cfg.get("warn_s", 1.0)), -1, int(by_district(cfg.get("barrage_pct", 0), sq.d))])
+                    pending.append([t + float(cfg.get("warn_s", 1.0)), -1,
+                                    boss_pm(int(by_district(cfg.get("barrage_pct", 0), sq.d)), boss_k)])
+                    last_mark[0] = t
         for h in hs:
             # Return fire (LevelSim._return_fire): an opening volley on entering rf_range, then
             # shooters = share % of the gang (rounded up, at most rf_max) x rf_rate shots/s;
@@ -504,7 +547,7 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05, fire_k: float = 1.0) -> 
                 continue
             if not h["rf_open"]:
                 h["rf_open"] = True
-                h["rf_acc"] += RF_OPEN * max(fire_k, 1.0)
+                h["rf_acc"] += RF_OPEN
             h["rf_acc"] += min((h["n"] * h["rf_share"] + 99) // 100, h["rf_max"]) * h["rf_rate"] * dt
             shots = int(math.floor(h["rf_acc"]))
             if shots > 0:
@@ -513,7 +556,7 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05, fire_k: float = 1.0) -> 
                 sq.lose(n if had else min(n, sq.total() - 1))
         for p in [p for p in pending if p[0] <= t + 1e-9]:
             pending.remove(p)
-            sq.lose(share_loss(sq.total(), p[2], p[1]))
+            sq.lose(share_loss_pm(sq.total(), p[2], p[1]))
         for h in hs:
             if h["n"] <= 0:
                 continue
@@ -522,14 +565,17 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05, fire_k: float = 1.0) -> 
                     continue
                 h["melee"] = True
                 h["mt"] = 0.0
+                h["met"] = sq.total()
             h["mt"] -= dt
             if h["mt"] > 0:
                 continue
             h["mt"] = float(W["melee_tick"])
             row = min(row_size(h), h["n"])
-            sq.lose(row * h["power"])
+            # The crowd clash (LevelSim._contacts): a capped share of the squad it met strikes.
+            strikers = row if h["boss"] else clash_strikers(h["met"], row, h["power"])
+            sq.lose(strikers * h["power"])
             if not h["boss"]:
-                h["n"] -= row
+                h["n"] -= strikers
     return sq.alive()
 
 
@@ -1490,6 +1536,10 @@ def build(level: int, seen: set, cal_all: dict) -> dict:
     fk = float(cal.get("fire_k", 1.0))
     if abs(fk - 1.0) > 1e-9:
         out["fire_k"] = round(fk, 4)
+    # The boss's or lieutenant's gun and barrage scale (LevelSim.boss_k), fitted the same way.
+    bk = float(cal.get("boss_k", 1.0))
+    if abs(bk - 1.0) > 1e-9:
+        out["boss_k"] = round(bk, 4)
     if cal.get("coin_ref"):
         out["coin_ref"] = int(cal["coin_ref"])
     # A lane route tests/tune.gd found to win (route_np: without powers, levels 1-10).
@@ -1529,6 +1579,7 @@ def merge(paths: list[str]) -> None:
             entry = {"k": round(float(old.get("k", 1.0)) * float(r["k"]), 4),
                      "kf": round(float(old.get("kf", 1.0)) * float(r.get("kf", 1.0)), 4),
                      "fire_k": round(float(old.get("fire_k", 1.0)) * float(r.get("fire_k", 1.0)), 4),
+                     "boss_k": round(float(old.get("boss_k", 1.0)) * float(r.get("boss_k", 1.0)), 4),
                      "best_ratio": round(float(r["best_ratio"]), 3),
                      "win_rate": round(float(r["win_rate"]), 3)}
             # Spec v2.1 §2 fits (tune.gd profile=greedy|noisy): the level's band, the greedy
@@ -1536,14 +1587,14 @@ def merge(paths: list[str]) -> None:
             # the no-ad route held. A record for the next calibration; build() ignores them.
             if r.get("band"):
                 entry["band"] = str(r["band"])
-            for fk in ("greedy_keep", "noisy_fail"):
+            for fk in ("greedy_keep", "greedy_lost", "noisy_fail"):
                 if fk in r:
                     entry[fk] = round(float(r[fk]), 3)
             if "noad" in r:
                 entry["noad"] = bool(r["noad"])
             # Routes are only valid for the exact level they were found on: keep them from
             # a plain report (k = kf = 1), drop them when the gangs were rescaled.
-            plain = all(abs(float(r.get(f, 1.0)) - 1.0) < 1e-9 for f in ("k", "kf", "fire_k"))
+            plain = all(abs(float(r.get(f, 1.0)) - 1.0) < 1e-9 for f in ("k", "kf", "fire_k", "boss_k"))
             if plain:
                 for rk in ("route", "route_np"):
                     if r.get(rk):
