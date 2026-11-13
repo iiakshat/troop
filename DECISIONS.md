@@ -357,3 +357,41 @@ Unity wasn't installed, would need about 15 GB plus a licence sign-in, and is he
 **The bullet cam.** A pistol, bow or sniper shot that will break a bottle is filmed (the sniper's old bullet cam sat 0.32 m to the side looking 2.5 m ahead through a 32 degree lens: the round was outside the frame, hence "POV of the bullet"). The camera rides just behind and 0.2 m above the round (bow: behind the nock), looking a little ahead of it, so on a tall screen the round flies up the picture towards the bottles with its profile and a short bright streak in view; the round is drawn 3.5x (pistol) or 5x (sniper) so it reads. The clock slows so the flight lasts about cam_s (0.8 / 0.95 / 1.1 s); the camera eases to a stop cam_stop metres short of the bottle so the round flies on into it in front of the lens, holds cam_hold on the shatter while the clock comes back from 0.3-0.35 to exactly 1, and the weapon's own view takes over. Every hit is filmed (like the knife) rather than only key shots: the owner asked for slow motion on these weapons, and a tap skips any film at once (the clock goes straight back to 1; the sniper then shows the shatter through the scope). Misses keep the first-person view (honest: only a hit gets the film, as the sniper already did). Slow motion is Bottle Shot's own clock (`_scale`), never `Engine.time_scale`; the film ends with the clock at 1 on a finish, a skip or the finale's end, and a finale freed mid-film gives the street its camera back. The round, its streak and the arrow's streak are in the weapons' warm parts, so the first film compiles nothing.
 
 **Why the live cases run in their own process.** The aim and film cases drive real finales, whose global transforms need a running tree; run_tests.gd runs in `_initialize` before the tree is live (30 000 "not inside tree" errors). `tests/test_finale_aim.gd` keeps the pure checks and starts `tests/smoke_finale_aim.gd` with the same Godot binary, failing if its cases fail, so build_apk.bat still gates on them.
+## Bottle Shot: the pinwheel and the camera's way back (2026-11-13, owner play-test, FINALE)
+
+Owner: "the pinwheel is hard to control and doesnt tell how to shoot, in 6 level i scored nothing with it" and "when pinwheel fails, the camera angle doesnt reset ... i was stuck there and had to shoot with that angle, nothing being visible".
+
+**Why no lesson showed.** `Tutorial._begin` marked every lesson seen the moment it opened, and a Bottle Shot lesson ended on any touch. A player still tapping from the street's tap-to-fire, or tapping through a guest weapon's gift, ended the ghost hand within a frame, and it never came back. Now a weapon's lesson counts as seen only once the player has shot with the hand showing (a guest's first use included). For LESSON_LOCK (0.6 s) after it opens, new touches are ignored, so a stray tap can't shoot (knife and pistol taps fire). The hand steps aside while a finger is down. A street lesson still open at the stash gives way. A lighter reminder (`bottle_hint`: a half-faded hand, no lock, never marked seen) shows when the first two throws of a finale both miss (then every two more), or after 3 s idle with nothing broken.
+
+**Why the stars were hard.**
+- The aim point was the lift point plus 30 % of the swipe carried on. The ghost hand's own gesture, a swipe that ends on the bottle, overshot by that much.
+- Only the last 0.25 s of the finger counted, so a slow or paused swipe threw nothing.
+- The swipe's speed set the throw speed, and gravity was allowed for only at full speed. An ordinary 1000-2000 px/s swipe dropped 0.3-1.2 m short, into the floor.
+
+**The new control.**
+- A star waits at the bottom of the screen whenever a throw is possible.
+- Put a finger down anywhere and swipe towards a bottle. The line from where the finger went down aims. While the finger is down, a dotted arc (the star's real path) and a ring on its target show the throw.
+- Aim assist (`WeaponStars.pick_target`): the standing bottle, jug or steel plate nearest the line within `assist_deg` (8°), or under the lifting finger, is the target. The line decides. Among things about as close to it (0.35 of a radius, or within one radius), the one nearest where the finger lifted wins, so a short flick takes the first on the line.
+- Nothing inside the cone means an honest miss along the line. The star never snaps from afar.
+- Every star flies at full speed and is solved onto its target, leading a moving bottle. The physics is unchanged: `BottleLogic.fire` decides.
+- The Armory's stars steps now widen the cone (`assist_deg_mult` 1.0 to 1.4) instead of lowering `swipe_fast`, which no longer exists.
+
+Measured in `tests/finale_aim_cases.gd`:
+- Long, flick, curved and slightly-off swipes at 30 and 60 fps on static, sliding and swinging sets and a guest set break the aimed bottle 90 % of the time or more overall, and at least 80 % in each style.
+- An "off" swipe passes beside its bottle by 0.6-1.2 of its radius; about half of those would miss with no assist. The ones that still miss pass through another bottle on the way.
+- A swipe whose line passes nowhere near the set misses.
+
+**Why the camera felt stuck.** No path in the code left it stuck: a headless repro of misses returned to the aim view about 0.5 s after the star landed. The screenshot is the stars' own aim view, with an earlier star lying on the floor after a lazy throw dropped short. Several things made it read as stuck:
+- Every throw was filmed by a low chase camera at 0.35 speed. A lazy miss skimmed the floor for up to 3 s while input was blocked.
+- The camera then eased back exponentially (`k = delta * 6`).
+- The aim view showed nothing of the player's own: no star in hand, no reticle, no line.
+- The next swipes could silently do nothing.
+
+The knife's miss close-up eased back the same slow way, about 1 s to settle. The sniper's post-miss look through the scope was a tween on the engine's clock instead of the finale's.
+
+**The camera fix.**
+- As with the bullet cam, only a throw that will break something is filmed (a tap now skips it, the knife's too). A miss is watched from the aim view at full speed, so the camera never leaves it.
+- After a film or a close-up, the knife and star camera comes back with a timed ease (`BottleShot.RETURN_S`, 0.25 s, the same at any frame rate).
+- The sniper's wait is timed in its own tick.
+- The bow's rest view is its still view.
+- Measured for every weapon at 30 and 60 fps after a miss, a hit and a skipped film: the finale aims again with the camera on its aim view and the aim aid showing within 0.6 s of the result, plus the beat a weapon holds on purpose (the knife's 0.85 s and the bullet cam's hold on a shatter; the sniper's 0.6 s on the scope and its bolt).
