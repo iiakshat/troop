@@ -320,7 +320,9 @@ func test_guest_level_rests_with_its_gift_weapon() -> void:
 		_ready_by_hand(warm._mode)
 		check(warm.logic.guest, "L%d: a guest level" % lv)
 		eq(warm.logic.weapon, cases[lv], "L%d: built with the guest weapon" % lv)
-		check(warm._mode != null and warm._mode.is_inside_tree(), "L%d: its weapon model is built at load" % lv)
+		# (Built at load as part of the finale. A --script run never puts the root's children
+		# inside the tree, so is_inside_tree() is false for every node here: ask its parent.)
+		check(warm._mode != null and warm._mode.get_parent() == warm, "L%d: its weapon model is built at load" % lv)
 		for f in LevelView.WARM_FRAMES + 2:
 			view._process(1.0 / 60.0)
 		check(BottleShot.reusable(warm, lv) and not warm.visible, "L%d: rests hidden" % lv)

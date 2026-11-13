@@ -209,7 +209,7 @@ func test_gate_numbers_fit_their_lanes_in_every_level() -> void:
 					if tag.visible:
 						w = GateRowView.text_w(tag, tag.text)
 					elif label.text != "":
-						w = GateRowView.text_w(label, label.text) + (GateRowView.ICON_W + 0.1 if (p["icon"] as Sprite3D).visible else 0.0)
+						w = GateRowView.text_w(label, label.text) + (GateRowView.icon_w(p["icon"]) + 0.1 if (p["icon"] as Sprite3D).visible else 0.0)
 					if w > worst:
 						worst = w
 						where = "L%d at %s lane %d '%s'" % [n, str(e["at"]), lane, tag.text if tag.visible else label.text]
@@ -221,9 +221,9 @@ func test_gate_numbers_fit_their_lanes_in_every_level() -> void:
 ## (per > strikers) never loses figures faster than its count; the strikers charge in; the
 ## squad's figures fall with the sim's count; the red -N keeps counting while the ticks come.
 func test_clash_figures_follow_the_counts() -> void:
-	var parts := _view({"id": 12, "district": 1, "events": [
-		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 59}]},
-		{"at": 90, "type": "wave", "groups": [{"enemy": "thug", "n": 3600, "hp": 100000}]},
+	var parts := _view({"id": 12, "district": 2, "events": [
+		{"at": 10, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 599}]},
+		{"at": 90, "type": "wave", "groups": [{"enemy": "knifer", "n": 3600, "hp": 100000}]},
 		{"at": 400, "type": "finish"}]})
 	var view: LevelView = parts[0]
 	view.sim.set_lane(1)
@@ -247,7 +247,7 @@ func test_clash_figures_follow_the_counts() -> void:
 		charged = maxi(charged, view._charging.size())
 		if view._minus_label.visible:
 			minus.append(view._minus_label.text)
-		if ticks > 120:
+		if ticks > 240:
 			break
 	check(ticks > 0, "the gang reached the squad")
 	eq(worst, 0, "the figures never fall faster than the gang's count")

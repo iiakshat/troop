@@ -1095,10 +1095,10 @@ def shift(ev: list[dict], m: int) -> list[dict]:
 # next to a + lane that leaves a bigger squad; the doubled squad cannot beat the gang behind it.
 # Every gang is hand-sized ("fixed": calibration never rescales L1).
 # Sized with the sim (_local/levels/probe_l1.gd): 1.5 taps/s clears the opening in about 6.4 s and 0
-# taps falls at 3.6 s; at the trap the +40 lane loses nothing while x2 (or the red gate) loses
-# about 55%; the leader soaks the best route's fire and lands his blow, so a best-lane player
-# keeps about 81% of his peak (the tutorial band, spec v2.1 §2).
-L1 = {"open": (5, 5, 30), "trap": 345, "big": (260, 160), "last": 500, "leader_hp": 2000, "leader_power": 45,
+# taps falls at 3.6 s; at the trap (the crowd clash, spec v2.1 §1.4) the +40 lane loses about
+# 8% while x2 loses about 45% (21 left against 54); the leader soaks the best route's fire and
+# lands his blow, so a best-lane player keeps about 79% of his peak (the tutorial band, §2).
+L1 = {"open": (5, 5, 30), "trap": 425, "big": (260, 160), "last": 500, "leader_hp": 2000, "leader_power": 45,
       "leader_gap": 14}
 
 

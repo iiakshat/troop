@@ -19,7 +19,7 @@
     {"at": 112, "type": "wave", "fixed": true, "groups": [{"enemy": "thug", "n": 30}]},
     {"at": 136, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 5}, {"lane": 1, "op": "num", "v": 8}, {"lane": 2, "op": "num", "v": -3, "step": 4, "max": 9}]},
     {"at": 164, "type": "gates", "trap": true, "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "num", "v": 40}, {"lane": 2, "op": "num", "v": -10, "step": 2.5, "max": 20}]},
-    {"at": 188, "type": "wave", "fixed": true, "groups": [{"enemy": "thug", "n": 345}]},
+    {"at": 188, "type": "wave", "fixed": true, "groups": [{"enemy": "thug", "n": 425}]},
     {"at": 236, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 25}, {"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "num", "v": -12, "step": 3, "max": 24}]},
     {"at": 276, "type": "wave", "fixed": true, "label": "BIG GANG", "groups": [{"enemy": "thug", "n": 260}, {"enemy": "thug", "n": 160, "gap": 12}]},
     {"at": 314, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -15, "step": 3, "max": 30}, {"lane": 1, "op": "num", "v": 40}, {"lane": 2, "op": "mul", "k": 2}]},

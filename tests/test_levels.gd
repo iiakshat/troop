@@ -339,8 +339,12 @@ func test_l1_trap_row_and_beats() -> void:
 	eq(safe["state"], "strike", "the + lane wins L1 (2 taps/s, no upgrades)")
 	eq(greedy["state"], "strike", "the best-lane player wins L1")
 	check(int(safe["trap_after"]) * 10 >= int(safe["trap_before"]) * 9, "the + lane beats the gang behind the trap row (%d -> %d)" % [int(safe["trap_before"]), int(safe["trap_after"])])
-	check(doubled["state"] == "lost" or int(doubled["trap_after"]) * 2 <= int(doubled["trap_before"]),
-		"the doubled squad cannot beat that gang (%s, %d -> %d)" % [doubled["state"], int(doubled["trap_before"]), int(doubled["trap_after"])])
+	# Spec v2.1 §1.4: the gang grinds the doubled squad down in a clash instead of wiping it in
+	# one tick, so x2 loses about 45 % (and ends with well under half the + lane's troops).
+	check(doubled["state"] == "lost" or int(doubled["trap_after"]) * 5 <= int(doubled["trap_before"]) * 3,
+		"the doubled squad loses at least 40 %% to that gang (%s, %d -> %d)" % [doubled["state"], int(doubled["trap_before"]), int(doubled["trap_after"])])
+	check(doubled["state"] == "lost" or int(doubled["trap_after"]) * 2 < int(safe["trap_after"]),
+		"x2 ends with under half the + lane's troops (%d vs %d)" % [int(doubled["trap_after"]), int(safe["trap_after"])])
 	var ratio := float(greedy["troops"]) / maxf(float(greedy["peak"]), 1.0)
 	check(ratio >= 0.7 and ratio <= 0.85, "the best-lane player keeps a tutorial-band share of his peak (%.2f)" % ratio)
 	# The tap lesson: the hero alone needs about 1.5 taps/s for 6-8 s; not tapping loses.

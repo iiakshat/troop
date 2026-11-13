@@ -28,6 +28,7 @@ var _fade := -1.0
 ## far sign is drawn at (_process), so neighbours never run into one number.
 const FIT_W := (2.8 - 0.35) / 1.2
 const ICON_W := 1.05   # the sign's icon beside a number (m)
+const ICON_W_LONG := 0.75  # ... beside a number of 3 or more characters ("600", "1.2K")
 
 
 func setup(r: Dictionary, font: Font, lane_x: Array) -> GateRowView:
@@ -143,10 +144,13 @@ func refresh(gate: Dictionary, ticked := false) -> void:
 		icon.texture = UiKit.icon_texture(icon_name)
 		# Icon alone sits in the middle; with a number they share the sign.
 		var solo := String(info["text"]) == ""
-		icon.position.x = 0.0 if solo else -0.6
-		icon.pixel_size = (1.35 if solo else 1.05) / 320.0
-		label.position.x = 0.0 if solo else 0.55
-		set_size(label, fit_size(label, label.text, FIT_W - ICON_W - 0.1, 130 if chars <= 2 else 100))
+		# A long number keeps a readable size: its icon steps down (review: a turncoat's "600"
+		# did not fit beside the full-size icon even at the smallest font).
+		var iw := ICON_W if chars <= 2 else ICON_W_LONG
+		icon.position.x = 0.0 if solo else -0.6 - (ICON_W - iw) * 0.5
+		icon.pixel_size = (1.35 if solo else 1.05 * iw / ICON_W) / 320.0
+		label.position.x = 0.0 if solo else 0.55 - (ICON_W - iw) * 0.5
+		set_size(label, fit_size(label, label.text, FIT_W - iw - 0.1, 130 if chars <= 2 else 100))
 	else:
 		label.position.x = 0.0
 		set_size(label, fit_size(label, label.text, FIT_W, label.font_size))
@@ -323,6 +327,11 @@ static func fit_size(l: Label3D, text: String, max_w: float, size: int, min_size
 	while size > min_size and text_w(l, text, size) > max_w:
 		size -= 4
 	return size
+
+
+## The width (m) of a sign's icon beside its number (ICON_W, or ICON_W_LONG for a long number).
+static func icon_w(icon: Sprite3D) -> float:
+	return ICON_W * icon.pixel_size / (1.05 / 320.0)
 
 
 static func text_w(l: Label3D, text: String, size := -1) -> float:
