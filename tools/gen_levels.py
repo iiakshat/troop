@@ -1535,6 +1535,8 @@ def build(level: int, seen: set, cal_all: dict) -> dict:
         out["scroll_speed"] = lv["scroll_speed"]
     if need_upgrades(level):
         out["need_upgrades"] = True
+    if cal.get("floor_bound"):
+        out["floor_bound"] = True   # tests/tune.gd: the floors hold the greedy keep above its band
     if level in START_HEAT:
         out["start_heat"] = START_HEAT[level]
     # The level's enemy fire intensity (LevelSim.fire_k), fitted by tests/tune.gd calibrate=1.
@@ -1597,6 +1599,15 @@ def merge(paths: list[str]) -> None:
                     entry[fk] = round(float(r[fk]), 3)
             if "noad" in r:
                 entry["noad"] = bool(r["noad"])
+            # The fit could not bring the greedy keep down into its band without breaking a
+            # floor (the random floor or the no-ad guarantee): a known exception the level test
+            # allows above the band (DECISIONS.md, v2.1 random floor).
+            top = {"tutorial": 0.85, "normal": 0.70, "hard": 0.60}.get(str(r.get("band", "")), 1.0)
+            bound = r.get("floor_bound")
+            if bound is None:   # a report from before tune.gd recorded it: the keep alone says
+                bound = "greedy_keep" in r and r.get("greedy_win", True) and float(r["greedy_keep"]) > top + 0.05
+            if bound:
+                entry["floor_bound"] = True
             # Routes are only valid for the exact level they were found on: keep them from
             # a plain report (k = kf = 1), drop them when the gangs were rescaled.
             plain = all(abs(float(r.get(f, 1.0)) - 1.0) < 1e-9 for f in ("k", "kf", "fire_k", "boss_k"))

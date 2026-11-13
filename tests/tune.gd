@@ -74,6 +74,7 @@ var fit_kf := [0.3, 12.0]  # ... and the last wave's kf (kf_max=)
 var dodge_share := GreedyPilot.DODGE_P  # profile=greedy|noisy: telegraphs dodged (dodge_p=)
 var cal_all := {}        # config/levels/calibration.json (the current k and kf of every level)
 var _weak := {}          # weak_units() cache
+var _floor_broke := false  # a floor broke during this level's fit (calibrate_harder)
 var random_floor := RANDOM_FLOOR  # the fit's random floor (floor=0.01: an experiment, never the checks)
 static var boss_hp_fixed := false  # units.json has the v2.1 boss rule: boss hp is not scaled
 
@@ -855,6 +856,7 @@ static func watch_greedy(n: int, level: Dictionary, units_cfg: Dictionary, up: D
 	return {"level": n, "band": band(n, level), "state": res["state"], "cause": res["cause"],
 		"troops": res["troops"], "peak": res["peak"], "time": res["time"], "stars": res["stars"],
 		"keep": keep_of(res), "armed": w["armed"].size(), "fired": fired, "enemy_lost": w["enemy_lost"],
+		"floor_bound": bool(level.get("floor_bound", false)),
 		"lost": float(w["enemy_lost"]) / maxf(float(res["peak"]), 1.0), "mix": w["mix"],
 		"gap_med": median_gap(w["marks"]), "max_air": w["max_air"], "marks": (w["marks"] as Array).size(),
 		"bosses": w["bosses"].values(), "solo_shot": w["solo_shot"], "route": pilot.choices.duplicate()}
@@ -879,7 +881,10 @@ static func guard_failures(r: Dictionary) -> Array:
 	var b: Dictionary = BANDS[String(r["band"])]
 	if String(r["state"]) != "strike":
 		out.append("L%d greedy lost the level (%s)" % [n, str(r.get("cause", "?"))])
-	elif not in_band(float(r["keep"]), b["keep"], KEEP_SLACK):
+	elif not in_band(float(r["keep"]), b["keep"], KEEP_SLACK) and not (bool(r.get("floor_bound", false))
+			and float(r["keep"]) > float(b["keep"][1])):
+		# (floor_bound: the calibration could not go harder without breaking a floor; a known
+		# exception the level file records, gen_levels.py --merge.)
 		out.append("L%d greedy keeps %.0f%% (%s band %.0f-%.0f%%, ±%.0f)" % [n, float(r["keep"]) * 100.0, r["band"],
 			float(b["keep"][0]) * 100.0, float(b["keep"][1]) * 100.0, KEEP_SLACK * 100.0])
 	var armed := int(r["armed"])
@@ -1081,6 +1086,7 @@ func calibrate_harder(n: int, base: Dictionary) -> Dictionary:
 	var b: Dictionary = BANDS[bname]
 	var want := band_mid(b["keep"])
 	var probes: Array = []
+	_floor_broke = false
 	# Stale values from before the fire_k bounds are clamped into them first.
 	var sc := {"k": _clamp_rel(n, base, "k", 1.0), "kf": _clamp_rel(n, base, "kf", 1.0),
 		"fk": _clamp_rel(n, base, "fk", 1.0), "bk": _clamp_rel(n, base, "bk", 1.0)}
@@ -1129,6 +1135,8 @@ func calibrate_harder(n: int, base: Dictionary) -> Dictionary:
 	var r := evaluate_harder(n, base, fin["k"], fin["kf"], VALID_NOISY, fin["fk"], fin["bk"])
 	r["probes"] = probes.size()
 	r["fit_s"] = (Time.get_ticks_msec() - t0) / 1000.0
+	# Left above its band because going harder broke a floor (gen_levels.py --merge records it).
+	r["floor_bound"] = _floor_broke and bool(r["greedy_win"]) and float(r["greedy_keep"]) > float(b["keep"][1]) + KEEP_SLACK
 	return r
 
 
@@ -1349,6 +1357,7 @@ func _floors(n: int, base: Dictionary, sc: Dictionary) -> Dictionary:
 	if floor_ok and band(n, base) == "normal":
 		weak_ok = greedy_probe(n, lv, weak_units())["state"] == "strike"
 	var ok := floor_ok and weak_ok and bool(noad(n, lv, base.get("route", []), false)["ok"])
+	_floor_broke = _floor_broke or not ok
 	if verbose:
 		print("        floors k %.4f kf %.4f fk %.4f bk %.3f: random wins %.0f%%, weak %s, no-ad %s" % [sc["k"], sc["kf"], sc["fk"],
 			sc.get("bk", 1.0), share * 100.0, "ok" if weak_ok else "LOSE", ("ok" if ok else "LOSE") if floor_ok and weak_ok else "-"])
@@ -1414,7 +1423,7 @@ func _easier(n: int, sc: Dictionary, base: Dictionary) -> Dictionary:
 	return {"k": maxf(float(sc["k"]) * 0.9, float(_axis_range(n, base, "k")[0])),
 		"kf": maxf(float(sc["kf"]) * 0.85, float(_axis_range(n, base, "kf")[0])),
 		"fk": maxf(float(sc["fk"]) * 0.85, minf(float(sc["fk"]), 1.0)),
-		"bk": maxf(float(sc.get("bk", 1.0)) * 0.85, float(_axis_range(n, base, "bk")[0]))}
+		"bk": maxf(float(sc.get("bk", 1.0)) * 0.85, float(_axis_range(n, base, "bk")[0])) if _axes(base).has("bk") else float(sc.get("bk", 1.0))}
 
 
 static func _lerp_scales(a: Dictionary, b: Dictionary, t: float) -> Dictionary:

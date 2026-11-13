@@ -9,7 +9,7 @@
   "target_ratio": 0.39,
   "stars": {"star2": 10, "star3": 20},
   "charges": {"shield": 1, "bomb": 2},
-  "coin_ref": 1475,
+  "coin_ref": 1505,
   "route": [0, 0, 0, 0, 2, 0, 0, 0, 0],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "commando", "n": 11}, {"lane": 1, "op": "turncoat", "n": 95}, {"lane": 2, "op": "num", "v": -2, "step": 0.5, "max": 5}]},
