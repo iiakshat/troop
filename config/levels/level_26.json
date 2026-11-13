@@ -7,10 +7,8 @@
   "archetype": "rescue",
   "target_win": 0.39,
   "target_ratio": 0.5,
-  "stars": {"star2": 25, "star3": 47},
+  "stars": {"star2": 28, "star3": 54},
   "charges": {"shield": 1, "bomb": 1},
-  "coin_ref": 1389,
-  "route": [2, 0, 0, 2, 2, 2, 2, 1, 0, 1],
   "events": [
     {"at": 6, "type": "hint", "id": "commando", "icon": "commando"},
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "commando", "n": 7}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 4}, {"lane": 2, "op": "num", "v": 32}]},
@@ -39,7 +37,7 @@
     {"at": 465, "type": "cage", "lane": 1, "hostages": 1050, "guards": {"enemy": "thug", "n": 11029}},
     {"at": 493, "type": "gates", "gates": [{"lane": 1, "op": "pct", "v": -50, "inc": 10, "step": 1621.4, "max": 30}, {"lane": 2, "op": "recruit", "unit": "sergeant", "n": 425}]},
     {"at": 493, "type": "obstacle", "kind": "barrel", "lane": 0, "hp": 4000, "dmg": 305, "radius": 8, "kill": 1850},
-    {"at": 527, "type": "wave", "groups": [{"enemy": "thug", "n": 11608}, {"enemy": "gunman", "n": 13333, "gap": 10}], "label": "RUSH"},
+    {"at": 527, "type": "wave", "groups": [{"enemy": "thug", "n": 74932}, {"enemy": "gunman", "n": 86067, "gap": 10}], "label": "RUSH"},
     {"at": 559, "type": "finish"}
   ]
 }

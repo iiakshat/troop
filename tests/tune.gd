@@ -74,6 +74,7 @@ var fit_kf := [0.3, 12.0]  # ... and the last wave's kf (kf_max=)
 var dodge_share := GreedyPilot.DODGE_P  # profile=greedy|noisy: telegraphs dodged (dodge_p=)
 var cal_all := {}        # config/levels/calibration.json (the current k and kf of every level)
 var _weak := {}          # weak_units() cache
+var random_floor := RANDOM_FLOOR  # the fit's random floor (floor=0.01: an experiment, never the checks)
 static var boss_hp_fixed := false  # units.json has the v2.1 boss rule: boss hp is not scaled
 
 # ---- spec v2.1 §2 targets (plan v2.1 Task 7)
@@ -86,7 +87,7 @@ const BANDS := {
 const TUTORIAL_LEVELS := 4      # L1-L4 are the tutorial band
 const HARD_SLOTS := [5, 9, 10]  # lieutenant, hard gauntlet, boss (when a level has no archetype)
 const HARD_ARCHETYPES := ["lieutenant", "hard_gauntlet", "boss"]
-const RANDOM_FLOOR := 0.05      # at least this share of random routes wins
+const RANDOM_FLOOR := 0.05      # at least this share of random routes wins (floor= overrides it for a fit)
 const NOISY_RUNS := 40          # noisy runs per first-try fail rate
 const NOISY_SHARE := 0.2        # the noisy player's share of random rows
 const FIRE_FROM := 11           # guard: from this level ...
@@ -188,6 +189,8 @@ func _initialize() -> void:
 			checks = true
 		elif a == "full=1":
 			full = true
+		elif a.begins_with("floor="):
+			random_floor = float(a.substr(6))
 		elif a == "sweep=1":
 			sweep = true
 		elif a.begins_with("fp="):
@@ -1109,11 +1112,15 @@ func calibrate_harder(n: int, base: Dictionary) -> Dictionary:
 				if axis == "bk" and not _axes(base).has("bk"):
 					break
 				var f2 := _fit_axis(n, base, axis, _scales(chosen), want, AXIS_PROBES, probes, t0)
-				var cand: Dictionary = f2["best"]
-				if _closer(cand, chosen, want) and _floors(n, base, _scales(cand))["ok"]:
-					chosen = cand
-				elif not (f2["easy"] as Dictionary).is_empty() and _closer(f2["easy"], chosen, want) 						and _floors(n, base, _scales(f2["easy"]))["ok"]:
-					chosen = f2["easy"]
+				# The probes nearest the midpoint first: the first that holds the floors wins.
+				var cands: Array = (f2["all"] as Array).filter(func(q): return bool(q["win"]) and _closer(q, chosen, want))
+				cands.sort_custom(func(a, c): return _closer(a, c, want))
+				for cand in cands:
+					if _over(t0):
+						break
+					if _floors(n, base, _scales(cand))["ok"]:
+						chosen = cand
+						break
 	var fin := _scales(chosen)
 	if verbose:
 		print("      L%d fit k %.3f kf %.3f fire_k x%.3f boss_k x%.3f keep %.0f%% lost %.0f%% (%s, want %.0f%%) in %d probes" % [n,
@@ -1289,7 +1296,7 @@ func _fit_axis(n: int, base: Dictionary, axis: String, sc: Dictionary, want: flo
 	for q in mine:
 		if _closer(q, best, want):
 			best = q
-	return {"best": best, "easy": easy.get("p", {}), "hard": hard.get("p", {})}
+	return {"best": best, "easy": easy.get("p", {}), "hard": hard.get("p", {}), "all": mine}
 
 
 ## boss_k in BOSS_K steps (coarse, advisor R4: a fourth dial invites overfitting): from the
@@ -1322,7 +1329,7 @@ func _fit_steps(n: int, base: Dictionary, sc: Dictionary, want: float, budget: i
 	for q in mine:
 		if _closer(q, best, want):
 			best = q
-	return {"best": best, "easy": {}, "hard": {}}
+	return {"best": best, "easy": {}, "hard": {}, "all": mine}
 
 
 static func _with(sc: Dictionary, axis: String, x: float) -> Dictionary:
@@ -1336,8 +1343,8 @@ static func _with(sc: Dictionary, axis: String, x: float) -> Dictionary:
 func _floors(n: int, base: Dictionary, sc: Dictionary) -> Dictionary:
 	var lv := scaled_level(base, sc["k"], sc["kf"], sc["fk"], sc.get("bk", 1.0))
 	var routes := sample_routes(n, Autopilot.gate_row_count(lv), VALID_ROUTES)
-	var share := _win_share(lv, routes, int(ceil(RANDOM_FLOOR * routes.size() - 1e-9)))
-	var floor_ok := share >= RANDOM_FLOOR - 1e-9
+	var share := _win_share(lv, routes, int(ceil(random_floor * routes.size() - 1e-9)))
+	var floor_ok := share >= random_floor - 1e-9
 	var weak_ok := true
 	if floor_ok and band(n, base) == "normal":
 		weak_ok = greedy_probe(n, lv, weak_units())["state"] == "strike"

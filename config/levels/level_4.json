@@ -7,11 +7,9 @@
   "archetype": "night",
   "target_win": 0.68,
   "target_ratio": -1.0,
-  "stars": {"star2": 35, "star3": 66},
+  "stars": {"star2": 35, "star3": 67},
   "charges": {"shield": 1},
   "look": "night",
-  "coin_ref": 233,
-  "route": [0, 2, 1, 0, 0, 0, 0, 0, 1, 0],
   "events": [
     {"at": 6, "type": "hint", "id": "sergeant", "icon": "sergeant"},
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "sergeant", "n": 6}, {"lane": 1, "op": "num", "v": 5}, {"lane": 2, "op": "num", "v": -1, "step": 0.5, "max": 6}]},
@@ -39,7 +37,7 @@
     {"at": 441, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 820, "block_reach": 12, "dmg": 32},
     {"at": 449, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 230}, {"lane": 1, "op": "num", "v": 180}]},
     {"at": 449, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 960, "dmg": 50},
-    {"at": 475, "type": "wave", "groups": [{"enemy": "thug", "n": 662}, {"enemy": "gunman", "n": 800, "gap": 10}], "label": "BIG GANG"},
+    {"at": 475, "type": "wave", "groups": [{"enemy": "thug", "n": 2321}, {"enemy": "gunman", "n": 2804, "gap": 10}], "label": "BIG GANG"},
     {"at": 507, "type": "finish"}
   ]
 }

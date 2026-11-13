@@ -7,10 +7,8 @@
   "archetype": "rescue",
   "target_win": 0.22,
   "target_ratio": 0.4,
-  "stars": {"star2": 16, "star3": 30},
+  "stars": {"star2": 10, "star3": 20},
   "charges": {"shield": 1, "bomb": 1},
-  "coin_ref": 20049,
-  "route": [0, 2, 2, 2, 0, 1, 0, 2],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 380}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 5}, {"lane": 2, "op": "weapon", "id": "pistol"}]},
     {"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 1654}]},
@@ -36,7 +34,7 @@
     {"at": 456, "type": "cage", "lane": 0, "hostages": 6950, "guards": {"enemy": "brute", "n": 9145}},
     {"at": 480, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 63500, "block_reach": 12, "dmg_pct": 15},
     {"at": 488, "type": "gates", "gates": [{"lane": 0, "op": "pct", "v": -50, "inc": 10, "step": 13055.9, "max": 40}, {"lane": 1, "op": "recruit", "unit": "inspector", "n": 3300}, {"lane": 2, "op": "num", "v": 8200}]},
-    {"at": 522, "type": "wave", "groups": [{"enemy": "thug", "n": 145787}, {"enemy": "grenadier", "n": 133333, "gap": 10}], "label": "RUSH"},
+    {"at": 522, "type": "wave", "groups": [{"enemy": "thug", "n": 1226812}, {"enemy": "grenadier", "n": 1122011, "gap": 10}], "label": "RUSH"},
     {"at": 554, "type": "finish"}
   ]
 }

@@ -7,11 +7,9 @@
   "archetype": "ambush",
   "target_win": 0.71,
   "target_ratio": -1.0,
-  "stars": {"star2": 40, "star3": 75},
+  "stars": {"star2": 36, "star3": 69},
   "charges": {"shield": 1},
   "start_heat": 0.5,
-  "coin_ref": 201,
-  "route": [0, 1, 0, 2, 0, 2],
   "events": [
     {"at": 30, "type": "wave", "fixed": true, "groups": [{"enemy": "thug", "n": 9}]},
     {"at": 64, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 10}, {"lane": 2, "op": "mul", "k": 3}]},
@@ -32,7 +30,7 @@
     {"at": 388, "type": "wave", "groups": [{"enemy": "knifer", "n": 120}, {"enemy": "gunman", "n": 14, "gap": 10}]},
     {"at": 422, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 40}, {"lane": 2, "op": "mul", "k": 2}]},
     {"at": 422, "type": "obstacle", "kind": "pothole", "lane": 0, "fall": 24},
-    {"at": 464, "type": "wave", "label": "CROSSFIRE", "groups": [{"enemy": "thug", "n": 180}, {"enemy": "gunman", "n": 20, "gap": 10}]},
+    {"at": 464, "type": "wave", "label": "CROSSFIRE", "groups": [{"enemy": "thug", "n": 2486}, {"enemy": "gunman", "n": 276, "gap": 10}]},
     {"at": 498, "type": "finish"}
   ]
 }

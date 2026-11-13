@@ -7,10 +7,8 @@
   "archetype": "ambush",
   "target_win": 0.57,
   "target_ratio": 0.58,
-  "stars": {"star2": 14, "star3": 27},
+  "stars": {"star2": 10, "star3": 20},
   "charges": {"shield": 1, "bomb": 1},
-  "coin_ref": 167,
-  "route": [1, 1, 0, 0, 0, 1, 0, 1, 1],
   "events": [
     {"at": 6, "type": "hint", "id": "swat", "icon": "swat"},
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "swat", "n": 4}, {"lane": 1, "op": "num", "v": 8}, {"lane": 2, "op": "num", "v": -2, "step": 0.5, "max": 4}]},
@@ -35,7 +33,7 @@
     {"at": 414, "type": "wave", "groups": [{"enemy": "riot", "n": 128}, {"enemy": "brute", "n": 148, "gap": 8}, {"enemy": "gunman", "n": 178, "gap": 16}]},
     {"at": 441, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "swat", "n": 28}, {"lane": 1, "op": "recruit", "unit": "swat", "n": 32}]},
     {"at": 441, "type": "obstacle", "kind": "pothole", "lane": 2, "fall": 70},
-    {"at": 475, "type": "wave", "groups": [{"enemy": "thug", "n": 830}, {"enemy": "molotov", "n": 800, "gap": 10}], "label": "RUSH"},
+    {"at": 475, "type": "wave", "groups": [{"enemy": "thug", "n": 4745}, {"enemy": "molotov", "n": 4574, "gap": 10}], "label": "RUSH"},
     {"at": 507, "type": "finish"}
   ]
 }
