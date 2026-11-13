@@ -1,6 +1,6 @@
 # Siren Squad: Privacy Policy
 
-<!-- Maintainers: this file is the public policy (linked from the game's Settings and the Play Console). Keep it in step with docs/privacy/index.html and docs/play_data_safety.md whenever an SDK or setting changes. -->
+<!-- Maintainers: the public copy is the README of github.com/iiakshat/siren-squad-privacy (linked from the game's Settings and the Play Console); update it there after any change here. Keep it in step with docs/privacy/index.html and docs/play_data_safety.md whenever an SDK or setting changes. -->
 
 **Last updated:** 13 November 2026
 **Developer:** axnex (Gurugram, India). **Contact:** jakshat569@gmail.com
