@@ -134,9 +134,11 @@ static func play(sim: LevelSim, pilot: Autopilot, dt := 1.0 / 30.0, max_rows := 
 	return result(sim)
 
 
+## A run's outcome. `time` is LevelSim.pace_time (the old pace's clock, which the calibration's
+## time budget measures); `clock` is the sim's own, shorter by the faster clear run.
 static func result(sim: LevelSim) -> Dictionary:
 	return {"state": sim.state, "troops": sim.squad.total(), "kills": sim.kills,
-		"time": sim.time, "cause": sim.lose_cause, "peak": sim.peak_squad, "stars": sim.stars()}
+		"time": sim.pace_time(), "clock": sim.time, "cause": sim.lose_cause, "peak": sim.peak_squad, "stars": sim.stars()}
 
 
 static func gate_row_count(level: Dictionary) -> int:

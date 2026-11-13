@@ -57,7 +57,7 @@ func test_bomb_is_thrown_with_the_throw_clip_and_a_visible_arc() -> void:
 	var parts := _view({"id": 3, "district": 1, "charges": {"bomb": 1}, "events": [{"at": 300, "type": "finish"}]})
 	var view: LevelView = parts[0]
 	var fx: Fx = parts[2]
-	_frames(view, 3)
+	_frames(view, 3 + LevelView.WARM_FRAMES + LevelView.START_HOLD_FRAMES)   # the level has started
 	fx._proj.clear()   # the level-load prewarm's bomb
 	check(view.use_power("bomb"), "the bomb button works with nothing in reach")
 	check(view._bomb_throw_t >= 0.0, "the hero starts his throw clip")
@@ -96,7 +96,7 @@ func test_bomb_is_thrown_with_the_throw_clip_and_a_visible_arc() -> void:
 func test_powers_wait_for_a_lesson_hold_and_steering_resets_after_a_revive() -> void:
 	var parts := _view({"id": 3, "district": 1, "charges": {"bomb": 1}, "events": [{"at": 300, "type": "finish"}]})
 	var view: LevelView = parts[0]
-	_frames(view, 3)
+	_frames(view, 3 + LevelView.WARM_FRAMES + LevelView.START_HOLD_FRAMES)   # the level has started
 	view.hold = true
 	_frames(view, 1)
 	check(not view.use_power("bomb"), "no bomb while a first-run lesson holds the street")
