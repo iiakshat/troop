@@ -65,6 +65,7 @@ class Glyph extends Control:
 	var kind := "bullet"
 	var color := Color.WHITE
 	var angle := 0.0
+	var tired := 0.0   # pin: 0 = steady (white ring) .. 1 = tired arm drifting (amber ring)
 
 	func _init(k: String, px: int, c := Color.WHITE) -> void:
 		kind = k
@@ -144,7 +145,7 @@ class Glyph extends Control:
 			"pin":
 				# Bow pin sight: a ring with a glowing green bead and a short post under it.
 				draw_arc(c, s * 0.34, 0.0, TAU, 40, ink, s * 0.1)
-				draw_arc(c, s * 0.34, 0.0, TAU, 40, Color("e9f7ff") * color, s * 0.05)
+				draw_arc(c, s * 0.34, 0.0, TAU, 40, Color("e9f7ff").lerp(Color("ffad33"), tired) * color, s * 0.05)
 				draw_line(c + Vector2(0, s * 0.1), c + Vector2(0, s * 0.3), ink, s * 0.08)
 				draw_line(c + Vector2(0, s * 0.1), c + Vector2(0, s * 0.3), Color("e9f7ff") * color, s * 0.035)
 				draw_circle(c, s * 0.1, ink)
@@ -398,6 +399,16 @@ func set_reticle(p: Vector2, kind: String) -> void:
 		_reticle.queue_redraw()
 	_reticle.position = p - _reticle.size * 0.5
 	_reticle.visible = true
+
+
+## The bow's tired arm (0..1): the pin's ring turns from white to amber as the drift comes in.
+func set_reticle_tired(k: float) -> void:
+	if _reticle == null:
+		return
+	var q := snappedf(clampf(k, 0.0, 1.0), 0.02)
+	if absf(_reticle.tired - q) > 0.001:
+		_reticle.tired = q
+		_reticle.queue_redraw()
 
 
 func hide_reticle() -> void:

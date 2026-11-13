@@ -206,10 +206,13 @@ func test_autoplay_clears_every_level() -> void:
 
 func test_weapon_configs_have_their_keys() -> void:
 	var need := {"knife": ["distance", "speed", "hit_radius"],
-		"pistol": ["distance", "speed", "mag", "reload_s", "kick_deg", "recover_s", "fov", "sens", "slow"],
-		"bow": ["distance", "speed_min", "speed_max", "draw_s", "steady_s", "shake_deg", "wind", "fov"],
+		"pistol": ["distance", "speed", "mag", "reload_s", "kick_deg", "recover_s", "fov", "sens", "slow",
+			"cam_s", "cam_stop", "cam_hold", "cam_hold_scale", "cam_bullet", "cam_rig"],
+		"bow": ["distance", "speed_min", "speed_max", "draw_s", "steady_s", "shake_deg", "wind", "fov",
+			"cam_s", "cam_stop", "cam_hold", "cam_hold_scale", "cam_rig"],
 		"stars": ["distance", "speed_min", "speed_max", "swipe_fast", "ricochet_len", "plate_w", "plate_h"],
-		"sniper": ["distance", "speed", "zero", "elevation", "scope_fov", "sway_deg", "tremor_deg", "steady_s", "cycle_s", "bullet_cam"]}
+		"sniper": ["distance", "speed", "zero", "elevation", "scope_fov", "sway_deg", "tremor_deg", "steady_s",
+			"steady_k", "worse_k", "worse_s", "cycle_s", "cam_s", "cam_stop", "cam_hold", "cam_hold_scale", "cam_bullet", "cam_rig"]}
 	for wname in need:
 		var w: Dictionary = cfg["weapons"][wname]
 		for k in need[wname]:

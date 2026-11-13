@@ -60,6 +60,8 @@ func handle_input(event: InputEvent) -> void:
 			_trail.append({"p": t["pos"], "t": now})
 			_swipe()
 			_trail.clear()
+		"cancel":
+			_trail.clear()
 	_draw_line()
 
 
