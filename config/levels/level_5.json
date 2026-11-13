@@ -9,6 +9,8 @@
   "target_ratio": -1.0,
   "stars": {"star2": 16, "star3": 31},
   "charges": {"shield": 1},
+  "coin_ref": 269,
+  "route": [2, 2, 0, 1, 1, 2, 0, 2, 1, 0],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "sergeant", "n": 2}, {"lane": 1, "op": "num", "v": -2, "step": 0.5, "max": 5}, {"lane": 2, "op": "recruit", "unit": "sergeant", "n": 3}]},
     {"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 29}]},

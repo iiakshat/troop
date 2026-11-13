@@ -10,6 +10,8 @@
   "stars": {"star2": 26, "star3": 50},
   "charges": {"shield": 1, "bomb": 1},
   "boss_k": 1.5,
+  "coin_ref": 501,
+  "route": [0, 0, 0, 1, 1, 2, 2, 2],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 14}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 6}, {"lane": 2, "op": "recruit", "unit": "swat", "n": 2}]},
     {"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 3}]},
@@ -34,7 +36,7 @@
     {"at": 418, "type": "wave", "groups": [{"enemy": "thug", "n": 376}, {"enemy": "brute", "n": 63, "gap": 6}]},
     {"at": 448, "type": "gates", "gates": [{"lane": 1, "op": "recruit", "unit": "swat", "n": 20}, {"lane": 2, "op": "pct", "v": -50, "inc": 10, "step": 140.0, "max": 40}]},
     {"at": 448, "type": "obstacle", "kind": "pothole", "lane": 0, "fall_pct": 30},
-    {"at": 482, "type": "wave", "label": "LIEUTENANT", "groups": [{"enemy": "thug", "n": 9532}, {"enemy": "boss", "lieutenant": true, "n": 1, "hp": 2350, "gap": 18}]},
+    {"at": 482, "type": "wave", "label": "LIEUTENANT", "groups": [{"enemy": "thug", "n": 9532}, {"enemy": "boss", "lieutenant": true, "n": 1, "hp": 4100, "gap": 18}]},
     {"at": 522.0, "type": "finish"}
   ]
 }

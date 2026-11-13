@@ -7,10 +7,12 @@
   "archetype": "storm",
   "target_win": 0.54,
   "target_ratio": -1.0,
-  "stars": {"star2": 36, "star3": 68},
+  "stars": {"star2": 35, "star3": 67},
   "charges": {"shield": 1, "bomb": 1},
   "look": "storm",
   "fire_k": 2.0,
+  "coin_ref": 237,
+  "route": [0, 0, 0, 0, 0, 1, 0, 0],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 9}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 6}, {"lane": 2, "op": "recruit", "unit": "inspector", "n": 2}]},
     {"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 46}]},

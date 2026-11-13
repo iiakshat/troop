@@ -9,6 +9,8 @@
   "target_ratio": -1.0,
   "stars": {"star2": 36, "star3": 68},
   "charges": {"shield": 1, "bomb": 1},
+  "coin_ref": 165,
+  "route": [0, 0, 1, 0, 0],
   "events": [
     {"at": 16, "type": "hint", "id": "inspector", "icon": "inspector"},
     {"at": 46, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "inspector", "n": 4}, {"lane": 1, "op": "num", "v": 4}, {"lane": 2, "op": "num", "v": -1, "step": 0.5, "max": 6}]},

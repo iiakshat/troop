@@ -9,6 +9,8 @@
   "target_ratio": 0.52,
   "stars": {"star2": 12, "star3": 22},
   "charges": {"shield": 1, "bomb": 2},
+  "coin_ref": 133,
+  "route": [0, 2, 1, 2, 2, 2, 0, 0],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 11}, {"lane": 1, "op": "num", "v": -2, "step": 0.5, "max": 5}, {"lane": 2, "op": "num", "v": 11}]},
     {"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 5}]},
@@ -29,7 +31,7 @@
     {"at": 374, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 365, "dmg_pct": 20},
     {"at": 408, "type": "wave", "groups": [{"enemy": "thug", "n": 825}]},
     {"at": 437, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "power", "id": "bomb", "n": 1}, {"lane": 2, "op": "pct", "v": -40, "inc": 10, "step": 74.8, "max": 30}]},
-    {"at": 473, "type": "wave", "label": "THE BUTCHER", "groups": [{"enemy": "thug", "n": 13965}, {"enemy": "boss", "n": 1, "gap": 22, "hp": 5700}]},
+    {"at": 473, "type": "wave", "label": "THE BUTCHER", "groups": [{"enemy": "thug", "n": 13965}, {"enemy": "boss", "n": 1, "gap": 22, "hp": 8700}]},
     {"at": 521, "type": "finish"}
   ]
 }

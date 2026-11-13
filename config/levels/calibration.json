@@ -30,7 +30,7 @@
   "band": "tutorial",
   "greedy_keep": 0.79,
   "greedy_lost": 0.21,
-  "noisy_fail": 0.05,
+  "noisy_fail": 0.025,
   "noad": true,
   "route": [
    0,
@@ -53,7 +53,7 @@
   "band": "tutorial",
   "greedy_keep": 0.775,
   "greedy_lost": 0.243,
-  "noisy_fail": 0.3,
+  "noisy_fail": 0.325,
   "noad": true,
   "route": [
    0,
@@ -75,7 +75,7 @@
   "band": "tutorial",
   "greedy_keep": 0.79,
   "greedy_lost": 0.357,
-  "noisy_fail": 0.05,
+  "noisy_fail": 0.025,
   "noad": true,
   "route": [
    0,
@@ -101,8 +101,21 @@
   "band": "hard",
   "greedy_keep": 0.76,
   "greedy_lost": 0.32,
-  "noisy_fail": 0.5,
+  "noisy_fail": 0.6,
   "noad": true,
+  "route": [
+   2,
+   2,
+   0,
+   1,
+   1,
+   2,
+   0,
+   2,
+   1,
+   0
+  ],
+  "coin_ref": 269,
   "boss_dps": 480.1
  },
  "6": {
@@ -115,8 +128,20 @@
   "band": "normal",
   "greedy_keep": 0.633,
   "greedy_lost": 0.38,
-  "noisy_fail": 0.15,
-  "noad": true
+  "noisy_fail": 0.225,
+  "noad": true,
+  "route": [
+   2,
+   2,
+   0,
+   1,
+   2,
+   0,
+   1,
+   2,
+   1
+  ],
+  "coin_ref": 190
  },
  "7": {
   "k": 0.4911,
@@ -128,21 +153,40 @@
   "band": "normal",
   "greedy_keep": 0.8,
   "greedy_lost": 0.221,
-  "noisy_fail": 0.4,
-  "noad": true
+  "noisy_fail": 0.45,
+  "noad": true,
+  "route": [
+   0,
+   0,
+   1,
+   0,
+   0
+  ],
+  "coin_ref": 165
  },
  "8": {
   "k": 0.9059,
   "kf": 1.2912,
   "fire_k": 2.0,
   "boss_k": 1.0,
-  "best_ratio": 0.803,
+  "best_ratio": 0.79,
   "win_rate": 0.09,
   "band": "normal",
-  "greedy_keep": 0.587,
-  "greedy_lost": 0.44,
+  "greedy_keep": 0.573,
+  "greedy_lost": 0.453,
   "noisy_fail": 0.2,
-  "noad": true
+  "noad": true,
+  "route": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0
+  ],
+  "coin_ref": 237
  },
  "9": {
   "k": 0.9363,
@@ -154,8 +198,20 @@
   "band": "hard",
   "greedy_keep": 0.478,
   "greedy_lost": 0.527,
-  "noisy_fail": 0.3,
-  "noad": true
+  "noisy_fail": 0.375,
+  "noad": true,
+  "route": [
+   0,
+   2,
+   0,
+   0,
+   0,
+   1,
+   1,
+   0,
+   1
+  ],
+  "coin_ref": 98
  },
  "10": {
   "k": 0.9,
@@ -167,9 +223,20 @@
   "band": "hard",
   "greedy_keep": 0.481,
   "greedy_lost": 0.523,
-  "noisy_fail": 0.5,
+  "noisy_fail": 0.45,
   "noad": true,
-  "boss_dps": 262.6
+  "route": [
+   0,
+   1,
+   1,
+   1,
+   1,
+   0,
+   1,
+   1
+  ],
+  "coin_ref": 227,
+  "boss_dps": 364.7
  },
  "11": {
   "k": 0.8153,
@@ -181,8 +248,20 @@
   "band": "normal",
   "greedy_keep": 0.742,
   "greedy_lost": 0.311,
-  "noisy_fail": 0.05,
-  "noad": true
+  "noisy_fail": 0.025,
+  "noad": true,
+  "route": [
+   0,
+   1,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "coin_ref": 87
  },
  "12": {
   "k": 0.9363,
@@ -194,7 +273,7 @@
   "band": "normal",
   "greedy_keep": 0.7,
   "greedy_lost": 0.389,
-  "noisy_fail": 0.15,
+  "noisy_fail": 0.2,
   "noad": true,
   "route": [
    1,
@@ -220,7 +299,7 @@
   "band": "normal",
   "greedy_keep": 0.539,
   "greedy_lost": 0.548,
-  "noisy_fail": 0.05,
+  "noisy_fail": 0.075,
   "noad": true,
   "route": [
    1,
@@ -245,8 +324,20 @@
   "band": "normal",
   "greedy_keep": 0.568,
   "greedy_lost": 0.528,
-  "noisy_fail": 0.4,
-  "noad": true
+  "noisy_fail": 0.525,
+  "noad": true,
+  "route": [
+   2,
+   1,
+   0,
+   0,
+   2,
+   2,
+   2,
+   2,
+   2
+  ],
+  "coin_ref": 209
  },
  "15": {
   "k": 0.4333,
@@ -260,20 +351,42 @@
   "greedy_lost": 0.311,
   "noisy_fail": 0.2,
   "noad": true,
-  "boss_dps": 336.3
+  "route": [
+   0,
+   0,
+   0,
+   1,
+   1,
+   2,
+   2,
+   2
+  ],
+  "coin_ref": 501,
+  "boss_dps": 587.2
  },
  "16": {
   "k": 0.8824,
   "kf": 2.3788,
   "fire_k": 1.6,
   "boss_k": 1.0,
-  "best_ratio": 0.763,
+  "best_ratio": 0.788,
   "win_rate": 0.61,
   "band": "normal",
   "greedy_keep": 0.701,
   "greedy_lost": 0.328,
   "noisy_fail": 0.05,
-  "noad": true
+  "noad": true,
+  "route": [
+   2,
+   1,
+   1,
+   1,
+   0,
+   2,
+   1,
+   1
+  ],
+  "coin_ref": 76
  },
  "17": {
   "k": 0.6518,
@@ -285,8 +398,17 @@
   "band": "normal",
   "greedy_keep": 0.713,
   "greedy_lost": 0.315,
-  "noisy_fail": 0.6,
-  "noad": true
+  "noisy_fail": 0.5,
+  "noad": true,
+  "route": [
+   0,
+   0,
+   0,
+   1,
+   2,
+   0
+  ],
+  "coin_ref": 87
  },
  "18": {
   "k": 0.8708,
@@ -298,8 +420,21 @@
   "band": "normal",
   "greedy_keep": 0.594,
   "greedy_lost": 0.55,
-  "noisy_fail": 0.35,
-  "noad": true
+  "noisy_fail": 0.4,
+  "noad": true,
+  "route": [
+   0,
+   0,
+   0,
+   2,
+   0,
+   0,
+   2,
+   2,
+   1,
+   2
+  ],
+  "coin_ref": 813
  },
  "19": {
   "k": 0.9487,
@@ -311,8 +446,19 @@
   "band": "hard",
   "greedy_keep": 0.476,
   "greedy_lost": 0.564,
-  "noisy_fail": 0.4,
-  "noad": true
+  "noisy_fail": 0.45,
+  "noad": true,
+  "route": [
+   2,
+   2,
+   2,
+   1,
+   0,
+   0,
+   0,
+   0
+  ],
+  "coin_ref": 455
  },
  "20": {
   "k": 0.8104,
@@ -324,22 +470,44 @@
   "band": "hard",
   "greedy_keep": 0.657,
   "greedy_lost": 0.423,
-  "noisy_fail": 0.15,
+  "noisy_fail": 0.125,
   "noad": true,
-  "boss_dps": 437.5
+  "route": [
+   0,
+   2,
+   1,
+   2,
+   2,
+   2,
+   0,
+   0
+  ],
+  "coin_ref": 133,
+  "boss_dps": 671.1
  },
  "21": {
   "k": 0.6063,
   "kf": 3.7879,
   "fire_k": 1.0,
   "boss_k": 1.0,
-  "best_ratio": 0.682,
+  "best_ratio": 0.683,
   "win_rate": 0.01,
   "band": "normal",
   "greedy_keep": 0.744,
   "greedy_lost": 0.293,
-  "noisy_fail": 0.25,
-  "noad": true
+  "noisy_fail": 0.3,
+  "noad": true,
+  "route": [
+   2,
+   1,
+   0,
+   1,
+   0,
+   0,
+   1,
+   2
+  ],
+  "coin_ref": 174
  },
  "22": {
   "k": 0.8207,
@@ -351,8 +519,21 @@
   "band": "normal",
   "greedy_keep": 0.565,
   "greedy_lost": 0.531,
-  "noisy_fail": 0.25,
-  "noad": true
+  "noisy_fail": 0.375,
+  "noad": true,
+  "route": [
+   0,
+   1,
+   0,
+   0,
+   1,
+   2,
+   1,
+   1,
+   0,
+   1
+  ],
+  "coin_ref": 4426
  },
  "23": {
   "k": 0.4935,
@@ -364,8 +545,18 @@
   "band": "normal",
   "greedy_keep": 0.958,
   "greedy_lost": 0.078,
-  "noisy_fail": 0.45,
-  "noad": true
+  "noisy_fail": 0.4,
+  "noad": true,
+  "route": [
+   1,
+   1,
+   0,
+   0,
+   2,
+   1,
+   1
+  ],
+  "coin_ref": 2877
  },
  "24": {
   "k": 0.5983,
@@ -378,7 +569,18 @@
   "greedy_keep": 0.826,
   "greedy_lost": 0.203,
   "noisy_fail": 0.3,
-  "noad": true
+  "noad": true,
+  "route": [
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   2,
+   1
+  ],
+  "coin_ref": 1101
  },
  "25": {
   "k": 0.7837,
@@ -390,9 +592,20 @@
   "band": "hard",
   "greedy_keep": 0.681,
   "greedy_lost": 0.35,
-  "noisy_fail": 0.2,
+  "noisy_fail": 0.175,
   "noad": true,
-  "boss_dps": 564.0
+  "route": [
+   2,
+   1,
+   0,
+   0,
+   2,
+   0,
+   2,
+   2
+  ],
+  "coin_ref": 115,
+  "boss_dps": 1138.8
  },
  "26": {
   "k": 1.0,
@@ -404,7 +617,7 @@
   "band": "normal",
   "greedy_keep": 0.557,
   "greedy_lost": 0.492,
-  "noisy_fail": 0.15,
+  "noisy_fail": 0.175,
   "noad": true,
   "route": [
    2,
@@ -430,8 +643,17 @@
   "band": "normal",
   "greedy_keep": 0.931,
   "greedy_lost": 0.082,
-  "noisy_fail": 0.25,
-  "noad": true
+  "noisy_fail": 0.325,
+  "noad": true,
+  "route": [
+   1,
+   0,
+   0,
+   0,
+   1,
+   1
+  ],
+  "coin_ref": 145
  },
  "28": {
   "k": 0.7889,
@@ -443,8 +665,20 @@
   "band": "normal",
   "greedy_keep": 0.648,
   "greedy_lost": 0.451,
-  "noisy_fail": 0.25,
-  "noad": true
+  "noisy_fail": 0.375,
+  "noad": true,
+  "route": [
+   1,
+   1,
+   1,
+   2,
+   2,
+   1,
+   1,
+   1,
+   1
+  ],
+  "coin_ref": 808
  },
  "29": {
   "k": 0.81,
@@ -456,8 +690,20 @@
   "band": "hard",
   "greedy_keep": 0.526,
   "greedy_lost": 0.514,
-  "noisy_fail": 0.35,
-  "noad": true
+  "noisy_fail": 0.45,
+  "noad": true,
+  "route": [
+   0,
+   0,
+   2,
+   0,
+   0,
+   1,
+   2,
+   2,
+   2
+  ],
+  "coin_ref": 377
  },
  "30": {
   "k": 0.3487,
@@ -469,9 +715,22 @@
   "band": "hard",
   "greedy_keep": 0.743,
   "greedy_lost": 0.33,
-  "noisy_fail": 0.4,
+  "noisy_fail": 0.375,
   "noad": true,
-  "boss_dps": 17414.0
+  "route": [
+   1,
+   1,
+   2,
+   2,
+   0,
+   1,
+   0,
+   0,
+   0,
+   2
+  ],
+  "coin_ref": 6554,
+  "boss_dps": 17259.5
  },
  "31": {
   "k": 0.6224,
@@ -483,8 +742,20 @@
   "band": "normal",
   "greedy_keep": 0.959,
   "greedy_lost": 0.153,
-  "noisy_fail": 0.3,
-  "noad": true
+  "noisy_fail": 0.275,
+  "noad": true,
+  "route": [
+   1,
+   2,
+   1,
+   2,
+   0,
+   1,
+   0,
+   0,
+   0
+  ],
+  "coin_ref": 17718
  },
  "32": {
   "k": 0.521,
@@ -496,8 +767,21 @@
   "band": "normal",
   "greedy_keep": 0.959,
   "greedy_lost": 0.082,
-  "noisy_fail": 0.4,
-  "noad": true
+  "noisy_fail": 0.3,
+  "noad": true,
+  "route": [
+   2,
+   1,
+   1,
+   0,
+   0,
+   1,
+   2,
+   2,
+   2,
+   1
+  ],
+  "coin_ref": 5571
  },
  "33": {
   "k": 0.7837,
@@ -509,8 +793,20 @@
   "band": "normal",
   "greedy_keep": 0.709,
   "greedy_lost": 0.332,
-  "noisy_fail": 0.55,
-  "noad": true
+  "noisy_fail": 0.5,
+  "noad": true,
+  "route": [
+   2,
+   2,
+   2,
+   2,
+   0,
+   1,
+   2,
+   0,
+   1
+  ],
+  "coin_ref": 2548
  },
  "34": {
   "k": 0.7994,
@@ -523,7 +819,20 @@
   "greedy_keep": 0.842,
   "greedy_lost": 0.235,
   "noisy_fail": 0.2,
-  "noad": true
+  "noad": true,
+  "route": [
+   2,
+   2,
+   1,
+   2,
+   1,
+   2,
+   2,
+   2,
+   0,
+   0
+  ],
+  "coin_ref": 1503
  },
  "35": {
   "k": 1.0166,
@@ -535,9 +844,21 @@
   "band": "hard",
   "greedy_keep": 0.576,
   "greedy_lost": 0.51,
-  "noisy_fail": 0.25,
+  "noisy_fail": 0.225,
   "noad": true,
-  "boss_dps": 4338.5
+  "route": [
+   2,
+   0,
+   0,
+   0,
+   0,
+   2,
+   2,
+   1,
+   2
+  ],
+  "coin_ref": 1670,
+  "boss_dps": 11007.3
  },
  "36": {
   "k": 0.906,
@@ -549,8 +870,21 @@
   "band": "normal",
   "greedy_keep": 0.68,
   "greedy_lost": 0.374,
-  "noisy_fail": 0.2,
-  "noad": true
+  "noisy_fail": 0.175,
+  "noad": true,
+  "route": [
+   0,
+   1,
+   0,
+   0,
+   0,
+   1,
+   0,
+   2,
+   1,
+   1
+  ],
+  "coin_ref": 5832
  },
  "37": {
   "k": 1.4187,
@@ -562,8 +896,17 @@
   "band": "normal",
   "greedy_keep": 0.679,
   "greedy_lost": 0.336,
-  "noisy_fail": 0.35,
-  "noad": true
+  "noisy_fail": 0.325,
+  "noad": true,
+  "route": [
+   2,
+   1,
+   0,
+   1,
+   1,
+   1
+  ],
+  "coin_ref": 25102
  },
  "38": {
   "k": 0.8316,
@@ -576,7 +919,21 @@
   "greedy_keep": 0.579,
   "greedy_lost": 0.362,
   "noisy_fail": 0.15,
-  "noad": true
+  "noad": true,
+  "route": [
+   2,
+   2,
+   1,
+   1,
+   1,
+   2,
+   1,
+   2,
+   0,
+   1,
+   2
+  ],
+  "coin_ref": 4819
  },
  "39": {
   "k": 0.7435,
@@ -588,8 +945,23 @@
   "band": "hard",
   "greedy_keep": 0.497,
   "greedy_lost": 0.664,
-  "noisy_fail": 0.4,
-  "noad": true
+  "noisy_fail": 0.375,
+  "noad": true,
+  "route": [
+   1,
+   2,
+   2,
+   2,
+   2,
+   2,
+   1,
+   1,
+   1,
+   1,
+   2,
+   2
+  ],
+  "coin_ref": 5500
  },
  "40": {
   "k": 0.1742,
@@ -601,9 +973,21 @@
   "band": "hard",
   "greedy_keep": 0.367,
   "greedy_lost": 0.603,
-  "noisy_fail": 0.45,
+  "noisy_fail": 0.6,
   "noad": true,
-  "boss_dps": 8725.1
+  "route": [
+   0,
+   0,
+   0,
+   0,
+   2,
+   0,
+   0,
+   0,
+   0
+  ],
+  "coin_ref": 1475,
+  "boss_dps": 7455.6
  },
  "41": {
   "k": 1.2115,
@@ -615,8 +999,20 @@
   "band": "normal",
   "greedy_keep": 0.723,
   "greedy_lost": 0.4,
-  "noisy_fail": 0.55,
-  "noad": true
+  "noisy_fail": 0.475,
+  "noad": true,
+  "route": [
+   0,
+   0,
+   2,
+   0,
+   2,
+   0,
+   1,
+   1,
+   2
+  ],
+  "coin_ref": 11044
  },
  "42": {
   "k": 0.8882,
@@ -628,8 +1024,20 @@
   "band": "normal",
   "greedy_keep": 0.521,
   "greedy_lost": 0.499,
-  "noisy_fail": 0.3,
-  "noad": true
+  "noisy_fail": 0.325,
+  "noad": true,
+  "route": [
+   1,
+   0,
+   0,
+   1,
+   0,
+   0,
+   2,
+   1,
+   1
+  ],
+  "coin_ref": 21790
  },
  "43": {
   "k": 0.7338,
@@ -642,7 +1050,17 @@
   "greedy_keep": 0.777,
   "greedy_lost": 0.323,
   "noisy_fail": 0.3,
-  "noad": true
+  "noad": true,
+  "route": [
+   1,
+   0,
+   2,
+   0,
+   0,
+   1,
+   1
+  ],
+  "coin_ref": 2578
  },
  "44": {
   "k": 0.8903,
@@ -654,8 +1072,21 @@
   "band": "normal",
   "greedy_keep": 0.723,
   "greedy_lost": 0.317,
-  "noisy_fail": 0.25,
-  "noad": true
+  "noisy_fail": 0.225,
+  "noad": true,
+  "route": [
+   1,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0
+  ],
+  "coin_ref": 175000
  },
  "45": {
   "k": 0.9722,
@@ -667,9 +1098,22 @@
   "band": "hard",
   "greedy_keep": 0.652,
   "greedy_lost": 0.438,
-  "noisy_fail": 0.4,
+  "noisy_fail": 0.375,
   "noad": true,
-  "boss_dps": 37484.6
+  "route": [
+   1,
+   1,
+   2,
+   1,
+   0,
+   0,
+   2,
+   2,
+   2,
+   2
+  ],
+  "coin_ref": 14852,
+  "boss_dps": 77623.7
  },
  "46": {
   "k": 1.0,
@@ -705,8 +1149,19 @@
   "band": "normal",
   "greedy_keep": 0.684,
   "greedy_lost": 0.362,
-  "noisy_fail": 0.2,
-  "noad": true
+  "noisy_fail": 0.325,
+  "noad": true,
+  "route": [
+   2,
+   0,
+   1,
+   0,
+   2,
+   2,
+   1,
+   0
+  ],
+  "coin_ref": 51746
  },
  "48": {
   "k": 0.7435,
@@ -719,7 +1174,20 @@
   "greedy_keep": 0.63,
   "greedy_lost": 0.531,
   "noisy_fail": 0.45,
-  "noad": true
+  "noad": true,
+  "route": [
+   2,
+   2,
+   0,
+   1,
+   0,
+   1,
+   2,
+   2,
+   0,
+   1
+  ],
+  "coin_ref": 27294
  },
  "49": {
   "k": 0.472,
@@ -731,8 +1199,22 @@
   "band": "hard",
   "greedy_keep": 0.797,
   "greedy_lost": 0.235,
-  "noisy_fail": 0.35,
-  "noad": true
+  "noisy_fail": 0.425,
+  "noad": true,
+  "route": [
+   0,
+   1,
+   2,
+   2,
+   1,
+   1,
+   0,
+   1,
+   2,
+   0,
+   0
+  ],
+  "coin_ref": 18214
  },
  "50": {
   "k": 0.4783,
@@ -758,6 +1240,6 @@
    0
   ],
   "coin_ref": 174710,
-  "boss_dps": 611118.9
+  "boss_dps": 609297.8
  }
 }

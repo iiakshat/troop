@@ -9,6 +9,8 @@
   "target_ratio": 0.39,
   "stars": {"star2": 10, "star3": 20},
   "charges": {"shield": 1, "bomb": 2},
+  "coin_ref": 1475,
+  "route": [0, 0, 0, 0, 2, 0, 0, 0, 0],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "commando", "n": 11}, {"lane": 1, "op": "turncoat", "n": 95}, {"lane": 2, "op": "num", "v": -2, "step": 0.5, "max": 5}]},
     {"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 1}]},
@@ -32,7 +34,7 @@
     {"at": 454, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 1600, "dmg_pct": 20},
     {"at": 488, "type": "wave", "groups": [{"enemy": "thug", "n": 2748}, {"enemy": "grenadier", "n": 811, "gap": 10}]},
     {"at": 515, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 1, "op": "pct", "v": -40, "inc": 10, "step": 338.6, "max": 40}, {"lane": 2, "op": "power", "id": "bomb", "n": 1}]},
-    {"at": 551, "type": "wave", "label": "IRON BARON", "groups": [{"enemy": "thug", "n": 12533}, {"enemy": "brute", "n": 1462, "gap": 6}, {"enemy": "boss", "n": 1, "gap": 22, "hp": 120000, "power": 25000}]},
+    {"at": 551, "type": "wave", "label": "IRON BARON", "groups": [{"enemy": "thug", "n": 12533}, {"enemy": "brute", "n": 1462, "gap": 6}, {"enemy": "boss", "n": 1, "gap": 22, "hp": 105000, "power": 25000}]},
     {"at": 599, "type": "finish"}
   ]
 }

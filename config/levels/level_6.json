@@ -9,6 +9,8 @@
   "target_ratio": -1.0,
   "stars": {"star2": 28, "star3": 53},
   "charges": {"shield": 1, "bomb": 1},
+  "coin_ref": 190,
+  "route": [2, 2, 0, 1, 2, 0, 1, 2, 1],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -1, "step": 0.5, "max": 6}, {"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "recruit", "unit": "sergeant", "n": 3}]},
     {"at": 64, "type": "hint", "id": "bomb", "icon": "bomb", "power": "bomb"},

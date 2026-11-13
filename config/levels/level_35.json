@@ -9,6 +9,8 @@
   "target_ratio": 0.45,
   "stars": {"star2": 23, "star3": 44},
   "charges": {"shield": 1, "bomb": 1},
+  "coin_ref": 1670,
+  "route": [2, 0, 0, 0, 0, 2, 2, 1, 2],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 140}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 4}, {"lane": 2, "op": "num", "v": 180}]},
     {"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 661}]},
@@ -34,7 +36,7 @@
     {"at": 509, "type": "gates", "gates": [{"lane": 2, "op": "num", "v": 1050}]},
     {"at": 509, "type": "obstacle", "kind": "pothole", "lane": 1, "fall_pct": 30},
     {"at": 509, "type": "obstacle", "kind": "pothole", "lane": 0, "fall_pct": 30},
-    {"at": 543, "type": "wave", "label": "LIEUTENANT", "groups": [{"enemy": "thug", "n": 349229}, {"enemy": "boss", "lieutenant": true, "n": 1, "hp": 34500, "gap": 18, "power": 25000}]},
+    {"at": 543, "type": "wave", "label": "LIEUTENANT", "groups": [{"enemy": "thug", "n": 349229}, {"enemy": "boss", "lieutenant": true, "n": 1, "hp": 88000, "gap": 18, "power": 25000}]},
     {"at": 583.0, "type": "finish"}
   ]
 }

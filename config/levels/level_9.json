@@ -9,6 +9,8 @@
   "target_ratio": -1.0,
   "stars": {"star2": 10, "star3": 20},
   "charges": {"shield": 1, "bomb": 1},
+  "coin_ref": 98,
+  "route": [0, 2, 0, 0, 0, 1, 1, 0, 1],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -1, "step": 0.5, "max": 5}, {"lane": 1, "op": "recruit", "unit": "inspector", "n": 2}, {"lane": 2, "op": "power", "id": "shield", "n": 1}]},
     {"at": 69, "type": "hint", "id": "car", "icon": "police_car"},

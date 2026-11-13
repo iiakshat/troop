@@ -10,6 +10,8 @@
   "stars": {"star2": 10, "star3": 20},
   "charges": {"shield": 1, "bomb": 1},
   "need_upgrades": true,
+  "coin_ref": 377,
+  "route": [0, 0, 2, 0, 0, 1, 2, 2, 2],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "commando", "n": 4}, {"lane": 1, "op": "recruit", "unit": "commando", "n": 3}, {"lane": 2, "op": "num", "v": -2, "step": 0.5, "max": 5}]},
     {"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 5}]},

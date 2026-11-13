@@ -36,7 +36,7 @@
     {"at": 456, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -6250, "step": 3074.0, "max": 8050, "inc": 596}, {"lane": 1, "op": "pct", "v": -40, "inc": 10, "step": 10100.4, "max": 30}, {"lane": 2, "op": "recruit", "unit": "swat", "n": 1500}]},
     {"at": 490, "type": "wave", "groups": [{"enemy": "thug", "n": 48290}, {"enemy": "grenadier", "n": 11115, "gap": 10}]},
     {"at": 520, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 5}, {"lane": 1, "op": "power", "id": "bomb", "n": 1}, {"lane": 2, "op": "pct", "v": -40, "inc": 10, "step": 11270.7, "max": 20}]},
-    {"at": 556, "type": "wave", "label": "OVERLORD", "groups": [{"enemy": "thug", "n": 52321}, {"enemy": "brute", "n": 4925, "gap": 6}, {"enemy": "boss", "n": 1, "gap": 22, "hp": 9165000, "power": 100000}]},
+    {"at": 556, "type": "wave", "label": "OVERLORD", "groups": [{"enemy": "thug", "n": 52321}, {"enemy": "brute", "n": 4925, "gap": 6}, {"enemy": "boss", "n": 1, "gap": 22, "hp": 9140000, "power": 100000}]},
     {"at": 604, "type": "finish"}
   ]
 }

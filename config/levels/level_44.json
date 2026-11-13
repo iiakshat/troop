@@ -10,6 +10,8 @@
   "stars": {"star2": 27, "star3": 51},
   "charges": {"shield": 1, "bomb": 1},
   "look": "night",
+  "coin_ref": 175000,
+  "route": [1, 1, 0, 0, 0, 0, 0, 0, 1, 0],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "sergeant", "n": 150}, {"lane": 1, "op": "recruit", "unit": "inspector", "n": 95}, {"lane": 2, "op": "num", "v": -1, "step": 0.5, "max": 5}]},
     {"at": 62, "type": "wave", "groups": [{"enemy": "thug", "n": 788}]},
