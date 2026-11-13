@@ -20,8 +20,8 @@
  },
  "2": {
   "k": 1.0,
-  "kf": 10.5711,
-  "fire_k": 6.0,
+  "kf": 1.0,
+  "fire_k": 1.0,
   "best_ratio": 0.75,
   "win_rate": 0.1,
   "band": "tutorial",
@@ -40,9 +40,9 @@
   "coin_ref": 225
  },
  "3": {
-  "k": 0.6791,
-  "kf": 0.6962,
-  "fire_k": 5.0754,
+  "k": 1.0,
+  "kf": 1.0,
+  "fire_k": 1.0,
   "best_ratio": 0.891,
   "win_rate": 0.4,
   "band": "tutorial",
@@ -60,9 +60,9 @@
   "coin_ref": 201
  },
  "4": {
-  "k": 0.64,
+  "k": 1.0,
   "kf": 1.0,
-  "fire_k": 2.6194,
+  "fire_k": 1.0,
   "best_ratio": 0.777,
   "win_rate": 0.11,
   "band": "tutorial",
@@ -84,9 +84,9 @@
   "coin_ref": 233
  },
  "5": {
-  "k": 0.5074,
-  "kf": 12.8838,
-  "fire_k": 6.0,
+  "k": 1.0,
+  "kf": 1.0,
+  "fire_k": 1.0,
   "best_ratio": 0.58,
   "win_rate": 0.12,
   "band": "hard",
@@ -109,9 +109,9 @@
   "boss_dps": 480.1
  },
  "6": {
-  "k": 0.8,
+  "k": 1.0,
   "kf": 1.0,
-  "fire_k": 6.0,
+  "fire_k": 1.0,
   "best_ratio": 0.6,
   "win_rate": 0.06,
   "band": "normal",
@@ -132,9 +132,9 @@
   "coin_ref": 180
  },
  "7": {
-  "k": 0.512,
-  "kf": 0.81,
-  "fire_k": 6.0,
+  "k": 1.0,
+  "kf": 1.0,
+  "fire_k": 1.0,
   "best_ratio": 0.529,
   "win_rate": 0.053,
   "band": "normal",
@@ -151,9 +151,9 @@
   "coin_ref": 62
  },
  "8": {
-  "k": 0.8,
+  "k": 1.0,
   "kf": 1.0,
-  "fire_k": 5.0942,
+  "fire_k": 1.0,
   "best_ratio": 0.55,
   "win_rate": 0.07,
   "band": "normal",
@@ -175,7 +175,7 @@
  "9": {
   "k": 1.0,
   "kf": 1.0,
-  "fire_k": 5.4917,
+  "fire_k": 1.0,
   "best_ratio": 0.0,
   "win_rate": 0.05,
   "band": "hard",
@@ -196,9 +196,9 @@
   "coin_ref": 61
  },
  "10": {
-  "k": 1.28,
+  "k": 1.0,
   "kf": 1.0,
-  "fire_k": 6.0,
+  "fire_k": 1.0,
   "best_ratio": 0.0,
   "win_rate": 0.08,
   "band": "hard",
@@ -221,7 +221,7 @@
  "11": {
   "k": 1.0,
   "kf": 1.0,
-  "fire_k": 4.3055,
+  "fire_k": 1.0,
   "best_ratio": 0.469,
   "win_rate": 0.07,
   "band": "normal",
@@ -242,9 +242,9 @@
   "coin_ref": 86
  },
  "12": {
-  "k": 0.2051,
-  "kf": 5.8835,
-  "fire_k": 5.1467,
+  "k": 1.0,
+  "kf": 1.0,
+  "fire_k": 1.0,
   "best_ratio": 0.83,
   "win_rate": 0.07,
   "band": "normal",
@@ -266,9 +266,9 @@
   "coin_ref": 174
  },
  "13": {
-  "k": 0.512,
+  "k": 1.0,
   "kf": 1.0,
-  "fire_k": 6.0,
+  "fire_k": 1.0,
   "best_ratio": 0.325,
   "win_rate": 0.08,
   "band": "normal",
@@ -289,9 +289,9 @@
   "coin_ref": 167
  },
  "14": {
-  "k": 0.1983,
-  "kf": 10.3816,
-  "fire_k": 5.5184,
+  "k": 1.0,
+  "kf": 1.0,
+  "fire_k": 1.0,
   "best_ratio": 0.157,
   "win_rate": 0.05,
   "band": "normal",
@@ -312,9 +312,9 @@
   "coin_ref": 183
  },
  "15": {
-  "k": 0.1942,
-  "kf": 0.687,
-  "fire_k": 5.0051,
+  "k": 1.0,
+  "kf": 1.0,
+  "fire_k": 1.0,
   "best_ratio": 0.665,
   "win_rate": 0.05,
   "band": "hard",
@@ -335,9 +335,9 @@
   "boss_dps": 336.3
  },
  "16": {
-  "k": 1.4929,
+  "k": 1.0,
   "kf": 1.0,
-  "fire_k": 6.0,
+  "fire_k": 1.0,
   "best_ratio": 0.588,
   "win_rate": 0.07,
   "band": "normal",
@@ -357,9 +357,9 @@
   "coin_ref": 124
  },
  "17": {
-  "k": 0.9429,
+  "k": 1.0,
   "kf": 1.0,
-  "fire_k": 6.0,
+  "fire_k": 1.0,
   "best_ratio": 0.543,
   "win_rate": 0.05,
   "band": "normal",
@@ -377,9 +377,9 @@
   "coin_ref": 326
  },
  "18": {
-  "k": 0.4875,
+  "k": 1.0,
   "kf": 1.0,
-  "fire_k": 6.0,
+  "fire_k": 1.0,
   "best_ratio": 0.756,
   "win_rate": 0.08,
   "band": "normal",
@@ -401,9 +401,9 @@
   "coin_ref": 265
  },
  "19": {
-  "k": 0.7566,
-  "kf": 3.2849,
-  "fire_k": 6.0,
+  "k": 1.0,
+  "kf": 1.0,
+  "fire_k": 1.0,
   "best_ratio": 0.57,
   "win_rate": 0.05,
   "band": "hard",
@@ -423,9 +423,9 @@
   "coin_ref": 237
  },
  "20": {
-  "k": 0.3767,
-  "kf": 0.9613,
-  "fire_k": 5.2085,
+  "k": 1.0,
+  "kf": 1.0,
+  "fire_k": 1.0,
   "best_ratio": 0.0,
   "win_rate": 0.06,
   "band": "hard",
@@ -446,9 +446,9 @@
   "boss_dps": 437.5
  },
  "21": {
-  "k": 0.3174,
-  "kf": 1.3342,
-  "fire_k": 6.0,
+  "k": 1.0,
+  "kf": 1.0,
+  "fire_k": 1.0,
   "best_ratio": 0.799,
   "win_rate": 0.11,
   "band": "normal",
@@ -468,9 +468,9 @@
   "coin_ref": 590
  },
  "22": {
-  "k": 0.3312,
+  "k": 1.0,
   "kf": 1.0,
-  "fire_k": 6.0,
+  "fire_k": 1.0,
   "best_ratio": 0.209,
   "win_rate": 0.09,
   "band": "normal",
@@ -492,9 +492,9 @@
   "coin_ref": 1235
  },
  "23": {
-  "k": 0.1059,
-  "kf": 0.8941,
-  "fire_k": 6.0,
+  "k": 1.0,
+  "kf": 1.0,
+  "fire_k": 1.0,
   "best_ratio": 0.596,
   "win_rate": 0.06,
   "band": "normal",
@@ -513,9 +513,9 @@
   "coin_ref": 1168
  },
  "24": {
-  "k": 0.3277,
+  "k": 1.0,
   "kf": 1.0,
-  "fire_k": 6.0,
+  "fire_k": 1.0,
   "best_ratio": 0.0,
   "win_rate": 0.05,
   "band": "normal",
@@ -535,9 +535,9 @@
   "coin_ref": 326
  },
  "25": {
-  "k": 0.4096,
-  "kf": 2.5873,
-  "fire_k": 6.0,
+  "k": 1.0,
+  "kf": 1.0,
+  "fire_k": 1.0,
   "best_ratio": 0.0,
   "win_rate": 0.08,
   "band": "hard",
@@ -560,7 +560,7 @@
  "26": {
   "k": 1.0,
   "kf": 1.0,
-  "fire_k": 3.5856,
+  "fire_k": 1.0,
   "best_ratio": 0.557,
   "win_rate": 0.07,
   "band": "normal",
@@ -582,9 +582,9 @@
   "coin_ref": 1389
  },
  "27": {
-  "k": 1.7635,
+  "k": 1.0,
   "kf": 1.0,
-  "fire_k": 6.0,
+  "fire_k": 1.0,
   "best_ratio": 0.435,
   "win_rate": 0.05,
   "band": "normal",
@@ -602,9 +602,9 @@
   "coin_ref": 176
  },
  "28": {
-  "k": 0.3187,
-  "kf": 0.8882,
-  "fire_k": 4.668,
+  "k": 1.0,
+  "kf": 1.0,
+  "fire_k": 1.0,
   "best_ratio": 0.32,
   "win_rate": 0.05,
   "band": "normal",
@@ -625,9 +625,9 @@
   "coin_ref": 387
  },
  "29": {
-  "k": 0.64,
+  "k": 1.0,
   "kf": 1.0,
-  "fire_k": 6.0,
+  "fire_k": 1.0,
   "best_ratio": 0.0,
   "win_rate": 0.08,
   "band": "hard",
@@ -648,9 +648,9 @@
   "coin_ref": 138
  },
  "30": {
-  "k": 0.0282,
-  "kf": 0.2288,
-  "fire_k": 0.4534,
+  "k": 1.0,
+  "kf": 1.0,
+  "fire_k": 1.0,
   "best_ratio": 0.273,
   "win_rate": 0.01,
   "band": "hard",
@@ -673,9 +673,9 @@
   "boss_dps": 17414.0
  },
  "31": {
-  "k": 0.6582,
+  "k": 1.0,
   "kf": 1.0,
-  "fire_k": 6.0,
+  "fire_k": 1.0,
   "best_ratio": 0.755,
   "win_rate": 0.06,
   "band": "normal",
@@ -698,7 +698,7 @@
  "32": {
   "k": 1.0,
   "kf": 1.0,
-  "fire_k": 2.7046,
+  "fire_k": 1.0,
   "best_ratio": 0.672,
   "win_rate": 0.06,
   "band": "normal",
@@ -720,9 +720,9 @@
   "coin_ref": 2613
  },
  "33": {
-  "k": 0.512,
+  "k": 1.0,
   "kf": 1.0,
-  "fire_k": 3.8751,
+  "fire_k": 1.0,
   "best_ratio": 0.574,
   "win_rate": 0.09,
   "band": "normal",
@@ -743,9 +743,9 @@
   "coin_ref": 933
  },
  "34": {
-  "k": 0.3374,
+  "k": 1.0,
   "kf": 1.0,
-  "fire_k": 6.0,
+  "fire_k": 1.0,
   "best_ratio": 0.915,
   "win_rate": 0.13,
   "band": "normal",
@@ -767,9 +767,9 @@
   "coin_ref": 661
  },
  "35": {
-  "k": 0.64,
+  "k": 1.0,
   "kf": 1.0,
-  "fire_k": 6.0,
+  "fire_k": 1.0,
   "best_ratio": 0.379,
   "win_rate": 0.06,
   "band": "hard",
@@ -793,7 +793,7 @@
  "36": {
   "k": 1.0,
   "kf": 1.0,
-  "fire_k": 4.3764,
+  "fire_k": 1.0,
   "best_ratio": 0.225,
   "win_rate": 0.08,
   "band": "normal",
@@ -815,9 +815,9 @@
   "coin_ref": 3602
  },
  "37": {
-  "k": 0.5663,
-  "kf": 3.3819,
-  "fire_k": 2.5986,
+  "k": 1.0,
+  "kf": 1.0,
+  "fire_k": 1.0,
   "best_ratio": 0.054,
   "win_rate": 0.06,
   "band": "normal",
@@ -835,9 +835,9 @@
   "coin_ref": 22304
  },
  "38": {
-  "k": 0.363,
-  "kf": 0.9934,
-  "fire_k": 5.9169,
+  "k": 1.0,
+  "kf": 1.0,
+  "fire_k": 1.0,
   "best_ratio": 0.089,
   "win_rate": 0.05,
   "band": "normal",
@@ -860,9 +860,9 @@
   "coin_ref": 819
  },
  "39": {
-  "k": 0.64,
+  "k": 1.0,
   "kf": 1.0,
-  "fire_k": 3.2728,
+  "fire_k": 1.0,
   "best_ratio": 0.18,
   "win_rate": 0.07,
   "band": "hard",
@@ -886,9 +886,9 @@
   "coin_ref": 3206
  },
  "40": {
-  "k": 0.018,
-  "kf": 2.7452,
-  "fire_k": 0.25,
+  "k": 1.0,
+  "kf": 1.0,
+  "fire_k": 1.0,
   "best_ratio": 0.0,
   "win_rate": 0.04,
   "band": "hard",
@@ -912,7 +912,7 @@
  "41": {
   "k": 1.0,
   "kf": 1.0,
-  "fire_k": 1.1645,
+  "fire_k": 1.0,
   "best_ratio": 0.232,
   "win_rate": 0.21,
   "band": "normal",
@@ -935,7 +935,7 @@
  "42": {
   "k": 1.0,
   "kf": 1.0,
-  "fire_k": 1.9124,
+  "fire_k": 1.0,
   "best_ratio": 0.121,
   "win_rate": 0.07,
   "band": "normal",
@@ -956,9 +956,9 @@
   "coin_ref": 18504
  },
  "43": {
-  "k": 0.64,
+  "k": 1.0,
   "kf": 1.0,
-  "fire_k": 3.44,
+  "fire_k": 1.0,
   "best_ratio": 0.583,
   "win_rate": 0.09,
   "band": "normal",
@@ -977,9 +977,9 @@
   "coin_ref": 894
  },
  "44": {
-  "k": 0.8,
+  "k": 1.0,
   "kf": 1.0,
-  "fire_k": 1.4974,
+  "fire_k": 1.0,
   "best_ratio": 0.191,
   "win_rate": 0.05,
   "band": "normal",
@@ -1001,9 +1001,9 @@
   "coin_ref": 153741
  },
  "45": {
-  "k": 0.3187,
-  "kf": 0.9869,
-  "fire_k": 2.7992,
+  "k": 1.0,
+  "kf": 1.0,
+  "fire_k": 1.0,
   "best_ratio": 0.366,
   "win_rate": 0.05,
   "band": "hard",
@@ -1028,7 +1028,7 @@
  "46": {
   "k": 1.0,
   "kf": 1.0,
-  "fire_k": 3.013,
+  "fire_k": 1.0,
   "best_ratio": 0.355,
   "win_rate": 0.08,
   "band": "normal",
@@ -1050,7 +1050,7 @@
  "47": {
   "k": 1.0,
   "kf": 1.0,
-  "fire_k": 6.0,
+  "fire_k": 1.0,
   "best_ratio": 0.28,
   "win_rate": 0.06,
   "band": "normal",
@@ -1070,9 +1070,9 @@
   "coin_ref": 104124
  },
  "48": {
-  "k": 0.228,
-  "kf": 0.9363,
-  "fire_k": 4.5717,
+  "k": 1.0,
+  "kf": 1.0,
+  "fire_k": 1.0,
   "best_ratio": 0.329,
   "win_rate": 0.05,
   "band": "normal",
@@ -1094,9 +1094,9 @@
   "coin_ref": 6022
  },
  "49": {
-  "k": 0.2621,
-  "kf": 2.4305,
-  "fire_k": 6.0,
+  "k": 1.0,
+  "kf": 1.0,
+  "fire_k": 1.0,
   "best_ratio": 0.225,
   "win_rate": 0.05,
   "band": "hard",
@@ -1119,9 +1119,9 @@
   "coin_ref": 24661
  },
  "50": {
-  "k": 0.0921,
-  "kf": 0.7534,
-  "fire_k": 0.6765,
+  "k": 1.0,
+  "kf": 1.0,
+  "fire_k": 1.0,
   "best_ratio": 0.328,
   "win_rate": 0.05,
   "band": "hard",

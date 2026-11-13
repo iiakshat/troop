@@ -9,7 +9,6 @@
   "target_ratio": 0.58,
   "stars": {"star2": 24, "star3": 45},
   "charges": {"shield": 1, "bomb": 1},
-  "fire_k": 6.0,
   "coin_ref": 326,
   "route": [0, 0, 0, 1, 2, 0],
   "events": [
@@ -20,16 +19,16 @@
     {"at": 167, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 45, "block_reach": 12, "dmg_pct": 15},
     {"at": 177, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 3}, {"lane": 1, "op": "num", "v": 14}]},
     {"at": 177, "type": "obstacle", "kind": "pothole", "lane": 2, "fall": 2},
-    {"at": 229, "type": "wave", "groups": [{"enemy": "knifer", "n": 145}, {"enemy": "sniper_foe", "n": 8, "gap": 14}], "label": "BIG GANG"},
+    {"at": 229, "type": "wave", "groups": [{"enemy": "knifer", "n": 154}, {"enemy": "sniper_foe", "n": 9, "gap": 14}], "label": "BIG GANG"},
     {"at": 279, "type": "gates", "gates": [{"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "pct", "v": -40, "inc": 10, "step": 31.7, "max": 40}]},
     {"at": 279, "type": "obstacle", "kind": "pothole", "lane": 0, "fall_pct": 20},
     {"at": 310, "type": "gates", "gates": [{"lane": 2, "op": "mul", "k": 2}]},
     {"at": 310, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 450, "dmg_pct": 20},
     {"at": 310, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 445, "dmg_pct": 25},
-    {"at": 362, "type": "wave", "groups": [{"enemy": "thug", "n": 575}, {"enemy": "riot", "n": 320, "gap": 6}]},
-    {"at": 411, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 2, "op": "pct", "v": -40, "inc": 10, "step": 112.8, "max": 40}]},
-    {"at": 411, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 855, "dmg_pct": 25},
-    {"at": 463, "type": "wave", "groups": [{"enemy": "thug", "n": 1034}, {"enemy": "riot", "n": 609, "gap": 6}], "label": "GANG WAR"},
+    {"at": 362, "type": "wave", "groups": [{"enemy": "thug", "n": 610}, {"enemy": "riot", "n": 322, "gap": 6}]},
+    {"at": 411, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 2, "op": "pct", "v": -40, "inc": 10, "step": 106.5, "max": 40}]},
+    {"at": 411, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 810, "dmg_pct": 25},
+    {"at": 463, "type": "wave", "groups": [{"enemy": "thug", "n": 1036}, {"enemy": "riot", "n": 878, "gap": 6}], "label": "GANG WAR"},
     {"at": 496, "type": "finish"}
   ]
 }

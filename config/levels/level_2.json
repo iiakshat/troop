@@ -11,7 +11,6 @@
   "charges": {},
   "look": "rush",
   "start_heat": 0.5,
-  "fire_k": 6.0,
   "coin_ref": 225,
   "route": [0, 0, 2, 2, 0, 2, 2],
   "events": [
@@ -33,7 +32,7 @@
     {"at": 364, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 20},
     {"at": 402, "type": "wave", "groups": [{"enemy": "knifer", "n": 200}]},
     {"at": 434, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -20, "step": 4, "max": 30, "inc": 2}, {"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "num", "v": 40}]},
-    {"at": 476, "type": "wave", "label": "RUSH", "groups": [{"enemy": "thug", "n": 1691}, {"enemy": "knifer", "n": 1691, "gap": 8}]},
+    {"at": 476, "type": "wave", "label": "RUSH", "groups": [{"enemy": "thug", "n": 160}, {"enemy": "knifer", "n": 160, "gap": 8}]},
     {"at": 508, "type": "finish"}
   ]
 }
