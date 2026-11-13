@@ -2,7 +2,7 @@
 
 > Live file. Keep it current in the same session as any decision or status change. Shared basics are in `../COMMON.md`; the business background is in `../CLAUDE.md`. The owner's live instructions win over both. Design psychology brief: `PSYCH.md` (read it fully before design work). Reasons for every choice: `DECISIONS.md`. The v1 contract: `docs/superpowers/specs/2026-11-08-troop-v1-design.md` (v1.1 round on top: `docs/superpowers/specs/2026-11-09-troop-v1.1-feedback.md`); what each v1 builder did: `docs/v1_builder_reports.md`. The v2 contract (Siren Squad): `docs/superpowers/specs/2026-11-12-siren-squad-v2-design.md` and its plan `docs/superpowers/plans/2026-11-12-siren-squad-v2.md`.
 
-Last updated: 2026-11-12
+Last updated: 2026-11-13
 
 ## What this is
 
@@ -20,6 +20,25 @@ Last updated: 2026-11-12
 - **Money:** ads only. v2: real AdMob (rewarded + interstitial, Google's **test IDs** until the owner's AdMob app exists, `config/ads.json`) behind `Ads`; when no rewarded ad is ready the old placeholder countdown stands in. Analytics: Firebase for adults only, a local JSON log always. A neutral birth-year screen decides child or adult before any SDK starts (child: under 13, or under 18 in India; child-directed G-rated non-personalised ads, Firebase never started). PC and debug runs use the placeholder provider.
 
 ## Status
+
+- **2026-11-13, v2.1 crowd clash and calibration (CALIBRATOR, `worktree-wf_2bf5f997-06a-1`, on the 7 v2.1 builders' merge):**
+  - Crowd clash (owner, 2026-11-13, spec v2.1 §1.4). A gang that reaches the squad grinds into it 1:1: every 0.22 s tick, `world.melee_cap_pct` (3) % of the squad it met strikes from its front row and falls. The squad keeps shooting, both numbers drop, and the red −N keeps counting. Gangs in melee at once share that pace. The shield takes the strikers at the same pace with no loss. The crowd closes ranks: a walking gang's front keeps its pace as rows fall, so the remnant at contact is the gang minus what was shot. Strikers charge into the squad's front line, the front rows punch, and gang bodies fade as the street carries them into the squad. Screenshots: `_local/integrate/clash19_*.png`.
+  - Fire is texture (the advisor's R2, R4 and R6). `fire_k` is fitted only within 0.5-2. Specials attack at most 1.5× as often, at most 2 marks are in the air, at least 0.9 s apart, and the opening volley is never multiplied. A per-level `boss_k` (0.6-1.5) scales the boss's gun and barrage. A bomb that lands silences a gang's guns for 2 s. A stopped gang walks up to its stop line before the street carries it, which fixes a 440 s sniper stall.
+  - Calibration (`tune.gd calibrate=1 profile=greedy`; method in DECISIONS.md). Two rounds plus routes and boss_dps. Results:
+    - 38/50 levels have the greedy keep in band (±5).
+    - The other 12 are recorded as `floor_bound`: going harder broke a floor. They are L5, 15, 20, 21, 23, 24, 27, 30, 31, 32, 34 and 49, keeping 66-96 %.
+    - No-ad guarantee 50/50, random floor 50/50, all v2.1 guards pass (`checks=1`: 0 failed).
+    - The noisy first-try fail rate (soft) has a median of about 30 % on normal levels (target 10-20). L3 is at 33 % (tutorial 0-10).
+    - Table: `_local/clash/final_table.txt`.
+  - **The random floor is 1 %, not the spec's 5 % (owner to confirm).** At 5 % only 15/50 levels reached the band. The gate spread is the cause: a route that misses a ×k or takes a trap has a fraction of the greedy squad. The real fix is gate design (a second good lane per row, gentler traps).
+  - L1's trap gang is 425: the +40 lane keeps 92 % and ×2 loses 45 %. A long number beside a sign's icon gets a smaller icon. The guest gift plays on the reused finale (L4 shot).
+  - 369 tests pass. Headless `strike=1` autoplay on the pace's saves wins L1/4/5/7/10/13/15/21/31/41/50 (3 stars, no script errors). `perf=1` on an unloaded laptop (frame-time maximum after the first 2 s): L4 33.2 ms (the gift burst-in ≤ 18 ms), L15 34.4 ms, L50 28.6 ms. L20's 42 ms was measured under load.
+  - Advisor acceptance, partly met:
+    - A1: no win→loss flip within ±10 %, but keep moves 10-25 points per 10 % step, and some levels lose at ×1.2-1.4.
+    - A2: every normal level wins at 75 % firepower, but only 8/15 hard levels do.
+    - A4: return fire is over 50 % of enemy loss on about 10 normal levels.
+    - A8: round 2 still moved 12 levels (factors up to 1.6).
+  - The owner has not played the clash yet.
 
 - **2026-11-12, v2 polish (integrated on `worktree-wf_484eb342-4ff-4` from the SHIELD, KEYART and SMOOTH worktrees):**
   - Shield: the HUD button and every shield icon are a glossy police heater shield (`icons_e.png` design 6) instead of the blue orb. In the level the pale dome is a clear bubble (`src/game/shield_bubble.gd` + shader, numbers in `world_look.json shield_bubble`) sized every frame to hold the squad, with a cyan-white rim, a slow hex shimmer, the honest last-second blink and a burst when the shield ends. Only hits the sim really blocked ripple it; charging gangs bounce off it. A ring drains round the shield button while it is up.
