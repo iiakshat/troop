@@ -10,6 +10,8 @@
   "stars": {"star2": 10, "star3": 20},
   "charges": {"shield": 1, "bomb": 1},
   "boss_k": 1.455,
+  "coin_ref": 192,
+  "route": [2, 1, 0, 0, 2, 0, 2, 2],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -2, "step": 0.5, "max": 4}, {"lane": 1, "op": "pct", "v": 40}, {"lane": 2, "op": "recruit", "unit": "swat", "n": 5}]},
     {"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 5}]},

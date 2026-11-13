@@ -10,6 +10,8 @@
   "stars": {"star2": 31, "star3": 60},
   "charges": {"shield": 1, "bomb": 1},
   "fire_k": 2.0,
+  "coin_ref": 97,
+  "route": [0, 0, 0, 1, 2, 0],
   "events": [
     {"at": 43, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 3}, {"lane": 1, "op": "num", "v": -2, "step": 0.5, "max": 5}, {"lane": 2, "op": "num", "v": 10}]},
     {"at": 95, "type": "wave", "groups": [{"enemy": "thug", "n": 4}]},

@@ -10,6 +10,8 @@
   "stars": {"star2": 32, "star3": 61},
   "charges": {"shield": 1, "bomb": 1},
   "floor_bound": true,
+  "coin_ref": 244,
+  "route": [2, 1, 0, 1, 0, 0, 1, 2],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "pct", "v": 60}, {"lane": 1, "op": "recruit", "unit": "sniper", "n": 5}, {"lane": 2, "op": "num", "v": -1, "step": 0.5, "max": 5}]},
     {"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 3}]},
