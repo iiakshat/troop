@@ -8,7 +8,15 @@ extends CanvasLayer
 ##   tap       tap the lower half to fire faster (first, before anything else; 3 taps)
 ##   swipe     drag to steer (held until the player drags)
 ##   barrel    the first explosive barrel: steer into its lane (held), then tap to shoot it
-##   bottle_*  each Bottle Shot weapon's gesture, and the pistol reload
+##   bottle_*  each Bottle Shot weapon's gesture, and the pistol reload. Owner play-test
+##             2026-11-13 ("the pinwheel ... doesnt tell how to shoot"): a weapon's lesson used
+##             to be marked seen the moment it opened and ended on any touch, so a player still
+##             tapping from the street (or skipping the gift) lost it in a frame. Now it counts
+##             as seen only once the player has shot with the hand showing (a guest weapon's
+##             first use included); new touches are ignored for LESSON_LOCK while it appears,
+##             and the hand steps aside while a finger is down. bottle_hint is the lighter
+##             reminder (no lock, half-faded hand): the first throws of a finale all missed
+##             (2, then every 2 more), or REMIND_IDLE_S with nothing broken and nothing done.
 ## Everything else has its own look and never a hand:
 ##   gate_pick the first gate choice: green chevrons painted on the road into the best lane and
 ##             the exact result above its gate (squad 16 ▸ 48); held until the squad is in it
@@ -37,6 +45,9 @@ const BARREL_MAX_S := 4.0           # the barrel's shooting part ends after this
 const POWER_S := 3.0                # the power card's step lasts this long (or until used)
 const GANG_Z := -44.0               # a gang this close (in fire range) opens the power tutorial
 const CHEVRON_GAP := 2.4            # metres between road chevrons
+const LESSON_LOCK := 0.6            # real s a Bottle Shot lesson's first moments ignore new touches
+const REMIND_IDLE_S := 3.0          # Bottle Shot: idle this long with nothing broken = the reminder hand
+const REMIND_ALPHA := 0.55          # the reminder hand is this faint
 const SPOT_SHADER := """
 shader_type canvas_item;
 uniform vec2 rect_size = vec2(720.0, 1280.0);
@@ -87,6 +98,12 @@ var _preview: Array = []  # gate lesson: [squad now, squad after the best gate] 
 var _preview_n := -1
 var _barrel: Dictionary = {}
 var _shooting := false    # barrel lesson: in its lane, shooting it
+var _shots_at := 0        # Bottle Shot lesson: shots fired when it opened (a shot ends it)
+var _light := false       # the Bottle Shot reminder (a fainter hand)
+var _fingers := 0         # fingers on the glass now
+var _idle_t := 0.0        # Bottle Shot: real s aiming with no finger down and no shot
+var _rem_shots := 0       # Bottle Shot: shots fired when the last miss reminder opened
+var _finale_id := 0       # the finale those two belong to
 
 var _root: Control
 var _shade: ColorRect
@@ -168,7 +185,9 @@ func build() -> void:
 func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		var e := event as InputEventScreenTouch
+		_fingers = maxi(_fingers + (1 if e.pressed else -1), 0)
 		if e.pressed:
+			_idle_t = 0.0
 			_touched = true
 			if e.position.y >= _screen().y * _zone_top():
 				_press[e.index] = {"pos": e.position, "t": _t}
@@ -224,7 +243,7 @@ func _seen(id: String) -> bool:
 ## Opens the next tutorial that is due right now, if any.
 func _look(delta: float) -> void:
 	if view.finale != null and is_instance_valid(view.finale):
-		_look_finale()
+		_look_finale(delta)
 		return
 	if view.sim == null or view.sim.state != "run" or view._state != "play":
 		return
@@ -280,24 +299,53 @@ func _look(delta: float) -> void:
 			return
 
 
-func _look_finale() -> void:
+func _look_finale(delta: float) -> void:
 	var f := view.finale
+	if f.get_instance_id() != _finale_id:
+		_finale_id = f.get_instance_id()
+		_rem_shots = 0
+		_idle_t = 0.0
 	if f._state != "aim":
+		_idle_t = 0.0
 		return
+	if _fingers == 0:
+		_idle_t += delta
 	var w := String(f.logic.weapon)
+	_weapon = w
 	if not _seen("bottle_" + w):
-		_weapon = w
 		_begin("bottle_" + w, false)
 		return
 	if w == "pistol" and f.logic.needs_reload() and not _seen("bottle_reload"):
-		_weapon = w
 		_begin("bottle_reload", false)
+		return
+	var shots := f.logic.shots_fired
+	if remind_due(shots, f.logic.broken_count() + f.logic.broken_count(true), _idle_t, _rem_shots, _fingers > 0):
+		_rem_shots = shots
+		_idle_t = 0.0
+		_begin("bottle_hint", false)
+
+
+## The Bottle Shot reminder hand is due: nothing broken yet in this finale and either its throws
+## so far (at least 2, and 2 more since the last reminder) all missed, or REMIND_IDLE_S idle.
+static func remind_due(shots: int, broken: int, idle_s: float, last_rem_shots: int, finger_down: bool) -> bool:
+	if broken > 0 or finger_down:
+		return false
+	if shots >= 2 and shots >= last_rem_shots + 2:
+		return true
+	return idle_s >= REMIND_IDLE_S
 
 
 func _begin(id: String, hold: bool) -> void:
 	if auto:
 		print("TUT %d %s" % [Engine.get_process_frames(), id])
-	Game.mark_hint(id)
+	var bottle := id.begins_with("bottle_")
+	if not bottle:
+		Game.mark_hint(id)   # a Bottle Shot lesson counts once the player has shot with it
+	_light = id == "bottle_hint"
+	if bottle and view.finale != null and is_instance_valid(view.finale):
+		_shots_at = view.finale.logic.shots_fired
+		if not _light:
+			view.finale.input_lock = LESSON_LOCK
 	_step = id
 	_t = 0.0
 	_touched = false
@@ -339,11 +387,15 @@ func _end() -> void:
 	_touched = false
 	_drag_px = 0.0
 	_taps = 0
+	_light = false
 
 
 func _run_step(delta: float) -> void:
 	var sim := view.sim
 	var acting := auto and _t > AUTO_S
+	if not _step.begins_with("bottle_") and view.finale != null and is_instance_valid(view.finale):
+		_end()   # a street lesson still open at the stash gives way to the finale's own
+		return
 	match _step:
 		"tap":
 			# Tap the lower half: the hand taps there, a pip fills per tap, 3 taps go on.
@@ -486,10 +538,24 @@ func _update_preview(row: Dictionary) -> void:
 
 func _run_bottle() -> void:
 	var f := view.finale
-	if f == null or not is_instance_valid(f) or f._state != "aim":
-		if f == null or not is_instance_valid(f) or f._state in ["tally", "finished"]:
-			_end()
+	if f == null or not is_instance_valid(f) or f._state in ["tally", "finished"]:
+		_end()   # not marked: the lesson comes back the next time this weapon is used
 		return
+	var done := f.logic.shots_fired > _shots_at
+	if _step == "bottle_reload":
+		done = not f.logic.needs_reload()
+	if done:
+		if not _light:
+			Game.mark_hint(_step)
+		_end()
+		return
+	# The hand steps aside while a finger is down or a shot is out, and comes back after.
+	_hand.visible = f._state == "aim" and _fingers == 0
+	if f._state != "aim":
+		_ring = Vector2(-1, -1)
+		return
+	if auto and _t > AUTO_S:
+		f.throw_at(Vector2.ZERO)   # tutor=auto: act it out (the autoplay's shot)
 	var vp := _root.size
 	var c := Vector2(vp.x * 0.5, vp.y * 0.5)
 	var target := _bottle_screen()
@@ -503,8 +569,9 @@ func _run_bottle() -> void:
 	else:
 		match _weapon:
 			"stars":
+				# From the star waiting at the bottom, up onto the bottle (WeaponStars).
 				_gesture = "swipe"
-				_a = Vector2(c.x + 40, vp.y * 0.86)
+				_a = vp * WeaponStars.READY_AT + Vector2(0, 30)
 				_b = target if target.x >= 0.0 else c
 			"bow", "sniper":
 				_gesture = "hold_drag"
@@ -519,8 +586,6 @@ func _run_bottle() -> void:
 				var aim := target if target.x >= 0.0 else c
 				_a = aim + Vector2(110, 170)
 				_b = aim
-	if _touched or (auto and _t > AUTO_S):
-		_end()
 
 
 # ---------------------------------------------------------------- level queries
@@ -755,7 +820,7 @@ func _animate_hand() -> void:
 	_pressed = pressed
 	_hand.set_tip(p)
 	_hand.pressed = pressed
-	_hand.modulate = Color(1, 1, 1, fade)
+	_hand.modulate = Color(1, 1, 1, fade * (REMIND_ALPHA if _light else 1.0))
 
 
 func _draw_fx() -> void:
@@ -775,12 +840,13 @@ func _draw_fx() -> void:
 		# "use" (orange, with aim ticks), never the old one-gold-for-everything.
 		var pulse := 0.5 + 0.5 * sin(t * 6.0)
 		var col := ring_color(_step)
+		var ra := REMIND_ALPHA if _light else 1.0   # the reminder is fainter
 		var r := _ring_r * (1.0 + 0.08 * pulse)
-		_canvas.draw_arc(_ring, r, 0, TAU, 48, Color(UiKit.INK, 0.6), 12.0)
-		_canvas.draw_arc(_ring, r, 0, TAU, 48, Color(col, 0.95), 8.0)
+		_canvas.draw_arc(_ring, r, 0, TAU, 48, Color(UiKit.INK, 0.6 * ra), 12.0)
+		_canvas.draw_arc(_ring, r, 0, TAU, 48, Color(col, 0.95 * ra), 8.0)
 		if NewItemCard.tone_shape(NewItemCard.tone(_step)) == "reticle":
-			NewItemCard.draw_ticks(_canvas, _ring, r, Color(col, 0.95), 7.0)
-		_canvas.draw_arc(_ring, _ring_r * (1.15 + 0.25 * fmod(t, 1.0)), 0, TAU, 48, Color(col, 0.6 * (1.0 - fmod(t, 1.0))), 5.0)
+			NewItemCard.draw_ticks(_canvas, _ring, r, Color(col, 0.95 * ra), 7.0)
+		_canvas.draw_arc(_ring, _ring_r * (1.15 + 0.25 * fmod(t, 1.0)), 0, TAU, 48, Color(col, 0.6 * ra * (1.0 - fmod(t, 1.0))), 5.0)
 	if _dots and _ring.x >= 0.0 and _a.x >= 0.0:
 		# Ghost bullets fly into the red gate; an up chevron says its number climbs.
 		for i in 5:
