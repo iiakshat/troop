@@ -1993,7 +1993,7 @@ func _update_visuals(d: float) -> void:
 				_charging.append({"kind": hv["kind"], "pos": p, "phase": o.y, "shielded": bool(hv.get("strike_sh", false)),
 					"dx": clampf(o.x * 0.35, -1.6, 1.6)})
 				continue
-			_dying.append({"kind": hv["kind"], "pos": p, "t": 0.0,
+			_dying.append({"kind": hv["kind"], "pos": p, "t": 0.0, "foe": true,
 				"basis": Basis(Vector3.UP, PI).scaled(Vector3.ONE * esc * crowd_scale(offs.size() + 1))})
 			fx.puff(p)
 		var crowd: Crowd = _crowds[hv["kind"]]
@@ -2090,7 +2090,8 @@ func _update_visuals(d: float) -> void:
 	var i := 0
 	while i < _charging.size():
 		var c: Dictionary = _charging[i]
-		var goal := Vector3(_squad_x + float(c.get("dx", 0.0)), 0, -0.6 if c["shielded"] else 0.2)
+		# A striker falls at the squad's front line, where the two crowds meet (spec v2.1 §1.4).
+		var goal := Vector3(_squad_x + float(c.get("dx", 0.0)), 0, -0.6 if c["shielded"] else -0.35)
 		var p: Vector3 = (c["pos"] as Vector3).move_toward(goal, d * 12.0)
 		c["pos"] = p
 		c["t"] = float(c.get("t", 0.0)) + d
@@ -2099,7 +2100,7 @@ func _update_visuals(d: float) -> void:
 			if bounced:
 				_shield_hit(p + Vector3(0, 0.9, 0), Vector3(_squad_x, 0.9, 0.6))
 			fx.puff(p)
-			_dying.append({"kind": c["kind"], "pos": p, "t": 0.0, "basis": Basis(Vector3.UP, PI).scaled(Vector3.ONE * ENEMY_SCALE)})
+			_dying.append({"kind": c["kind"], "pos": p, "t": 0.0, "foe": true, "basis": Basis(Vector3.UP, PI).scaled(Vector3.ONE * ENEMY_SCALE)})
 			_charging.remove_at(i)
 			continue
 		(_crowds[c["kind"]] as Crowd).push(Transform3D(Basis(Vector3.UP, PI).scaled(Vector3.ONE * ENEMY_SCALE), p), "punch", float(c["t"]) * 1.4)
@@ -2116,7 +2117,10 @@ func _update_visuals(d: float) -> void:
 		var p: Vector3 = dd["pos"]
 		p.z += sim.S * d * (1.0 if _state == "play" or _state == "done" else 0.0)
 		dd["pos"] = p
-		if t > BODY_TIME + 0.5 or p.z > 4.0:
+		# A gang member's body fades as the street carries it into the squad (a clash drops many
+		# right at the front; ridden on towards the camera they loomed over the squad).
+		var foe_fade := clampf((p.z - 0.2) / 1.0, 0.0, 1.0) if dd.get("foe", false) else 0.0
+		if t > BODY_TIME + 0.5 or p.z > 4.0 or foe_fade >= 1.0:
 			_dying.remove_at(i)
 			continue
 		if not dd.has("spin"):
@@ -2128,6 +2132,8 @@ func _update_visuals(d: float) -> void:
 		var flash := maxf(0.0, 1.0 - t * 6.0)
 		if t > BODY_TIME:
 			flash = -clampf((t - BODY_TIME) / 0.5, 0.0, 1.0)  # dissolve away
+		if foe_fade > 0.0:
+			flash = minf(flash, -foe_fade)
 		(_crowds[dd["kind"]] as Crowd).push(Transform3D(basis, p + Vector3(0, 0.05, 0)), "hit", minf(t, 0.15), flash)
 		i += 1
 	# Troops a pothole took: hop to the hole, then drop in, shrinking and tumbling.
