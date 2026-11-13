@@ -62,6 +62,11 @@ static func view_basis_for(rest: Vector2, _aim: Vector2) -> Basis:
 	return Basis.from_euler(Vector3(rest.y, rest.x, 0.0))
 
 
+## The bow's aim view is that still view (not the pin's direction).
+func rest_view() -> Transform3D:
+	return Transform3D(view_basis_for(_rest, Vector2(yaw, pitch)), eye())
+
+
 ## Bow pose in camera space: the grip low left, leaning out, pointing at the aim (`a` = aim
 ## direction in camera space); a draw pulls it a touch closer.
 static func bow_pose(a: Vector3, draw: float) -> Transform3D:
