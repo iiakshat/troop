@@ -92,8 +92,11 @@ const HALT_LT := 4.0            # ... a lieutenant
 const BARRAGES_MIN := 2         # guard: barrages each boss or lieutenant fires, at least
 const KEEP_SLACK := 0.05        # the greedy keep guard allows this much either side of the band
 # ---- the keep fit (calibrate=1 with profile=greedy|noisy)
-const FIT_PROBES := 12          # greedy runs the fit may spend on one level (k, then kf)
-const FIT_K_PROBES := 8         # ... of which k may take this many
+const FIT_PROBES := 30          # greedy runs the fit may spend on one level (about 1 s each)
+const FIT_K_PROBES := 8         # ... one fire_k fit may take this many
+const WALKER_STEPS := 5         # fire_k fits at k, then k x WALKER_STEP ... while a floor breaks
+const WALKER_STEP := 0.8
+const FIRE_K := [0.25, 6.0]     # the level fire intensity range the fit may use (absolute)
 const FIT_TOL := 0.025          # a probe this close to the band's midpoint ends the fit
 const VALID_ROUTES := 100       # random routes the floor is validated on (the report's sample)
 const VALID_NOISY := 20         # noisy runs the fit reports (measured, not fitted)
@@ -110,6 +113,7 @@ func _initialize() -> void:
 	var only: Array = []
 	var k_eval := 1.0
 	var kf_eval := 1.0
+	var fk_eval := 1.0
 	var pace_path := "res://_local/pace.json"
 	var zero := false
 	var full := false
@@ -177,6 +181,8 @@ func _initialize() -> void:
 			k_eval = float(a.substr(2))
 		elif a.begins_with("kf="):
 			kf_eval = float(a.substr(3))
+		elif a.begins_with("fk="):
+			fk_eval = float(a.substr(3))
 	units = Config.units()
 	boss_hp_fixed = has_boss_rule(units)
 	var harder := profile == "greedy" or profile == "noisy"
@@ -196,7 +202,7 @@ func _initialize() -> void:
 	print("profile %s%s, tap_rate %.1f, powers %s%s" % [profile if profile != "" else "plain", " zero upgrades" if zero else "",
 		tap_rate, "on" if use_powers else "off", ", dodge_p %.2f" % dodge_share if harder else ""])
 	if harder:
-		print("level | band     | greedy keeps (band)    | noisy fails (soft)  | random wins | no-ad | best troops/peak | time s | halt s | k / kf | guards")
+		print("level | band     | greedy keeps (band)    | noisy fails (soft)  | random wins | no-ad | best troops/peak | time s | halt s | k / kf / fire_k | guards")
 	else:
 		print("level | rows | wins/total | target | no-pow best | best troops/peak | stars | time s | k / kf")
 	if only.is_empty():
@@ -206,7 +212,7 @@ func _initialize() -> void:
 		upgrades = level_upgrades(n)
 		var r: Dictionary
 		if harder:
-			r = calibrate_harder(n, level) if calibrate else evaluate_harder(n, level, k_eval, kf_eval)
+			r = calibrate_harder(n, level) if calibrate else evaluate_harder(n, level, k_eval, kf_eval, NOISY_RUNS, fk_eval)
 		else:
 			r = calibrate_level(n, level) if calibrate else evaluate(n, level, k_eval, kf_eval)
 		r["target_ratio"] = float(level.get("target_ratio", -1.0))
@@ -483,10 +489,14 @@ func _fit_ratio(base: Dictionary, k: float, want: float) -> float:
 ## Every gang's size (bosses: hp) and barrel blast times k, the last wave times kf more;
 ## rounded the same way as tools/gen_levels.py. With the v2.1 boss rule (boss_hp_fixed) a
 ## boss's or lieutenant's hp is designed in seconds of damage and never scaled.
-static func scaled_level(base: Dictionary, k: float, kf := 1.0) -> Dictionary:
-	if absf(k - 1.0) < 1e-9 and absf(kf - 1.0) < 1e-9:
+static func scaled_level(base: Dictionary, k: float, kf := 1.0, fk := 1.0) -> Dictionary:
+	if absf(k - 1.0) < 1e-9 and absf(kf - 1.0) < 1e-9 and absf(fk - 1.0) < 1e-9:
 		return base
 	var lv: Dictionary = base.duplicate(true)
+	if absf(fk - 1.0) > 1e-9:
+		# The level's enemy fire intensity (LevelSim.fire_k), relative like k (gen_levels.py
+		# --merge multiplies calibration.json fire_k by it).
+		lv["fire_k"] = float(base.get("fire_k", 1.0)) * fk
 	if absf(k - 1.0) > 1e-9:
 		for e in lv["events"]:
 			if e["type"] == "obstacle" and String(e.get("kind", "")) == "barrel" and e.has("kill"):
@@ -846,21 +856,27 @@ func noisy_fail(n: int, level: Dictionary, causes := {}, runs := NOISY_RUNS) -> 
 	return float(fails) / maxf(runs, 1.0)
 
 
-func _win_share(level: Dictionary, routes: Array) -> float:
+## The share of `routes` that win (stops counting at `enough` wins). With the v2.1 profiles a
+## random route is the profile's player on random lanes: it steps out of telegraphs at dodge_p.
+func _win_share(level: Dictionary, routes: Array, enough := -1) -> float:
 	var wins := 0
+	var dodges := profile == "greedy" or profile == "noisy"
 	for route in routes:
-		if Autopilot.run(level, units, route, upgrades, use_powers, DT, false, tap_rate)["state"] == "strike":
+		if Autopilot.run(level, units, route, upgrades, use_powers, DT, dodges, tap_rate, dodge_share)["state"] == "strike":
 			wins += 1
+			if enough > 0 and wins >= enough:
+				break   # the floor holds; the rest of the sample would not change that
 	return float(wins) / maxf(routes.size(), 1.0)
 
 
 ## The no-ad guarantee for `route` at this level's pace, without powers: it wins tapping 4/s
-## and 2/s (in time), at 1.5/s on L1, and not tapping at all from L6, stepping out of a boss's
-## barrage on boss levels (as test_level_sim's level test asks of the stored route).
+## and 2/s (in time), at 1.5/s on L1, and not tapping at all from L6, stepping out of every
+## telegraphed attack (a boss's barrage, a sniper's laser, a grenade or firebomb mark: the
+## v2.1 hint cards teach "change lane"), as test_level_sim's level test asks of the stored route.
 func noad_ok(n: int, level: Dictionary, route: Array) -> bool:
 	if route.is_empty():
 		return false
-	var dodge := bool(level.get("boss", false))
+	var dodge := true
 	var taps := [2.0, 4.0]
 	if n == 1:
 		taps.append(1.5)
@@ -892,7 +908,7 @@ func noad(n: int, level: Dictionary, stored: Array = [], beam_first := true) -> 
 		tried[str(route)] = true
 		var ok := noad_ok(n, level, route)
 		if ok or first.is_empty():
-			var r := Autopilot.run(level, units, route, upgrades, false, DT, bool(level.get("boss", false)), tap_rate)
+			var r := Autopilot.run(level, units, route, upgrades, false, DT, true, tap_rate)
 			first = {"ok": ok, "route": route, "result": r}
 		if ok:
 			return first
@@ -904,8 +920,8 @@ func noad(n: int, level: Dictionary, stored: Array = [], beam_first := true) -> 
 ## The v2.1 report of level n at scale k / kf: the greedy keep share and the guard checks, the
 ## noisy first-try fail rate, random-route wins, the no-ad route (stored by `--merge` from a
 ## plain run) and the best route with powers (its share sets the star thresholds).
-func evaluate_harder(n: int, base: Dictionary, k: float, kf := 1.0, noisy_runs := NOISY_RUNS) -> Dictionary:
-	var level := scaled_level(base, k, kf)
+func evaluate_harder(n: int, base: Dictionary, k: float, kf := 1.0, noisy_runs := NOISY_RUNS, fk := 1.0) -> Dictionary:
+	var level := scaled_level(base, k, kf, fk)
 	var rows := Autopilot.gate_row_count(level)
 	var g := watch_greedy(n, level, units, upgrades, dodge_share, tap_rate, use_powers)
 	var causes := {}
@@ -922,7 +938,7 @@ func evaluate_harder(n: int, base: Dictionary, k: float, kf := 1.0, noisy_runs :
 	for bo in g["bosses"]:
 		halt = float(bo["halt"]) if halt < 0.0 else minf(halt, float(bo["halt"]))
 	var won: bool = nr["state"] == "strike"
-	return {"level": n, "rows": rows, "k": k, "kf": kf, "band": g["band"],
+	return {"level": n, "rows": rows, "k": k, "kf": kf, "fire_k": fk, "band": g["band"],
 		"greedy_keep": g["keep"], "greedy_win": g["state"] == "strike", "greedy_time": g["time"],
 		"greedy_route": g["route"], "guards": guard_failures(g), "boss_halt": halt,
 		"noisy_fail": fail, "wins": int(round(share * routes.size())), "total": routes.size(), "win_rate": share,
@@ -938,53 +954,79 @@ static func harder_row(r: Dictionary) -> String:
 	var keep := float(r["greedy_keep"])
 	var fail := float(r["noisy_fail"])
 	var halt := float(r.get("boss_halt", -1.0))
-	return "%5d | %-8s | %-4s %3.0f%% (%2.0f-%2.0f%%) %s | %3.0f%% (%2.0f-%2.0f%%) %s | %3.0f%% %s | %-5s | %5d/%-5d %3.0f%% | %6.1f | %5s | %.3f / %.3f | %s" % [
+	return "%5d | %-8s | %-4s %3.0f%% (%2.0f-%2.0f%%) %s | %3.0f%% (%2.0f-%2.0f%%) %s | %3.0f%% %s | %-5s | %5d/%-5d %3.0f%% | %6.1f | %5s | %.3f / %.3f / %.3f | %s" % [
 		r["level"], r["band"], "win" if r["greedy_win"] else "LOSE", keep * 100.0,
 		float(b["keep"][0]) * 100.0, float(b["keep"][1]) * 100.0, "ok" if r["greedy_win"] and in_band(keep, b["keep"], KEEP_SLACK) else "!!",
 		fail * 100.0, float(b["fail"][0]) * 100.0, float(b["fail"][1]) * 100.0, "ok" if in_band(fail, b["fail"]) else "~",
 		float(r["win_rate"]) * 100.0, "ok" if float(r["win_rate"]) >= RANDOM_FLOOR - 1e-9 else "!!",
 		"ok" if r["noad"] else "LOSE", r["best_troops"], r["best_peak"], float(r["best_ratio"]) * 100.0,
-		float(r["greedy_time"]), "-" if halt < 0.0 else "%.1f" % halt, r["k"], r["kf"],
+		float(r["greedy_time"]), "-" if halt < 0.0 else "%.1f" % halt, r["k"], r["kf"], float(r.get("fire_k", 1.0)),
 		"ok" if (r["guards"] as Array).is_empty() else "; ".join(r["guards"])]
 
 
-## The v2.1 keep fit (plan v2.1 Task 8, second method). The noisy first-try fail rate swings by
-## 5-10 points between seeds and fights the keep share, so it is no longer fitted: only the
-## greedy player's end ÷ peak squad is, one deterministic run per probe. k (every gang) is
-## walked out from 1 in growing steps until the keep crosses the band's midpoint, then
-## narrowed (secant inside the bracket, bisection when one end lost); if k alone jumps past the
-## band (a few more enemies turn a clean win into a loss) or runs out of range, the last wave's
-## kf is fitted the same way on the hardest k that still keeps more. Then it is validated once:
-## the no-ad guarantee (the greedy, stored or best no-power route wins at the pace without
-## powers) and the random floor (at least RANDOM_FLOOR of VALID_ROUTES random routes win); if
-## either fails it backs off toward the last scale that held them (bisection in log scale). The
-## noisy fail rate is only measured and reported. A level stops searching after LEVEL_CAP_S.
+## The v2.1 keep fit (plan v2.1 Task 8, third method). Only the greedy player's end ÷ peak
+## squad is fitted, one deterministic run per probe, aimed at the band's midpoint. Losses must be
+## graded for that: a gang that reaches the squad trades 1:1, and the squad's fire cuts down
+## dozens of enemies per troop on the way in, so scaling the gangs (k) mostly flips a clean win
+## into a wipe-out within a few percent (a cliff). The level's enemy fire intensity fire_k
+## (LevelSim.fire_k: return-fire shots and special attacks, every one a capped share of the
+## squad) costs troops in proportion instead, so it is fitted first: walked out from the
+## current value in growing steps until the keep crosses the midpoint, then narrowed (secant
+## inside the bracket, bisection when one end lost), within FIRE_K. If fire_k alone cannot get
+## there (no armed gangs, or the level is too hard even at the least fire), k is fitted the
+## same way from there, then the last wave's kf. Then it is validated once: the no-ad
+## guarantee (the greedy, stored or best no-power route wins at the pace without powers) and
+## the random floor (at least RANDOM_FLOOR of VALID_ROUTES random routes win); if either fails
+## it backs off toward scales that hold them (bisection in log scale). The noisy fail rate is
+## only measured and reported. A level stops searching after LEVEL_CAP_S.
 func calibrate_harder(n: int, base: Dictionary) -> Dictionary:
 	var t0 := Time.get_ticks_msec()
 	var b: Dictionary = BANDS[band(n, base)]
 	var want := band_mid(b["keep"])
 	var probes: Array = []
-	var best := _fit_axis(n, base, true, 1.0, 1.0, want, FIT_K_PROBES, probes, t0)
-	if not in_band(float(best["keep"]), b["keep"]) and probes.size() < FIT_PROBES and not _over(t0):
-		var above := _hardest_above(probes, want)
-		if not above.is_empty():
-			var b2 := _fit_axis(n, base, false, float(above["k"]), float(above["kf"]), want,
-				FIT_PROBES - probes.size(), probes, t0)
-			if _closer(b2, best, want):
-				best = b2
-	var k := float(best["k"])
-	var kf := float(best["kf"])
+	var fk0 := float(base.get("fire_k", 1.0))
+	var sc := {"k": 1.0, "kf": 1.0, "fk": 1.0}
+	var chosen := {}
+	var last := {}
+	for step in WALKER_STEPS:
+		if _over(t0) or probes.size() >= FIT_PROBES:
+			break
+		var fit := _fit_axis(n, base, "fk", sc, want, FIT_K_PROBES, probes, t0)
+		var best: Dictionary = fit["best"]
+		# Too easy even at the most fire (few armed gangs): the gangs grow (k), then the last
+		# wave (kf), the old way; only from the current files' size.
+		if step == 0 and bool(best["win"]) and float(best["keep"]) > float(b["keep"][1]):
+			for axis in ["k", "kf"]:
+				if in_band(float(best["keep"]), b["keep"]) or probes.size() >= FIT_PROBES or _over(t0):
+					break
+				var from: Dictionary = fit["easy"] if not fit["easy"].is_empty() else best
+				var f2 := _fit_axis(n, base, axis, _scales(from), want, FIT_PROBES - probes.size(), probes, t0)
+				if _closer(f2["best"], best, want):
+					best = f2["best"]
+		last = best
+		var too_hard := not bool(best["win"]) or float(best["keep"]) < float(b["keep"][0]) - KEEP_SLACK
+		if not too_hard and _floors(n, base, _scales(best))["ok"]:
+			chosen = best
+			break
+		# A floor broke (a weaker route or player walks into a gang that wipes it out) or the
+		# level is too hard even at the least fire: fewer enemies in every gang, and the fire
+		# refitted from where it was, so the losses come from fire (graded) with room to spare.
+		sc = {"k": float(best["k"]) * WALKER_STEP, "kf": float(best["kf"]), "fk": float(best["fk"])}
+	if chosen.is_empty():
+		chosen = _back_off(n, base, _scales(last), t0)
+	var fin := _scales(chosen)
 	if verbose:
-		print("      L%d fit k %.3f kf %.3f keep %.0f%% (%s, want %.0f%%) in %d probes" % [n, k, kf,
-			float(best["keep"]) * 100.0, band(n, base), want * 100.0, probes.size()])
-	if not _floors(n, base, k, kf)["ok"]:
-		var ks := _back_off(n, base, k, kf, t0)
-		k = ks[0]
-		kf = ks[1]
-	var r := evaluate_harder(n, base, k, kf, VALID_NOISY)
+		print("      L%d fit k %.3f kf %.3f fire_k %.3f (x%.3f) keep %.0f%% (%s, want %.0f%%) in %d probes" % [n,
+			fin["k"], fin["kf"], fk0 * float(fin["fk"]), fin["fk"], float(chosen.get("keep", -1.0)) * 100.0, band(n, base),
+			want * 100.0, probes.size()])
+	var r := evaluate_harder(n, base, fin["k"], fin["kf"], VALID_NOISY, fin["fk"])
 	r["probes"] = probes.size()
 	r["fit_s"] = (Time.get_ticks_msec() - t0) / 1000.0
 	return r
+
+
+static func _scales(p: Dictionary) -> Dictionary:
+	return {"k": float(p["k"]), "kf": float(p["kf"]), "fk": float(p["fk"])}
 
 
 ## The greedy player's run at this level plus the lanes it took: one probe of the keep fit.
@@ -999,12 +1041,14 @@ func greedy_probe(n: int, level: Dictionary) -> Dictionary:
 	return r
 
 
-func _probe(n: int, base: Dictionary, k: float, kf: float, probes: Array) -> Dictionary:
-	var r := greedy_probe(n, scaled_level(base, k, kf))
-	var p := {"k": k, "kf": kf, "keep": float(r["keep"]), "win": r["state"] == "strike", "time": float(r["time"])}
+func _probe(n: int, base: Dictionary, sc: Dictionary, probes: Array) -> Dictionary:
+	var r := greedy_probe(n, scaled_level(base, sc["k"], sc["kf"], sc["fk"]))
+	var p := {"k": sc["k"], "kf": sc["kf"], "fk": sc["fk"], "keep": float(r["keep"]), "win": r["state"] == "strike",
+		"time": float(r["time"])}
 	probes.append(p)
 	if verbose:
-		print("        probe k %.4f kf %.4f -> %s keep %.1f%% %.0fs" % [k, kf, r["state"], float(p["keep"]) * 100.0, float(p["time"])])
+		print("        probe k %.4f kf %.4f fk %.4f -> %s keep %.1f%% %.0fs" % [sc["k"], sc["kf"], sc["fk"], r["state"],
+			float(p["keep"]) * 100.0, float(p["time"])])
 	return p
 
 
@@ -1021,23 +1065,34 @@ static func _closer(a: Dictionary, b: Dictionary, want: float) -> bool:
 	return absf(float(a["keep"]) - want) < absf(float(b["keep"]) - want)
 
 
-## One scale (k when `on_k`, else the last wave's kf) fitted so the greedy keep is `want` (the
-## keep falls as the scale grows). Returns the probe closest to `want`, a win if any won.
-func _fit_axis(n: int, base: Dictionary, on_k: bool, k: float, kf: float, want: float, budget: int,
+## The relative range one axis may try: fit_k / fit_kf, and for fire_k the absolute FIRE_K
+## range over the level's current fire_k.
+func _axis_range(base: Dictionary, axis: String) -> Array:
+	if axis == "fk":
+		var fk0 := maxf(float(base.get("fire_k", 1.0)), 1e-6)
+		return [float(FIRE_K[0]) / fk0, float(FIRE_K[1]) / fk0]
+	return fit_k if axis == "k" else fit_kf
+
+
+## One scale (`axis`: "fk" fire intensity, "k" every gang, "kf" the last wave) fitted from
+## `sc` so the greedy keep is `want` (the keep falls as the scale grows). Returns {best: the
+## probe closest to want, a win if any won; easy: the hardest probe that kept more; hard: the
+## easiest that kept less} ({} when there is none).
+func _fit_axis(n: int, base: Dictionary, axis: String, sc: Dictionary, want: float, budget: int,
 		probes: Array, t0: int) -> Dictionary:
-	var lims: Array = fit_k if on_k else fit_kf
+	var lims := _axis_range(base, axis)
 	var lo_lim := log(float(lims[0]))
 	var hi_lim := log(float(lims[1]))
-	var x := clampf(log(k if on_k else kf), lo_lim, hi_lim)
+	var x := clampf(log(float(sc[axis])), lo_lim, hi_lim)
 	var mine: Array = []
-	var p := _probe(n, base, exp(x) if on_k else k, kf if on_k else exp(x), probes)
+	var p := _probe(n, base, _with(sc, axis, x), probes)
 	mine.append(p)
-	var easy := {}   # {x, keep}: the hardest probe so far that keeps more than want
+	var easy := {}   # {x, keep, p}: the hardest probe so far that keeps more than want
 	var hard := {}   # ... the easiest that keeps less
 	if float(p["keep"]) > want:
-		easy = {"x": x, "keep": p["keep"]}
+		easy = {"x": x, "keep": p["keep"], "p": p}
 	else:
-		hard = {"x": x, "keep": p["keep"]}
+		hard = {"x": x, "keep": p["keep"], "p": p}
 	var step := log(2.0)
 	# Walk out until the keep crosses want.
 	while mine.size() < budget and absf(float(p["keep"]) - want) > FIT_TOL and (easy.is_empty() or hard.is_empty()) and not _over(t0):
@@ -1045,12 +1100,12 @@ func _fit_axis(n: int, base: Dictionary, on_k: bool, k: float, kf: float, want: 
 		if absf(nx - x) < 1e-6:
 			break   # the range ends here
 		x = nx
-		p = _probe(n, base, exp(x) if on_k else k, kf if on_k else exp(x), probes)
+		p = _probe(n, base, _with(sc, axis, x), probes)
 		mine.append(p)
 		if float(p["keep"]) > want:
-			easy = {"x": x, "keep": p["keep"]}
+			easy = {"x": x, "keep": p["keep"], "p": p}
 		else:
-			hard = {"x": x, "keep": p["keep"]}
+			hard = {"x": x, "keep": p["keep"], "p": p}
 		step *= 1.5
 	# Narrow the bracket: secant when both ends won, else bisection.
 	while mine.size() < budget and not easy.is_empty() and not hard.is_empty() and absf(float(p["keep"]) - want) > FIT_TOL \
@@ -1061,72 +1116,81 @@ func _fit_axis(n: int, base: Dictionary, on_k: bool, k: float, kf: float, want: 
 		if float(hard["keep"]) > 0.0:
 			var t := (float(easy["keep"]) - want) / maxf(float(easy["keep"]) - float(hard["keep"]), 1e-6)
 			nx = lerpf(xe, xh, clampf(t, 0.15, 0.85))
-		p = _probe(n, base, exp(nx) if on_k else k, kf if on_k else exp(nx), probes)
+		p = _probe(n, base, _with(sc, axis, nx), probes)
 		mine.append(p)
 		if float(p["keep"]) > want:
-			easy = {"x": nx, "keep": p["keep"]}
+			easy = {"x": nx, "keep": p["keep"], "p": p}
 		else:
-			hard = {"x": nx, "keep": p["keep"]}
+			hard = {"x": nx, "keep": p["keep"], "p": p}
 	var best := {}
 	for q in mine:
 		if _closer(q, best, want):
 			best = q
-	return best
+	return {"best": best, "easy": easy.get("p", {}), "hard": hard.get("p", {})}
 
 
-## The probe with the largest scale whose greedy player still keeps more than `want` ({} if
-## none did).
-static func _hardest_above(probes: Array, want: float) -> Dictionary:
-	var out := {}
-	for q in probes:
-		if bool(q["win"]) and float(q["keep"]) > want and (out.is_empty() or
-				float(q["k"]) * float(q["kf"]) > float(out["k"]) * float(out["kf"])):
-			out = q
-	return out
+static func _with(sc: Dictionary, axis: String, x: float) -> Dictionary:
+	var s2 := sc.duplicate()
+	s2[axis] = exp(x)
+	return s2
 
 
-## The two floors at scale k / kf: the random-route floor and the no-ad guarantee.
-func _floors(n: int, base: Dictionary, k: float, kf: float) -> Dictionary:
-	var lv := scaled_level(base, k, kf)
+## The two floors at these scales: the random-route floor and the no-ad guarantee.
+func _floors(n: int, base: Dictionary, sc: Dictionary) -> Dictionary:
+	var lv := scaled_level(base, sc["k"], sc["kf"], sc["fk"])
 	var routes := sample_routes(n, Autopilot.gate_row_count(lv), VALID_ROUTES)
-	var share := _win_share(lv, routes)
+	var share := _win_share(lv, routes, int(ceil(RANDOM_FLOOR * routes.size() - 1e-9)))
 	var floor_ok := share >= RANDOM_FLOOR - 1e-9
-	var ok := floor_ok and bool(noad(n, lv, base.get("route", []))["ok"])
+	var ok := floor_ok and bool(noad(n, lv, base.get("route", []), false)["ok"])
 	if verbose:
-		print("        floors k %.4f kf %.4f: random wins %.0f%%, no-ad %s" % [k, kf, share * 100.0,
-			("ok" if ok else "LOSE") if floor_ok else "-"])
+		print("        floors k %.4f kf %.4f fk %.4f: random wins %.0f%%, no-ad %s" % [sc["k"], sc["kf"], sc["fk"],
+			share * 100.0, ("ok" if ok else "LOSE") if floor_ok else "-"])
 	return {"ok": ok, "share": share}
 
 
-## Backs off from a scale that broke a floor toward one that holds them: (1, 1) (the current
-## files) when the fit made the level harder, else easier steps from the fit; then
-## BACKOFF_STEPS bisections in log scale between the two. Returns [k, kf].
-func _back_off(n: int, base: Dictionary, k: float, kf: float, t0: int) -> Array:
-	var ga: Array = [1.0, 1.0] if k * kf > 1.0 else [k * 0.8, kf * 0.9]
-	var found := false
-	for j in 5:
-		if _floors(n, base, ga[0], ga[1])["ok"]:
-			found = true
+## Backs off from scales that broke a floor toward ones that hold them: easier steps from the
+## fit (k and fire_k x0.8, kf x0.9) until the floors hold and the greedy player still wins,
+## then BACKOFF_STEPS bisections in log scale between the two. Returns the probe it settled on.
+func _back_off(n: int, base: Dictionary, sc: Dictionary, t0: int) -> Dictionary:
+	var ga := _easier(sc)
+	var good_p := {}
+	for j in 6:
+		var p := _probe(n, base, ga, [])
+		if bool(p["win"]) and _floors(n, base, ga)["ok"]:
+			good_p = p
 			break
-		ga = [float(ga[0]) * 0.8, float(ga[1]) * 0.9]
+		ga = _easier(ga)
 		if _over(t0):
 			break
-	if not found:
-		print("      !! L%d no scale tried holds the floors; kept k %.3f kf %.3f" % [n, ga[0], ga[1]])
-		return ga
+	if good_p.is_empty():
+		print("      !! L%d no scale tried holds the floors; kept k %.3f kf %.3f fk %.3f" % [n, ga["k"], ga["kf"], ga["fk"]])
+		var p0 := _probe(n, base, ga, [])
+		return p0
 	var good := 0.0
 	var bad := 1.0
-	var lk := [log(float(ga[0])), log(k)]
-	var lf := [log(float(ga[1])), log(kf)]
 	for i in BACKOFF_STEPS:
 		if _over(t0):
 			break
 		var t := (good + bad) * 0.5
-		if _floors(n, base, exp(lerpf(lk[0], lk[1], t)), exp(lerpf(lf[0], lf[1], t)))["ok"]:
+		var mid := _lerp_scales(ga, sc, t)
+		var p := _probe(n, base, mid, [])
+		if bool(p["win"]) and _floors(n, base, mid)["ok"]:
 			good = t
+			good_p = p
 		else:
 			bad = t
-	return [exp(lerpf(lk[0], lk[1], good)), exp(lerpf(lf[0], lf[1], good))]
+	return good_p
+
+
+static func _easier(sc: Dictionary) -> Dictionary:
+	return {"k": float(sc["k"]) * 0.8, "kf": float(sc["kf"]) * 0.9, "fk": float(sc["fk"]) * 0.8}
+
+
+static func _lerp_scales(a: Dictionary, b: Dictionary, t: float) -> Dictionary:
+	var out := {}
+	for key in ["k", "kf", "fk"]:
+		out[key] = exp(lerpf(log(float(a[key])), log(float(b[key])), t))
+	return out
 
 
 ## checks=1 (spec v2.1 §2 guard checks): per level the greedy player at the pace (keep share

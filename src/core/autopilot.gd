@@ -147,8 +147,11 @@ static func gate_row_count(level: Dictionary) -> int:
 ## at `tap_rate` (no powers). tools/gen_levels.py sets his HP to hp_secs x this (calibration.json
 ## `boss_dps`). The boss gets endless health for the run, so he always reaches the halt. A
 ## level with no boss (yet; a lieutenant slot): the squad's dps against boss armour when its
-## last wave's first gang comes out. 0 if the squad falls first.
-static func boss_dps(level: Dictionary, units_cfg: Dictionary, lanes: Array, upgrades := {}, tap_rate := 2.0, dt := 1.0 / 30.0) -> float:
+## last wave's first gang comes out. 0 if the squad falls first. `pilot` (optional) drives
+## instead of a lane-route autopilot: tools/boss_dps.gd passes the calibration profile's greedy
+## player (tests/tune.gd GreedyPilot), the spec's expected squad.
+static func boss_dps(level: Dictionary, units_cfg: Dictionary, lanes: Array, upgrades := {}, tap_rate := 2.0, dt := 1.0 / 30.0,
+		pilot: Autopilot = null) -> float:
 	var lv := level.duplicate(true)
 	var has_boss := false
 	var last_wave := -1
@@ -163,7 +166,8 @@ static func boss_dps(level: Dictionary, units_cfg: Dictionary, lanes: Array, upg
 				g["hp"] = 1.0e12
 				has_boss = true
 	var sim := LevelSim.new(lv, units_cfg, upgrades)
-	var pilot := Autopilot.new(lanes, false, true, tap_rate, 1.0)
+	if pilot == null:
+		pilot = Autopilot.new(lanes, false, true, tap_rate, 1.0)
 	var bdef: Dictionary = units_cfg["enemies"]["boss"]
 	var guard := 0
 	while sim.state == "run" and guard < 40000:

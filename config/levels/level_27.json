@@ -10,23 +10,22 @@
   "stars": {"star2": 42, "star3": 79},
   "charges": {"shield": 1, "bomb": 1},
   "coin_ref": 852,
-  "route": [0, 0, 0, 0, 1, 1],
   "events": [
     {"at": 43, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -2, "step": 0.5, "max": 6}, {"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "foe_div", "k": 2}]},
-    {"at": 96, "type": "wave", "groups": [{"enemy": "thug", "n": 3}]},
+    {"at": 96, "type": "wave", "groups": [{"enemy": "thug", "n": 6}]},
     {"at": 145, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 3}, {"lane": 1, "op": "recruit", "unit": "commando", "n": 3}]},
-    {"at": 145, "type": "obstacle", "kind": "barrel", "lane": 2, "hp": 4, "dmg": 2, "radius": 8, "kill": 6},
+    {"at": 145, "type": "obstacle", "kind": "barrel", "lane": 2, "hp": 4, "dmg": 2, "radius": 8, "kill": 12},
     {"at": 177, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}]},
     {"at": 177, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 2},
     {"at": 177, "type": "obstacle", "kind": "pothole", "lane": 2, "fall": 2},
-    {"at": 229, "type": "wave", "groups": [{"enemy": "thug", "n": 58}, {"enemy": "grenadier", "n": 1, "gap": 10}], "label": "BIG GANG"},
+    {"at": 229, "type": "wave", "groups": [{"enemy": "thug", "n": 114}, {"enemy": "grenadier", "n": 2, "gap": 10}], "label": "BIG GANG"},
     {"at": 275, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 2, "op": "turncoat", "n": 20}]},
     {"at": 275, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 24, "dmg_pct": 15},
     {"at": 306, "type": "gates", "gates": [{"lane": 0, "op": "pct", "v": -50, "inc": 10, "step": 7.4, "max": 20}, {"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "power", "id": "shield", "n": 1}]},
-    {"at": 359, "type": "wave", "groups": [{"enemy": "thug", "n": 152}, {"enemy": "grenadier", "n": 14, "gap": 10}]},
+    {"at": 359, "type": "wave", "groups": [{"enemy": "thug", "n": 297}, {"enemy": "grenadier", "n": 27, "gap": 10}]},
     {"at": 410, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -6, "step": 6.3, "max": 8, "inc": 1}, {"lane": 1, "op": "mul", "k": 4}]},
     {"at": 410, "type": "obstacle", "kind": "pothole", "lane": 2, "fall_pct": 20},
-    {"at": 462, "type": "wave", "groups": [{"enemy": "thug", "n": 4440}, {"enemy": "brute", "n": 1396, "gap": 6}], "label": "AMBUSH"},
+    {"at": 462, "type": "wave", "groups": [{"enemy": "thug", "n": 1145}, {"enemy": "brute", "n": 360, "gap": 6}], "label": "AMBUSH"},
     {"at": 496, "type": "finish"}
   ]
 }

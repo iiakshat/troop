@@ -45,6 +45,11 @@ extends RefCounted
 ## one still in the air when the squad falls or bursts into the stash is called off.
 ## The player's bomb is thrown and lands later (_throw_bomb, _land_bombs). Counts are exact
 ## ints; a huge gang fights in capped rows.
+## A level's `fire_k` (calibration.json, default 1) is how hard its gangs fire: return-fire
+## shots (the rate, and the opening volley when fire_k > 1) x fire_k, and specials attack
+## fire_k x as often.
+## Not the level's first gang (the opening, sized for the squad it starts with), nor bosses and
+## lieutenants (units.json's numbers). Every shot and attack is still capped.
 
 var S: float            # current scroll speed, m/s
 var S_base: float       # running speed
@@ -54,6 +59,7 @@ var spawn_dist: float
 var contact_z: float
 var melee_tick: float
 var boss_halt: float
+var fire_k := 1.0       # the level's enemy fire intensity (see the header)
 var finish_hold: float
 var boss_hit_every: float
 var lane_w := 2.8          # metres between lane centres
@@ -142,6 +148,7 @@ func _init(level: Dictionary = {}, units_cfg: Dictionary = {}, upgrades: Diction
 	contact_z = float(w["contact_z"])
 	melee_tick = float(w.get("melee_tick", 0.22))
 	boss_halt = float(w.get("boss_halt", 40.0))
+	fire_k = maxf(float(level.get("fire_k", 1.0)), 0.0)
 	finish_hold = float(w.get("finish_hold", 14.0))
 	boss_hit_every = float(w.get("boss_hit_every", 0.1))
 	lane_w = float(w.get("lane_width", lane_w))
@@ -754,6 +761,11 @@ func _spawn_horde(sp: Dictionary, early := false) -> void:
 		attack = "gun"
 	var every := float(def.get("throw_every", def.get("shoot_every", 0.0)))
 	var first := float(def.get("first_shot", every))
+	# The level's fire intensity, from its second gang on (the opening is sized for the start).
+	var fk := fire_k if int(sp["wave"]) != 0 and not boss else 1.0
+	if every > 0.0 and fk > 0.0:
+		every /= fk   # specials attack fk x as often
+		first /= fk
 	var h := {
 		"id": _new_id(), "wave": sp["wave"], "enemy": grp["enemy"], "label": sp["label"],
 		"count": int(grp["n"]), "start": int(grp["n"]),
@@ -790,7 +802,8 @@ func _spawn_horde(sp: Dictionary, early := false) -> void:
 	# max_shooters), range; 0 = never. The opening volley goes out on first entering range.
 	var rf: Dictionary = def.get("return_fire", {})
 	var on := district >= int(rf.get("from_district", rf_cfg.get("from_district", 2)))
-	h["rf_rate"] = float(rf.get("rate", 0.0)) if on else 0.0
+	h["rf_rate"] = float(rf.get("rate", 0.0)) * fk if on else 0.0
+	h["fire_k"] = fk
 	h["rf_share"] = int(rf.get("share", 0))
 	h["rf_range"] = float(rf.get("range", rf_cfg.get("range", 50.0)))
 	h["rf_max"] = int(_by_district(rf_cfg.get("max_shooters", 1 << 30)))
@@ -827,10 +840,13 @@ func _move(dt: float) -> void:
 			h["z"] = contact_z + killed_rows(h) * float(h["row_gap"])
 			continue
 		if h["stopped"]:
-			if front_z(h) < -fire_range:
-				# Stopped beyond the squad's reach: it stands on the street, which carries the
-				# squad to it (no standoff out there, spec v2.1 §1.2).
-				h["z"] = float(h["z"]) + S * dt
+			# The rows behind walk up to the stop line as the front rows fall, so the living
+			# front stays where the gang stopped, inside the squad's reach. (Before, the front
+			# fell back with every dead row; past fire_range while the squad held short of the
+			# HQ, nothing moved and the gang shot an untouchable squad until it died.)
+			var line := -float(h["stop"]) + killed_rows(h) * float(h["row_gap"])
+			if float(h["z"]) < line:
+				h["z"] = minf(line, float(h["z"]) + float(h["vrel"]) * dt)
 			continue
 		h["z"] = float(h["z"]) + float(h["vrel"]) * dt
 		if float(h["stop"]) > 0.0 and front_z(h) >= -float(h["stop"]):
@@ -1217,7 +1233,8 @@ func _return_fire(dt: float) -> void:
 		if not h["rf_open"]:
 			h["rf_open"] = true
 			opening = true
-			h["rf_acc"] = float(h["rf_acc"]) + float(rf_cfg.get("open", 0))
+			# (A calmer level never mutes the opening volley: they always shoot first.)
+			h["rf_acc"] = float(h["rf_acc"]) + float(rf_cfg.get("open", 0)) * maxf(float(h.get("fire_k", 1.0)), 1.0)
 		h["rf_acc"] = float(h["rf_acc"]) + float(shooters(h)) * float(h["rf_rate"]) * dt
 		var shots := int(floor(float(h["rf_acc"])))
 		if shots <= 0:
@@ -1611,7 +1628,7 @@ func drain() -> Array:
 func clone() -> LevelSim:
 	var c := LevelSim.new()
 	for p in ["S", "S_base", "accel", "fire_range", "spawn_dist", "contact_z", "melee_tick",
-			"boss_halt", "finish_hold", "boss_hit_every", "weapons", "enemy_defs", "obstacle_defs",
+			"boss_halt", "fire_k", "finish_hold", "boss_hit_every", "weapons", "enemy_defs", "obstacle_defs",
 			"powers", "rf_cfg", "boss_cfg", "lt_cfg", "revive_cfg", "star_cfg", "lane", "squad_x", "_x_driven", "lane_w", "form_half",
 			"fig_cap", "fig_r", "gate_clear_s", "gang_priority", "gang_figs", "district", "caps",
 			"coin_ref", "tap_heat", "tap_auto", "tap_per", "heat_sum", "heat_t",

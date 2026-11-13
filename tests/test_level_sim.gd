@@ -417,9 +417,9 @@ func test_levels_are_winnable_and_reward_planning() -> void:
 		var up: Dictionary = pace[str(n)]
 		var route: Array = lv.get("route", [])
 		check(not route.is_empty(), "L%d has a stored route" % n)
-		# Spec v2.1 §1.3: a boss's barrage is telegraphed to be dodged; boss levels are
-		# calibrated (and kept winnable) with the pilot stepping out of it.
-		var dodge := bool(lv.get("boss", false))
+		# Spec v2.1 §1.2-1.3: every special attack and boss barrage is telegraphed to be
+		# dodged; levels are calibrated (and kept winnable) with the pilot stepping out of them.
+		var dodge := true
 		var best := Autopilot.run(lv, units, route, up, false, 1.0 / 30.0, dodge)
 		eq(best["state"], "strike", "L%d planned route wins with the paced upgrades and no powers" % n)
 		# Spec v2 section 2 / calibration rule 2: a non-tapper with the same upgrades wins every
@@ -429,10 +429,10 @@ func test_levels_are_winnable_and_reward_planning() -> void:
 			eq(cold["state"], "strike", "L%d a non-tapper wins with the stored route" % n)
 		elif n == 2 or n == 3:
 			check(cold["state"] != "strike", "L%d a non-tapper loses" % n)
-			check(Autopilot.run(lv, units, route, up, false, 1.0 / 30.0, false, 1.0)["state"] != "strike", "L%d 1 tap/s loses" % n)
-			eq(Autopilot.run(lv, units, route, up, false, 1.0 / 30.0, false, 2.0)["state"], "strike", "L%d a casual 2 taps/s wins" % n)
+			check(Autopilot.run(lv, units, route, up, false, 1.0 / 30.0, dodge, 1.0)["state"] != "strike", "L%d 1 tap/s loses" % n)
+			eq(Autopilot.run(lv, units, route, up, false, 1.0 / 30.0, dodge, 2.0)["state"], "strike", "L%d a casual 2 taps/s wins" % n)
 		if n == 1:
-			eq(Autopilot.run(lv, units, route, up, false, 1.0 / 30.0, false, 1.5)["state"], "strike", "L1 is won with light tapping (1.5/s)")
+			eq(Autopilot.run(lv, units, route, up, false, 1.0 / 30.0, dodge, 1.5)["state"], "strike", "L1 is won with light tapping (1.5/s)")
 		# Rule 1: upgrades gate progress from mid district 1 (the stored route, no upgrades).
 		if n >= 5 and n <= 10 and Autopilot.run(lv, units, route, {}, false)["state"] != "strike":
 			zero_lost.append(n)
@@ -1759,3 +1759,87 @@ func test_lieutenant_wave() -> void:
 	check(not (hits["land"] as Array).is_empty(), "his barrage lands")
 	for l in hits["land"]:
 		eq(int(l["lost"]), int(l["before"]) * int(lt["barrage_pct"][d - 1]) / 100, "lieutenant barrage share of %d" % int(l["before"]))
+
+
+# ---------------------------------------------------------------- v2.1 calibration: graded losses
+
+## A stopped gang's living front stays at its stop line: the rows behind walk up as the front
+## rows fall. Before, the front fell back with every dead row; once it was past fire_range while
+## the squad held short of the HQ, nothing moved and the gang shot an untouchable squad until it
+## died (the v2.1 calibration's "stall" losses at 150-250 s).
+func test_a_stopped_gang_closes_up_and_never_stalls_at_the_hq() -> void:
+	# Many gunmen arriving right at the HQ: the squad holds short of it while they stand.
+	var grp := {"enemy": "gunman", "n": 900, "hp": 6}
+	var events: Array = [{"at": 60, "type": "wave", "groups": [grp]}, {"at": 75, "type": "finish"}]
+	var sim := LevelSim.new({"district": 1, "events": events}, units)
+	sim.squad.cap = 0
+	sim.squad.add("constable", 199)
+	sim.peak_squad = sim.squad.total()
+	sim.set_lane(1)
+	var stop := float(units["enemies"]["gunman"]["stop_at"])
+	var worst := 0.0
+	var killed_rows := 0
+	for i in 30 * 120:
+		sim.step(1.0 / 30.0)
+		sim.drain()
+		for h in sim.hordes:
+			if h["stopped"]:
+				killed_rows = maxi(killed_rows, LevelSim.killed_rows(h))
+				worst = minf(worst, LevelSim.front_z(h))
+		if sim.state != "run":
+			break
+	check(killed_rows > 3, "the squad shot through several of the gang's rows (%d)" % killed_rows)
+	check(worst >= -stop - 1.5, "the living front stayed near its stop line (%.1f m, stop %.0f m)" % [worst, stop])
+	check(worst > -sim.fire_range, "the front never fell back out of the squad's reach (%.1f m)" % worst)
+	eq(sim.state, "strike", "the squad cleared the gunmen and reached the HQ")
+	check(sim.time < 60.0, "no stall (%.0f s)" % sim.time)
+
+
+## The level's fire intensity (LevelSim.fire_k, fitted by tests/tune.gd calibrate=1): return
+## fire shots (the opening volley and the rate) and special attacks scale with it; each shot
+## still takes one figure and a volley stays capped; bosses keep their numbers.
+func test_fire_k_scales_return_fire_and_attacks_but_not_bosses() -> void:
+	var shots := {}
+	var telegraphs := {}
+	for fk in [1.0, 2.0]:
+		# (The level's first gang is the opening, sized for the start: fire_k leaves it alone.)
+		var events: Array = [
+			{"at": 30, "type": "wave", "groups": [{"enemy": "thug", "n": 1}]},
+			{"at": 70, "type": "wave", "groups": [{"enemy": "gunman", "n": 40, "hp": 100000}]},
+			{"at": 70, "type": "wave", "groups": [{"enemy": "grenadier", "n": 4, "hp": 100000}]},
+			{"at": 600, "type": "finish"}]
+		var sim := LevelSim.new({"district": 3, "fire_k": fk, "events": events}, units)
+		sim.squad.cap = 0
+		sim.squad.add("constable", 100000 - 1)
+		sim.set_lane(1)
+		var n := 0
+		var t := 0
+		var first_open := -1
+		for i in 30 * 30:
+			sim.step(1.0 / 30.0)
+			for e in sim.drain():
+				if e["type"] == "return_fire":
+					n += int(e["shots"])
+					if bool(e["opening"]) and first_open < 0:
+						first_open = int(e["shots"])
+				elif e["type"] == "telegraph":
+					t += 1
+		shots[fk] = n
+		telegraphs[fk] = t
+		eq(first_open, int(round(float(units["return_fire"]["open"]) * fk)), "opening volley x fire_k %.0f" % fk)
+	check(absf(float(shots[2.0]) / maxf(float(shots[1.0]), 1.0) - 2.0) < 0.15, "fire_k 2 doubles the shots (%d vs %d)" % [shots[2.0], shots[1.0]])
+	check(telegraphs[2.0] >= 2 * telegraphs[1.0] - 1 and telegraphs[1.0] > 0, "fire_k 2 doubles the attacks (%d vs %d)" % [telegraphs[2.0], telegraphs[1.0]])
+	var boss := LevelSim.new({"district": 1, "fire_k": 3.0, "events": [
+		{"at": 30, "type": "wave", "groups": [{"enemy": "molotov", "n": 2}]},
+		{"at": 70, "type": "wave", "groups": [{"enemy": "boss", "n": 1, "hp": 1000}]}, {"at": 600, "type": "finish"}]}, units)
+	boss.squad.add("constable", 10)
+	var every := {}
+	for i in 30 * 40:
+		boss.step(1.0 / 30.0)
+		for e in boss.drain():
+			if e["type"] == "horde_spawn":
+				every[String(e["horde"]["enemy"])] = float(e["horde"]["shoot_every"])
+		if every.size() >= 2 or boss.state != "run":
+			break
+	eq(float(every.get("boss", -1.0)), float(units["enemies"]["boss"]["shoot_every"]), "a boss keeps his own gun rate")
+	eq(float(every.get("molotov", -1.0)), float(units["enemies"]["molotov"]["throw_every"]), "the opening gang keeps its own rate")
