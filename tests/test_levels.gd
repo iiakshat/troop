@@ -656,3 +656,45 @@ func test_revive_after_a_boss_phase_loss() -> void:
 				eq(played.state, "strike", "L%d fp %.2f: an offered revive wins" % [n, fp])
 			break
 	check(offered >= 1, "at least one boss-phase revive is offered and won (%d)" % offered)
+
+
+## Owner play-test 2026-11-13 ("the army went behind the bottle house, then came on invisible"):
+## all 50 levels, played on their stored routes at the no-ad pace (tapping 4/s and 0/s). No gang
+## stands at or behind the stash: a gang that stops to attack stops at least
+## world.stash_stand_m in front of the stash's face, and a gang whose front is behind the face (a
+## late wave that came out inside the stash, or a stopped line whose front rows fell faster than
+## the rows behind could walk up) is out of the door again within OUT_S (LevelView draws it at
+## the door meanwhile: test_loss_cues).
+const OUT_S := 10.0
+func test_no_gang_at_or_behind_the_stash() -> void:
+	var bad: Array = []
+	var slowest := 0.0
+	for n in range(1, 51):
+		var lv := Config.level(n)
+		for taps in [4.0, 0.0]:
+			var sim := LevelSim.new(lv, units, _model_pace().get(str(n), {}))
+			var pilot := Autopilot.new(lv.get("route", []), false, false, taps)
+			var worst_stop := INF
+			var inside := {}   # gang id -> seconds its front has been behind the face in a row
+			var guard := 0
+			while sim.state == "run" and guard < 40000:
+				pilot.drive(sim)
+				sim.step(DT)
+				sim.drain()
+				guard += 1
+				var face := sim.stash_z()
+				for h in sim.hordes:
+					if int(h["count"]) <= 0 or h.has("cage"):
+						continue
+					if h["stopped"]:
+						worst_stop = minf(worst_stop, -float(h["stop"]) - face)
+					var id := int(h["id"])
+					inside[id] = float(inside.get(id, 0.0)) + DT if LevelSim.front_z(h) < face else 0.0
+					slowest = maxf(slowest, float(inside[id]))
+					if float(inside[id]) > OUT_S and float(inside[id]) <= OUT_S + DT * 1.5:
+						bad.append("L%d %.0f/s: a %s gang stayed inside the stash over %.0f s" % [n, taps, h["enemy"], OUT_S])
+			# (A stop line is set while the squad may still be braking: 1 m of slack.)
+			if worst_stop < sim.stash_stand - 1.0:
+				bad.append("L%d %.0f/s: a gang stopped %.1f m in front of the stash" % [n, taps, worst_stop])
+	print("        (stash scan: the longest a gang's front was behind the face: %.1f s)" % slowest)
+	eq(bad, [], "every gang stands in front of the stash")

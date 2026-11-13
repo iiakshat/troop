@@ -13,9 +13,18 @@ extends RefCounted
 ## The scroll speed `S` is not constant: the squad stops running and stands its ground
 ## (`halted`, a standoff) while a boss is within `boss_halt` metres or while any gang that
 ## stops to shoot has stopped, and it stops `finish_hold` metres short of the Gang HQ while
-## any gang is still alive or yet to come. So bosses really walk in (slowly, shooting), a
+## any gang is still alive or yet to come (further back, hold_m, when a gang that stops to attack
+## would otherwise stand inside the stash). So bosses really walk in (slowly, shooting), a
 ## gunman line is a real standoff (the street does not scroll past it), and the HQ never
 ## scrolls past a fight. `traveled` does not advance while halted.
+##
+## The stash (owner play-test 2026-11-13): LevelView draws the gang's stash with its front face
+## world.stash_front_m past the finish line (stash_z). No gang stands at or behind it: a gang
+## that stops to attack stops at least stash_stand in front of it (hold_m, stop_line), and a
+## revive never pushes one into it. Every gang keeps its schedule: one that comes out while its
+## front is still behind the face (a late wave) is inside the stash, walking out of it (LevelView
+## draws it coming out of the door). (Moving late gangs out to the door at once, or a deep
+## gang's back rows, moved the calibrated levels; the hold does not.)
 ##
 ## Obstacles hit spatially: the squad is a formation of slots (Squad.slot_offset) around its
 ## real sideways position `squad_x` (set_squad_x, called by the view every frame; without it
@@ -85,6 +94,9 @@ var _last_mark := -1.0e9  # sim time of the last telegraph
 var bomb_silence := 0.0 # powers.bomb.silence_s: a bombed gang's guns stay quiet this long
 var volley_s := 0.0     # return_fire.volley_s: a gang's shots go out together this often (0 = every tick)
 var finish_hold: float
+var stash_front := 12.0 # world.stash_front_m: the stash's front face, metres past the finish line
+var stash_gap := 2.0    # world.stash_gap_m: a revive never pushes a gang closer to it than this
+var stash_stand := 9.0  # world.stash_stand_m: a gang that stops stands at least this far in front of it
 var clear_rush := 1.0   # world.clear_run_speed: the run to the stash once the street is clear
 var boss_hit_every: float
 var lane_w := 2.8          # metres between lane centres
@@ -155,6 +167,7 @@ var snipe_ref = null        # the gang the snipers shot this tick (or null)
 
 var _spawns: Array = []     # pre-computed, sorted by the distance at which they appear
 var _next_spawn := 0
+var _stop_after: PackedFloat32Array = []   # per spawn index: the farthest stop_at of a gang from there on
 var _pending_hordes := 0    # horde spawns not yet on screen
 var _wave_ats: Array = []   # arrival `at` of each wave event, in order
 var _wave_mods: Dictionary = {}  # wave index -> {"div": k, "strip": true}
@@ -188,6 +201,9 @@ func _init(level: Dictionary = {}, units_cfg: Dictionary = {}, upgrades: Diction
 	bomb_silence = float(units_cfg["powers"].get("bomb", {}).get("silence_s", 0.0))
 	volley_s = maxf(float(units_cfg.get("return_fire", {}).get("volley_s", 0.0)), 0.0)
 	finish_hold = float(w.get("finish_hold", 14.0))
+	stash_front = float(w.get("stash_front_m", stash_front))
+	stash_gap = float(w.get("stash_gap_m", stash_gap))
+	stash_stand = maxf(float(w.get("stash_stand_m", stash_stand)), stash_gap)
 	clear_rush = maxf(float(w.get("clear_run_speed", 1.0)), 1.0)
 	boss_hit_every = float(w.get("boss_hit_every", 0.1))
 	lane_w = float(w.get("lane_width", lane_w))
@@ -377,6 +393,13 @@ func _build_spawns(events: Array) -> void:
 					_pending_hordes += 1
 				wave_index += 1
 	_spawns.sort_custom(func(a, b): return float(a["spawn_at"]) < float(b["spawn_at"]))
+	_stop_after.resize(_spawns.size() + 1)
+	_stop_after[_spawns.size()] = 0.0
+	for i in range(_spawns.size() - 1, -1, -1):
+		var st := 0.0
+		if String(_spawns[i]["kind"]) == "horde":
+			st = float(enemy_def(_spawns[i]["ev"]).get("stop_at", 0.0))
+		_stop_after[i] = maxf(_stop_after[i + 1], st)
 
 
 # ---------------------------------------------------------------- input
@@ -586,6 +609,7 @@ func revive(troops: int) -> bool:
 	var push := float(revive_cfg.get("push", 14.0))
 	for h in hordes.duplicate():
 		var back := boss_halt if h["boss"] else push
+		back = minf(back, maxf(-stash_z() - stash_gap, push))   # never into the stash
 		if not h["melee"] and front_z(h) <= -back:
 			continue
 		var took := int(h.get("took", 0)) if h["melee"] else 0
@@ -780,8 +804,8 @@ func _update_speed(dt: float) -> void:
 		target = 0.0
 	var hold := false
 	if finish_at > 0.0 and (not hordes.is_empty() or _pending_hordes > 0):
-		# Brake so the squad comes to rest exactly finish_hold metres before the HQ.
-		var remaining := finish_at - finish_hold - traveled
+		# Brake so the squad comes to rest exactly hold_m() metres before the HQ.
+		var remaining := finish_at - hold_m() - traveled
 		var limit := sqrt(2.0 * accel * maxf(remaining, 0.0))
 		if limit < target:
 			target = limit
@@ -803,6 +827,18 @@ func _update_speed(dt: float) -> void:
 			var sp: Dictionary = _spawns[_next_spawn]
 			_next_spawn += 1
 			_spawn_one(sp, true)
+
+
+## How far short of the finish line the squad holds while gangs live: finish_hold, or further
+## back when a gang that stops to attack (alive or still to come) would otherwise stand inside
+## the stash at its stop_at (owner play-test 2026-11-13: a sniper line's 40 m at the old hold was
+## behind the stash's face). Every gang keeps its own stop line; only the squad waits earlier.
+func hold_m() -> float:
+	var far := _stop_after[mini(_next_spawn, _stop_after.size() - 1)] if not _stop_after.is_empty() else 0.0
+	for h in hordes:
+		if int(h["count"]) > 0:
+			far = maxf(far, float(h.get("stop", 0.0)))
+	return maxf(finish_hold, far + stash_stand - stash_front) if far > 0.0 else finish_hold
 
 
 func _spawn_due() -> void:
@@ -973,11 +1009,32 @@ func _move(dt: float) -> void:
 				h["z"] = float(h["z"]) + S * dt
 			continue
 		h["z"] = float(h["z"]) + float(h["vrel"]) * dt
-		if float(h["stop"]) > 0.0 and front_z(h) >= -float(h["stop"]):
-			h["z"] = -float(h["stop"]) + killed_rows(h) * float(h["row_gap"])
+		var stop := stop_line(h)
+		if stop > 0.0 and front_z(h) >= -stop:
+			h["stop"] = stop
+			h["z"] = -stop + killed_rows(h) * float(h["row_gap"])
 			h["stopped"] = true
 			# (Its attack clock started at spawn and runs while it attacks: the first one comes
 			# first_shot s after it starts, in range or stopped.)
+
+
+## Where the stash's front face is now (z; -INF when the level has no finish). LevelView draws
+## the stash there; no gang that stops to attack stands at or behind it (hold_m, stop_line).
+func stash_z() -> float:
+	if finish_at <= 0.0:
+		return -INF
+	return -(finish_at - traveled) - stash_front
+
+
+## How far ahead of the squad walking gang `h` stops to attack (0 = it never stops): its stop_at,
+## but at least stash_stand in front of the stash (owner play-test 2026-11-13: a sniper's 40 m
+## at the HQ hold was inside the stash, and a gunman line's 26 m at its front face). hold_m keeps
+## the squad far enough back for that; this only bites when the squad was already closer.
+func stop_line(h: Dictionary) -> float:
+	var stop := float(h.get("stop", 0.0))
+	if stop <= 0.0 or finish_at <= 0.0:
+		return stop
+	return clampf(-stash_z() - stash_stand, minf(stop, -contact_z + 4.0), stop)
 
 
 func _shoot(dt: float) -> void:
@@ -1938,13 +1995,13 @@ func clone() -> LevelSim:
 	var c := LevelSim.new()
 	for p in ["S", "S_base", "accel", "fire_range", "spawn_dist", "contact_z", "melee_tick",
 			"boss_halt", "fire_k", "boss_k", "melee_cap_pct", "mark_max", "mark_gap", "fk_every_max", "_last_mark",
-			"bomb_silence", "volley_s", "finish_hold", "boss_hit_every", "weapons", "enemy_defs", "obstacle_defs",
+			"bomb_silence", "volley_s", "finish_hold", "stash_front", "stash_gap", "stash_stand", "boss_hit_every", "weapons", "enemy_defs", "obstacle_defs",
 			"powers", "rf_cfg", "boss_cfg", "lt_cfg", "revive_cfg", "star_cfg", "lane", "squad_x", "_x_driven", "lane_w", "form_half",
 			"fig_cap", "fig_r", "gate_clear_s", "gang_priority", "gang_figs", "district", "caps",
 			"coin_ref", "tap_heat", "tap_auto", "tap_per", "heat_sum", "heat_t",
 			"tap_hold_s", "tap_decay_s", "_tap_hold", "traveled", "time", "state", "lose_cause", "clear", "clear_rush", "_has_foes",
 			"finish_at", "halted", "peak_squad", "revived", "shield_t", "kills", "rows_passed",
-			"_spawns", "_next_spawn", "_pending_hordes", "_wave_ats", "_next_id", "_armour_note_t"]:
+			"_spawns", "_next_spawn", "_stop_after", "_pending_hordes", "_wave_ats", "_next_id", "_armour_note_t"]:
 		c.set(p, get(p))
 	c.stats = stats
 	c.squad = squad.duplicate_squad()
