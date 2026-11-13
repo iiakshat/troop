@@ -18,7 +18,8 @@ extends Control
 ## close_overlay() -> bool closes the open panel (Android back: close it, else quit).
 ## After a win, lobby.map.advance_from(level_just_beaten) makes the pin hop to the next level.
 ## Debug args (after --): save=path (load that save, never write), building=<id> (open its
-## panel), focus=N (scroll the map to level N).
+## panel), focus=N (scroll the map to level N), collect=1 (collect the city after 1 s),
+## buy=<weapon id> (with panel=armory: buy one step after 1 s).
 
 signal play(level: int)
 signal play_pressed(level: int)
@@ -34,6 +35,7 @@ var _coins: HBoxContainer
 var _coin_icon: Control
 var _power: HBoxContainer
 var _shown_power := -1.0
+var _power_delta: PowerDelta
 var _hand: Control = null  # best-purchase pointer on the Station or Armory: tag (before ▸ after) + tapping hand
 var _hand_at := ""
 var _play: Button
@@ -126,6 +128,8 @@ func _build_top() -> void:
 		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
 			_open(ArmoryPanel.new()))
 	top.add_child(_power)
+	_power_delta = PowerDelta.make(_power, 30, 2.0)
+	_chrome.add_child(_power_delta)
 	var gap := Control.new()
 	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -450,7 +454,11 @@ func refresh() -> void:
 
 ## Squad Power pill: counts up with a bump when it grew (an upgrade was just bought).
 func _refresh_power() -> void:
+	if _shown_power >= 0.0 and is_instance_valid(_overlay) and not _overlay.is_queued_for_deletion():
+		return  # the pill counts up (and shows its +N) once the panel closes
 	var p := Game.squad_power()
+	if _shown_power >= 0.0 and absf(p - _shown_power) >= 0.05:
+		_power_delta.add(p - _shown_power)  # owner play-test: +N in green under the pill
 	if _shown_power >= 0.0 and p >= _shown_power + 0.05:
 		UiKit.pill_count(_power, _shown_power, p, 0.6, Economy.fmt_power)
 		UiKit.bump(_power, 1.2)
@@ -529,3 +537,9 @@ func _debug_args() -> void:
 		map.advance_from(int(adv))
 	if _arg("collect") != "":
 		get_tree().create_timer(1.0).timeout.connect(map.collect_any)
+	var buy := _arg("buy")
+	if buy != "":
+		# buy=<weapon id> with panel=armory: one step is bought after 1 s (screenshots).
+		get_tree().create_timer(1.0).timeout.connect(func():
+			if _overlay is ArmoryPanel:
+				(_overlay as ArmoryPanel).buy(buy))

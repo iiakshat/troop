@@ -171,6 +171,8 @@ func _armory_tap_buys() -> void:
 	_check(Armory.index(_g().save, id) == idx + 1, "a tap on a buy button buys one step")
 	_check(int(_g().save["coins"]) == coins - cost, "a tap pays the price once")
 	_check(s.scroll_vertical == before, "a tap does not scroll")
+	if not Armory.is_finale(id):
+		_check(String(_panel._power_delta.shown()).begins_with("+"), "the power pill shows +N in green after the buy (%s)" % _panel._power_delta.shown())
 
 
 ## A real finger: screen touch and drag events through Input, which emulates the mouse from

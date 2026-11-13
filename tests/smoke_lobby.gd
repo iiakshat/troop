@@ -81,6 +81,18 @@ func _run() -> void:
 	_check(String(_lobby._overlay.get_script().resource_path).ends_with("armory_panel.gd"), "the station's weapon card opens the armory")
 	_check(_lobby.close_overlay(), "back closes the armory opened from the station")
 
+	# Owner play-test: after a weapon buy, the lobby's Squad Power shows +N under it.
+	_g().save["coins"] = 100000
+	var arm: Control = load("res://src/ui/armory_panel.gd").new()
+	_lobby.open_panel(arm)
+	var pw: String = _lobby._power_delta.shown()
+	arm.call("buy", "knives")
+	_lobby.refresh()
+	_check(_lobby._power_delta.shown() == pw, "the lobby waits while the armory is open")
+	_check(_lobby.close_overlay(), "back closes the armory after a buy")
+	arm.free()  # what queue_free would do at the frame's end (tree_exited refreshes the lobby)
+	_check(String(_lobby._power_delta.shown()).begins_with("+"), "the lobby's Squad Power shows +N after the buy (%s)" % _lobby._power_delta.shown())
+
 	# A drag scrolls and does not tap.
 	var before: float = map._scroll
 	var start: Vector2 = Vector2(360, 600)
