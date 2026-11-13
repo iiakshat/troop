@@ -7,7 +7,7 @@
   "archetype": "rush",
   "target_win": 0.48,
   "target_ratio": 0.5,
-  "stars": {"star2": 26, "star3": 49},
+  "stars": {"star2": 15, "star3": 29},
   "charges": {"shield": 1, "bomb": 1},
   "look": "rush",
   "scroll_speed": 9.6,
@@ -38,7 +38,7 @@
     {"at": 356, "type": "obstacle", "kind": "barricade", "lane": 2, "hp": 7050, "block_reach": 12, "dmg_pct": 10},
     {"at": 364, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": -1550, "step": 568.8, "max": 1850, "inc": 142}, {"lane": 2, "op": "pct", "v": 30}]},
     {"at": 364, "type": "obstacle", "kind": "barrel", "lane": 0, "hp": 4000, "dmg": 315, "radius": 8, "kill": 1559},
-    {"at": 390, "type": "wave", "groups": [{"enemy": "thug", "n": 53797}, {"enemy": "grenadier", "n": 39163, "gap": 10}], "label": "AMBUSH"},
+    {"at": 390, "type": "wave", "groups": [{"enemy": "thug", "n": 88579}, {"enemy": "grenadier", "n": 64483, "gap": 10}], "label": "AMBUSH"},
     {"at": 422, "type": "finish"}
   ]
 }

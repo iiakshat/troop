@@ -7,7 +7,7 @@
   "archetype": "storm",
   "target_win": 0.27,
   "target_ratio": 0.45,
-  "stars": {"star2": 18, "star3": 34},
+  "stars": {"star2": 10, "star3": 20},
   "charges": {"shield": 1, "bomb": 1},
   "look": "storm",
   "need_upgrades": true,
@@ -46,7 +46,7 @@
     {"at": 494, "type": "obstacle", "kind": "pothole", "lane": 0, "fall_pct": 20},
     {"at": 528, "type": "wave", "groups": [{"enemy": "thug", "n": 6460}, {"enemy": "grenadier", "n": 2294, "gap": 10}]},
     {"at": 556, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 535}, {"lane": 1, "op": "pct", "v": -30, "inc": 10, "step": 1463.7, "max": 40}, {"lane": 2, "op": "mul", "k": 2}]},
-    {"at": 590, "type": "wave", "groups": [{"enemy": "thug", "n": 90566}, {"enemy": "molotov", "n": 134611, "gap": 10}], "label": "AMBUSH"},
+    {"at": 590, "type": "wave", "groups": [{"enemy": "thug", "n": 144906}, {"enemy": "molotov", "n": 215378, "gap": 10}], "label": "AMBUSH"},
     {"at": 622, "type": "finish"}
   ]
 }

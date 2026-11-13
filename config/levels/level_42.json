@@ -7,7 +7,7 @@
   "archetype": "rush",
   "target_win": 0.28,
   "target_ratio": 0.4,
-  "stars": {"star2": 17, "star3": 32},
+  "stars": {"star2": 10, "star3": 20},
   "charges": {"shield": 1, "bomb": 1},
   "look": "rush",
   "scroll_speed": 9.6,
@@ -36,7 +36,7 @@
     {"at": 334, "type": "wave", "groups": [{"enemy": "biker", "n": 20654}]},
     {"at": 358, "type": "gates", "gates": [{"lane": 1, "op": "mul", "k": 4}, {"lane": 2, "op": "recruit", "unit": "commando", "n": 260}]},
     {"at": 358, "type": "obstacle", "kind": "barrel", "lane": 0, "hp": 6900, "dmg": 455, "radius": 8, "kill": 2443},
-    {"at": 385, "type": "wave", "groups": [{"enemy": "knifer", "n": 425701}, {"enemy": "sniper_foe", "n": 224135, "gap": 14}], "label": "AMBUSH"},
+    {"at": 385, "type": "wave", "groups": [{"enemy": "knifer", "n": 590341}, {"enemy": "sniper_foe", "n": 310820, "gap": 14}], "label": "AMBUSH"},
     {"at": 422, "type": "finish"}
   ]
 }

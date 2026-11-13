@@ -87,7 +87,7 @@ const BANDS := {
 const TUTORIAL_LEVELS := 4      # L1-L4 are the tutorial band
 const HARD_SLOTS := [5, 9, 10]  # lieutenant, hard gauntlet, boss (when a level has no archetype)
 const HARD_ARCHETYPES := ["lieutenant", "hard_gauntlet", "boss"]
-const RANDOM_FLOOR := 0.05      # at least this share of random routes wins (floor= overrides it for a fit)
+const RANDOM_FLOOR := 0.01      # at least this share of random routes wins (spec v2.1 §2 said 5 %: DECISIONS.md)
 const NOISY_RUNS := 40          # noisy runs per first-try fail rate
 const NOISY_SHARE := 0.2        # the noisy player's share of random rows
 const FIRE_FROM := 11           # guard: from this level ...
@@ -1407,14 +1407,14 @@ func _back_off(n: int, base: Dictionary, sc: Dictionary, t0: int) -> Dictionary:
 	return good_p
 
 
-## One step easier: the last wave x0.85, every gang x0.9 (not below their bounds); fire_k and
-## boss_k x0.85 but not below the files' value (the fire is the floors' friend, _back_off's
-## caller turns it up again).
+## One step easier: the last wave x0.85, every gang x0.9, the boss's gun and barrage x0.85
+## (not below their bounds: a weaker squad stands under a boss longer); fire_k x0.85 but not
+## below the files' value (fire is the floors' friend: _back_off's caller turns it up again).
 func _easier(n: int, sc: Dictionary, base: Dictionary) -> Dictionary:
 	return {"k": maxf(float(sc["k"]) * 0.9, float(_axis_range(n, base, "k")[0])),
 		"kf": maxf(float(sc["kf"]) * 0.85, float(_axis_range(n, base, "kf")[0])),
 		"fk": maxf(float(sc["fk"]) * 0.85, minf(float(sc["fk"]), 1.0)),
-		"bk": maxf(float(sc.get("bk", 1.0)) * 0.85, minf(float(sc.get("bk", 1.0)), 1.0))}
+		"bk": maxf(float(sc.get("bk", 1.0)) * 0.85, float(_axis_range(n, base, "bk")[0]))}
 
 
 static func _lerp_scales(a: Dictionary, b: Dictionary, t: float) -> Dictionary:

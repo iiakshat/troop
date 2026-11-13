@@ -7,7 +7,7 @@
   "archetype": "night",
   "target_win": 0.54,
   "target_ratio": 0.58,
-  "stars": {"star2": 25, "star3": 48},
+  "stars": {"star2": 10, "star3": 20},
   "charges": {"shield": 1, "bomb": 1},
   "look": "night",
   "events": [
@@ -37,7 +37,7 @@
     {"at": 437, "type": "gates", "gates": [{"lane": 2, "op": "recruit", "unit": "sergeant", "n": 45}]},
     {"at": 437, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 60},
     {"at": 437, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 915, "dmg_pct": 25},
-    {"at": 463, "type": "wave", "groups": [{"enemy": "thug", "n": 3305}, {"enemy": "molotov", "n": 3854, "gap": 10}], "label": "BIG GANG"},
+    {"at": 463, "type": "wave", "groups": [{"enemy": "thug", "n": 5076}, {"enemy": "molotov", "n": 5919, "gap": 10}], "label": "BIG GANG"},
     {"at": 496, "type": "finish"}
   ]
 }

@@ -7,7 +7,7 @@
   "archetype": "hard",
   "target_win": 0.25,
   "target_ratio": 0.45,
-  "stars": {"star2": 27, "star3": 51},
+  "stars": {"star2": 13, "star3": 26},
   "charges": {"shield": 1, "bomb": 1},
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -1, "step": 0.5, "max": 4}, {"lane": 1, "op": "num", "v": 190}, {"lane": 2, "op": "foe_div", "k": 2}]},
@@ -44,7 +44,7 @@
     {"at": 559, "type": "wave", "groups": [{"enemy": "thug", "n": 20314}, {"enemy": "grenadier", "n": 6822, "gap": 10}]},
     {"at": 591, "type": "gates", "gates": [{"lane": 1, "op": "recruit", "unit": "swat", "n": 360}, {"lane": 2, "op": "num", "v": -1050, "step": 674.1, "max": 895, "inc": 81}]},
     {"at": 591, "type": "obstacle", "kind": "pothole", "lane": 0, "fall_pct": 30},
-    {"at": 625, "type": "wave", "groups": [{"enemy": "thug", "n": 113044}, {"enemy": "molotov", "n": 75544, "gap": 10}], "label": "LAST STAND"},
+    {"at": 625, "type": "wave", "groups": [{"enemy": "thug", "n": 238320}, {"enemy": "molotov", "n": 159262, "gap": 10}], "label": "LAST STAND"},
     {"at": 657, "type": "finish"}
   ]
 }

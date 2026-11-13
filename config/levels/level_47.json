@@ -7,7 +7,7 @@
   "archetype": "horde",
   "target_win": 0.21,
   "target_ratio": 0.4,
-  "stars": {"star2": 30, "star3": 57},
+  "stars": {"star2": 23, "star3": 44},
   "charges": {"shield": 1, "bomb": 1},
   "need_upgrades": true,
   "events": [
@@ -27,7 +27,7 @@
     {"at": 409, "type": "wave", "groups": [{"enemy": "thug", "n": 553680}]},
     {"at": 449, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 2}, {"lane": 2, "op": "foe_div", "k": 2}]},
     {"at": 449, "type": "obstacle", "kind": "pothole", "lane": 1, "fall": 14500},
-    {"at": 493, "type": "wave", "groups": [{"enemy": "thug", "n": 7084834}, {"enemy": "molotov", "n": 1416967, "gap": 10}], "label": "GANG WAR"},
+    {"at": 493, "type": "wave", "groups": [{"enemy": "thug", "n": 8858880}, {"enemy": "molotov", "n": 1771776, "gap": 10}], "label": "GANG WAR"},
     {"at": 525, "type": "finish"}
   ]
 }
