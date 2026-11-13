@@ -300,8 +300,9 @@ func _first_gang(view: LevelView) -> int:
 
 
 ## Spec v2.1 §1.1: incoming fire has its own tracer pool. A full squad volley (320) never hides
-## it and it never takes the squad's projectiles; one event draws at most 8 tracers, each on
-## screen for about a second.
+## it and it never takes the squad's projectiles; one event draws at most 8 tracers. Gunfire is
+## drawn as bullets that hit within Fx.GUN_MAX_S (owner 2026-11-13: a slow tracer read as a shot
+## to dodge that chased the squad across the lanes).
 func test_enemy_tracers_have_own_pool() -> void:
 	var parts := _view(_fight_level(), {"squad": 40})
 	var view: LevelView = parts[0]
@@ -320,10 +321,10 @@ func test_enemy_tracers_have_own_pool() -> void:
 	view._handle_events([{"type": "return_fire", "horde": id, "x": 0.0, "z": -48.0, "shots": 3, "lost": 0,
 		"blocked": true, "opening": false}])
 	eq(fx.enemy_projectiles(), one + 3, "three shots, three more tracers")
-	_tick(view, fx, 0.6)
-	eq(fx.enemy_projectiles(), one + 3, "still on screen after 0.6 s")
-	_tick(view, fx, 0.9)
-	eq(fx.enemy_projectiles(), 0, "landed within about 1.5 s")
+	_tick(view, fx, 1.0 / 60.0)
+	eq(fx.enemy_projectiles(), one + 3, "in the air for a moment")
+	_tick(view, fx, Fx.GUN_MAX_S + 1.0 / 60.0)
+	eq(fx.enemy_projectiles(), 0, "every shot hit within %.2f s" % Fx.GUN_MAX_S)
 	_drop(parts)
 
 
@@ -373,7 +374,7 @@ func test_volley_loss_lands_with_its_tracers() -> void:
 		if view.shown_total() < total:
 			landed = (i + 1) / 60.0
 			break
-	check(landed > 0.2 and landed <= 1.1, "the loss lands with the tracers (%.2f s)" % landed)
+	check(landed > 0.0 and landed <= Fx.GUN_MAX_S + 0.05, "the loss lands with the shots (%.2f s)" % landed)
 	eq(view.shown_total(), total - 3, "exactly the volley's loss")
 	eq(view._minus_label.text, "-3", "a red -3 over the squad")
 	check(view._allies.size() < shown, "hit figures fall (%d -> %d)" % [shown, view._allies.size()])

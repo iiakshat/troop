@@ -66,6 +66,7 @@ const RING_Y := 3.4              # the countdown ring over the squad (m)
 const LASER_FAR_W := 0.42        # a sniper's laser is this wide at his end (m) ...
 const LASER_NEAR_W := 0.1        # ... and this wide where it meets the lane (a tapered beam)
 const SPOT_Z := -2.0             # where a grenade, bottle or sniper round lands: just ahead of the hero
+const DODGE_TINT := Color(0.7, 0.95, 1.0)   # the ring round a squad that dodged a marked attack
 const THREAT_TINT := {"snipe": Color(1.0, 0.1, 0.1), "grenade": Color(1.0, 0.4, 0.06),
 	"firebomb": Color(1.0, 0.58, 0.05), "barrage": Color(1.0, 0.06, 0.18), "lt_barrage": Color(1.0, 0.16, 0.5),
 	"sweep": Color(1.0, 0.04, 0.3), "crane": Color(1.0, 0.5, 0.06), "steam": Color(1.0, 0.72, 0.3),
@@ -107,6 +108,16 @@ const LASER_POOL := 6           # sniper telegraph beams on screen at once
 const STEER_PER_SCREEN := 14.0   # metres of squad travel for a full-width finger drag
 const LANE_SLACK := 0.35         # metres past the midpoint before the lane flips (no flicker)
 const STEER_EASE := 16.0         # how quickly the squad catches the finger
+## A released swipe settles in the lane nearest the finger's spot pushed this far on in the
+## direction it was moving (owner 2026-11-13: a quick flick toward a lane takes that lane; it
+## used to spring back into the marked lane it was leaving unless it passed the midpoint + slack).
+const FLICK_BIAS := 0.9
+## The level's clock starts only once it is on screen (owner 2026-11-13: the squad had walked a
+## few metres while the level was still loading): after the warm frames, START_HOLD_FRAMES more
+## drawn frames, and no frame slower than START_SLOW_S (still loading), at most START_HOLD_MAX.
+const START_HOLD_FRAMES := 2
+const START_SLOW_S := 0.1
+const START_HOLD_MAX := 30
 
 var sim: LevelSim
 var world: World
@@ -133,6 +144,12 @@ var _charging: Array = []      # {kind, pos, target, flip}
 var _hordes: Dictionary = {}   # id -> {h, kind, offs, per, label, sub, flash}
 var _rows: Dictionary = {}     # id -> GateRowView
 var _squad_x := 0.0
+var _drawn_x := 0.0            # the squad x the formation was last drawn at (steering shift)
+var _steer_dir := 0            # the steering finger's last direction of travel (-1, 0, 1)
+var started := false           # the street's clock runs (false while the level is still loading)
+var _start_frames := 0         # frames drawn while it waited to start
+var clear_run := false         # LevelSim.clear: nothing left to fight, the squad runs to the stash
+var _run_t := 0.0              # the run cycle's clock (faster on the clear run)
 var _acc := 0.0
 var _last_traveled := 0.0
 var _time_scale := 1.0
@@ -151,7 +168,6 @@ var _warm_stash_at := Vector3.ZERO   # where the warm Bottle Shot stash stands (
 var _warm_left := 0            # compile during loading and not when a rank joins
 var _warm_at := Vector3(0, -8, -16)
 var _hq: Node3D
-var _hq_fill: MeshInstance3D
 var finale: BottleShot = null
 var _finale_warm: BottleShot = null   # this level's finale, built at load and resting (prewarm)
 var item_card: NewItemCard = null   # v2 §11: the "this is new" card + gold outline (new_item_card())
@@ -308,8 +324,11 @@ func _ready() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	# The steering finger can lift while the game is paused or the squad is down: let go of it
-	# anyway, or a revive starts with the squad parked between lanes on a stale anchor.
+	# anyway, or a revive starts with the squad parked between lanes on a stale anchor. Lifted
+	# in play, the swipe settles in the lane it was heading for (release_lane).
 	if event is InputEventScreenTouch and (event as InputEventScreenTouch).index == _steer_id:
+		if not (event as InputEventScreenTouch).pressed and not demo and _state == "play" and input_enabled:
+			settle_steer()
 		_reset_steer()
 	if demo or paused or _state != "play" or not input_enabled:
 		return
@@ -328,9 +347,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		if r == "tap" and from != null and _touch.in_zone(from, get_viewport().get_visible_rect().size):
 			tap()
 			_last_tap_pos = from
-		if t.index == _steer_id:
-			_steer_id = -1
-			_touching = false
 	elif event is InputEventScreenDrag:
 		var d := event as InputEventScreenDrag
 		if _touch.move(d.index, d.position, now) != "steer":
@@ -342,11 +358,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			_drag_from_x = (_touch.origin(d.index) as Vector2).x
 			_steer_from = _squad_x
 			_steer_x = _squad_x
+			_steer_dir = 0
 		if d.index != _steer_id:
 			return
 		var w := get_viewport().get_visible_rect().size.x
-		_steer_x = clampf(_steer_from + (d.position.x - _drag_from_x) / w * STEER_PER_SCREEN,
+		var nx := clampf(_steer_from + (d.position.x - _drag_from_x) / w * STEER_PER_SCREEN,
 			LANE_X[0], LANE_X[2])
+		if absf(nx - _steer_x) > 0.02:
+			_steer_dir = signi(int(signf(nx - _steer_x)))
+		_steer_x = nx
 		# Finger went past the edge: re-anchor so dragging back responds at once.
 		if _steer_x == LANE_X[0] or _steer_x == LANE_X[2]:
 			_drag_from_x = d.position.x
@@ -381,9 +401,34 @@ func _reset_steer() -> void:
 	_touching = false
 
 
+## The lane a swipe released at squad x `x`, moving in direction `dir` (-1, 0, 1), settles in:
+## the lane nearest x pushed FLICK_BIAS m on in that direction. A flick that has the squad a
+## third of the way over takes the next lane; one dragged back toward its lane keeps it.
+static func release_lane(x: float, dir: int) -> int:
+	var w: float = LANE_X[2] - LANE_X[1]
+	return clampi(int(round((x + FLICK_BIAS * signf(dir)) / w)) + 1, 0, 2)
+
+
+## The steering finger lifted in play: the squad commits to the lane the swipe was heading for
+## (and never springs back into the lane it was leaving, owner 2026-11-13).
+func settle_steer() -> void:
+	if not _touching:
+		return
+	var want := release_lane(_steer_x, _steer_dir)
+	for i in 2:
+		if sim.lane == want:
+			break
+		_move(signi(want - sim.lane))
+
+
+## How the squad's x follows its target (the finger, or the lane centre) over `d` seconds.
+static func steer_toward(x: float, target: float, d: float) -> float:
+	return lerpf(x, target, 1.0 - exp(-d * STEER_EASE))
+
+
 ## One tap: the hero's heat rises (LevelSim.tap, spec v2 §2) and his hand flicks.
 func tap() -> void:
-	if paused or _state != "play":
+	if paused or _state != "play" or clear_run:
 		return
 	taps += 1
 	_last_tap_s = Time.get_ticks_msec() / 1000.0
@@ -427,7 +472,7 @@ func _update_heat_ring(d: float) -> void:
 	if sim.get("tap_heat") == null:
 		var tc: Dictionary = Game.units.get("hero", {}).get("tap", {})
 		_heat_local = maxf(_heat_local - d / maxf(float(tc.get("decay_s", 1.0)), 0.05), 0.0)
-	var show: bool = not demo and _state == "play" and not _allies.is_empty() \
+	var show: bool = not demo and _state == "play" and not clear_run and not _allies.is_empty() \
 		and _allies[0]["kind"] == "hero" and sim.squad.hero_alive()
 	_heat_ring.visible = show
 	if not show:
@@ -472,11 +517,12 @@ func revive(troops: int) -> bool:
 
 
 ## A power button press. Ignored (nothing spent) while the street is frozen (pause, a first-run
-## lesson's hold), and when it comes within input.power_guard_s of a fire tap that landed right
-## next to `button` (screen rect): a thumb tapping fast that slid onto the button. A press with
-## the other thumb while tapping still works. The sim also takes one bomb at a time.
+## lesson's hold, the level still loading), and when it comes within input.power_guard_s of a
+## fire tap that landed right next to `button` (screen rect): a thumb tapping fast that slid onto
+## the button. A press with the other thumb while tapping still works. The sim also takes one
+## bomb at a time.
 func use_power(id: String, button := Rect2()) -> bool:
-	if paused or _state != "play" or hold or _time_scale <= 0.0:
+	if paused or _state != "play" or hold or _time_scale <= 0.0 or not started:
 		return false
 	var guard := float(Game.units.get("input", {}).get("power_guard_s", 0.0))
 	if guard > 0.0 and button.has_area() and Time.get_ticks_msec() / 1000.0 - _last_tap_s < guard 			and button.grow(button.size.x * 0.5).has_point(_last_tap_pos):
@@ -509,12 +555,27 @@ func _process(delta: float) -> void:
 		return
 	match _state:
 		"play":
+			if not started:
+				if not _ready_to_start(delta):
+					# Still loading: the level is drawn (and its warm frames compile) but the
+					# street's clock waits, so the squad starts where the level starts. The
+					# squad stands (no fire, no run) until it does.
+					_update_visuals(delta)
+					return
+				started = true
+				_acc = 0.0
+				delta = DT   # the first played frame is one step, never the load's long frame
+				if perf_on:
+					perf_marks.append("sim_start:%d" % _start_frames)
+					print("LEVEL start: the clock starts after %d drawn frames, sim.time %.3f traveled %.3f" % [_start_frames, sim.time, sim.traveled])
 			_update_time_scale(delta)
 			var d := delta * _time_scale
 			_acc += d
 			var steps := 0
-			# The sim hits obstacles where the squad really is (between lanes while steering).
-			# Autoplay keeps lane centres so its runs match the headless routes.
+			# The squad's steering for this frame first: the sim decides every hit (obstacles,
+			# a telegraphed attack landing) by where the squad is drawn this frame, between
+			# lanes while steering. Autoplay keeps lane centres so its runs match the headless routes.
+			_steer(d)
 			if input_enabled:
 				sim.set_squad_x(_squad_x)
 			while _acc >= DT and steps < 8:
@@ -533,7 +594,7 @@ func _process(delta: float) -> void:
 				fx.burst(Vector3(_squad_x, 0.1, 1.2), Color(0.75, 0.7, 0.62), 18, 3.0, 0.4, 0.6, 1.0, 2.0)
 				Sfx.play("thunk", -6.0, 0.7)
 			_was_standoff = stand
-			_update_visuals(d)
+			_update_visuals(d, true)
 		"finale", "done_win":
 			fx.scroll_speed = 0.0
 			_update_visuals(delta)
@@ -549,6 +610,18 @@ func _process(delta: float) -> void:
 			_update_visuals(d)
 			if _end_t > 1.2 and _end_t - delta <= 1.2:
 				finished.emit({"won": false, "cause": sim.lose_cause, "kills": sim.kills, "level": level_id})
+
+
+## True once the level may start its clock (see START_HOLD_FRAMES): the warm frames are done,
+## START_HOLD_FRAMES more frames were drawn, and this frame was not a slow loading one (or the
+## wait reached START_HOLD_MAX frames).
+func _ready_to_start(delta: float) -> bool:
+	_start_frames += 1
+	if _warm_left > 0:
+		return false
+	if _start_frames >= START_HOLD_MAX:
+		return true
+	return _start_frames > WARM_FRAMES + START_HOLD_FRAMES and delta < START_SLOW_S
 
 
 ## The street's speed this frame (1 = real time; 0 only while a first-run tutorial holds it).
@@ -660,6 +733,8 @@ func _handle_events(events: Array) -> void:
 				hint.emit(e["ev"])
 			"finish_spawn":
 				_spawn_finish(float(e["at"]))
+			"street_clear":
+				clear_run = true   # the squad lowers its guns and runs to the stash
 			"finish":
 				_land_impacts(true)
 				_clear_threats()
@@ -1017,9 +1092,11 @@ func _on_bomb(e: Dictionary) -> void:
 
 
 ## Spec v2.1 §1.1: a gang firing back. Big muzzle flashes on its front shooters (bigger still
-## for its opening volley), up to 8 orange-red tracers that take about a second to reach the
-## squad (or the shield), and the loss lands with them: the figures they hit fall, a red -N, the
-## troop pill pulses, a short buzz.
+## for its opening volley), up to 8 amber gunfire streaks that hit within Fx.GUN_MAX_S (the
+## squad or the shield), and the loss lands with them: the figures they hit fall, a red -N, the
+## troop pill pulses, a short buzz. Gunfire cannot be dodged (the sim took the loss when it
+## fired), so it is drawn as bullets, never as a slow red shot that seems to chase a squad
+## changing lane (owner 2026-11-13); the dodgeable attacks are red, slow and lane-marked.
 func _on_return_fire(e: Dictionary) -> void:
 	var hv: Dictionary = _hordes.get(e["horde"], {})
 	var opening := bool(e.get("opening", false))
@@ -1033,14 +1110,14 @@ func _on_return_fire(e: Dictionary) -> void:
 		hv["fire_t"] = 0.35
 	for f in froms:
 		fx.muzzle_big(f, _flash_k(f) * (1.8 if opening else 1.4))
-	_volley(froms, int(e.get("lost", 0)), bool(e.get("blocked", false)), "etracer", mini(shots, n))
+	_volley(froms, int(e.get("lost", 0)), bool(e.get("blocked", false)), "egun", mini(shots, n))
 	if _rf_sfx_t <= 0.0 or opening:
 		_rf_sfx_t = 0.09
 		Sfx.play("shot", -4.0 if opening else -8.0, randf_range(0.8, 0.95))
 
 
 ## Spec v2.1 §1.3: the boss's (or lieutenant's) gun: a big flash at his gun hand and two heavy
-## tracers; the loss lands with them and shows its -N like any other.
+## gunfire streaks (undodgeable, like a gang's); the loss lands with them and shows its -N.
 func _on_boss_shot(e: Dictionary) -> void:
 	var hv: Dictionary = _hordes.get(e["horde"], {})
 	var from := Vector3(0, 4.0, -40.0)
@@ -1048,7 +1125,7 @@ func _on_boss_shot(e: Dictionary) -> void:
 		hv["shoot_flash"] = 0.2
 		from = _boss_gun(hv)
 	fx.muzzle_big(from, _flash_k(from) * 1.6)
-	_volley([from, from + Vector3(0.25, -0.15, 0.1)], int(e.get("lost", 0)), bool(e.get("blocked", false)), "etracer_big")
+	_volley([from, from + Vector3(0.25, -0.15, 0.1)], int(e.get("lost", 0)), bool(e.get("blocked", false)), "egun_big")
 	Sfx.play("blast", -3.0, 0.85)
 
 
@@ -1440,7 +1517,8 @@ func _on_attack_land(e: Dictionary) -> void:
 			fx.muzzle_big(from, 2.0)
 			for i in 6:
 				var to := Vector3(LANE_X[lane] + randf_range(-1.0, 1.0), 0.6 + randf() * 0.6, randf_range(-2.0, 1.0))
-				fx.enemy_shoot(from, to, false, "etracer", 0.18 + 0.04 * i)
+				# A burst that hits at the sim's landing (not a beat after it).
+				fx.enemy_shoot(from, to, false, "etracer", 0.05 + 0.025 * i)
 			_sfx("shot_rifle", "shot", -3.0, 0.8)
 			world.shake(0.5)
 		"barrage", "lt_barrage", "sweep":
@@ -1450,6 +1528,11 @@ func _on_attack_land(e: Dictionary) -> void:
 			Sfx.play("boom", 0.0, 0.8)
 			world.shake(0.7 if kind == "lt_barrage" else 1.0)
 	var lost := int(e.get("lost", 0))
+	if not bool(e.get("hit", true)) and _state == "play":
+		# Dodged: the squad left the marked lane in time. A pale whoosh ring round it says so
+		# (the impact above lands on the empty lane).
+		fx.ring(Vector3(_squad_x, 0.25, 0.2), DODGE_TINT, 28, 7.0, 0.2)
+		Sfx.play("swoosh", -8.0, 1.5)
 	if blocked:
 		Sfx.play("blocked")
 		if _shield_fx == null or not _shield_fx.is_up():
@@ -2181,14 +2264,20 @@ func _place_of(slot: int, n: int) -> int:
 
 # ---------------------------------------------------------------- visuals
 
-func _update_visuals(d: float) -> void:
+## The squad's x follows the finger while one steers, else its lane's centre.
+func _steer(d: float) -> void:
 	var lane_target: float = _steer_x if _touching else LANE_X[sim.lane]
-	var x_before := _squad_x
 	if demo:
 		_squad_x = move_toward(_squad_x, lane_target, 1.0)
 	else:
-		_squad_x = lerpf(_squad_x, lane_target, 1.0 - exp(-d * STEER_EASE))
-	var shift := _squad_x - x_before
+		_squad_x = steer_toward(_squad_x, lane_target, d)
+
+
+func _update_visuals(d: float, steered := false) -> void:
+	if not steered:
+		_steer(d)
+	var shift := _squad_x - _drawn_x
+	_drawn_x = _squad_x
 	var target_pos = _target_point()
 	_anim_t += d
 	_hero_knife_t += d
@@ -2207,7 +2296,9 @@ func _update_visuals(d: float) -> void:
 		elif _bomb_throw_t > Crowd.clip_length(_throw_clip()) / _bomb_speed and _bomb_launch.is_empty():
 			_bomb_throw_t = -1.0
 	_tick_bomb_mark(d)
-	var moving := demo or _state == "play" or _state == "done"
+	# Waiting to start, the squad stands; on the clear run its legs keep up with the street.
+	var moving := demo or (_state == "play" and started) or _state == "done"
+	_run_t += d * (maxf(sim.S / maxf(sim.S_base, 0.01), 1.0) if clear_run and _state == "play" else 1.0)
 
 	for k in _crowds:
 		(_crowds[k] as Crowd).begin()
@@ -2229,7 +2320,9 @@ func _update_visuals(d: float) -> void:
 		a["pos"] = pos
 		a["flash"] = maxf(float(a["flash"]) - d * 3.0, 0.0)
 		var aim := 0.0
-		if not demo and _state == "play":
+		# Nobody fires before the level starts, nor on the clear run to the stash (owner
+		# 2026-11-13: nobody is left to shoot at).
+		if not demo and _state == "play" and started and not clear_run:
 			aim = 1.0
 			a["fire_t"] = float(a["fire_t"]) - d
 			# The hero's hands are busy with the bomb: no knife throws drawn until it is gone.
@@ -2281,7 +2374,7 @@ func _update_visuals(d: float) -> void:
 		elif aim > 0.0:
 			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis.scaled(Vector3.ONE * (1.0 if a["kind"] == "hero" else troop_k)), pos), "shoot", _anim_t + ph, float(a["flash"]))
 		elif moving:
-			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis.scaled(Vector3.ONE * (1.0 if a["kind"] == "hero" else troop_k)), pos), "run", (_anim_t + ph) * RUN_SPEED, float(a["flash"]))
+			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis.scaled(Vector3.ONE * (1.0 if a["kind"] == "hero" else troop_k)), pos), "run", (_run_t + ph) * RUN_SPEED, float(a["flash"]))
 		else:
 			(_crowds[a["kind"]] as Crowd).push(Transform3D(basis.scaled(Vector3.ONE * (1.0 if a["kind"] == "hero" else troop_k)), pos), "idle", _anim_t + ph, float(a["flash"]))
 
@@ -3104,12 +3197,8 @@ func _build_finish() -> void:
 	_hq = FinaleStash.facade(district)
 	_hq.position = Vector3(0, 0, -16)
 	_finish.add_child(_hq)
-	var bar_bg := World._box(Vector3(6.2, 0.5, 0.2), Color(0.1, 0.1, 0.1))
-	bar_bg.position = Vector3(0, 7.3, 0)
-	_hq.add_child(bar_bg)
-	_hq_fill = World._box(Vector3(6.0, 0.36, 0.22), Color("e0484f"))
-	_hq_fill.position = Vector3(0, 7.3, 0.02)
-	_hq.add_child(_hq_fill)
+	# (No bar over it, owner 2026-11-13: a full red "life bar" on the stash that nothing ever
+	# drained, left over from the v1 HQ, read as health the squad had to shoot down.)
 
 
 func _begin_strike() -> void:

@@ -30,6 +30,16 @@ const ENEMY_FAR_M := 9.0
 const ENEMY_FAR_MAX := 5.0
 const ENEMY_TRACER_COLOR := Color(1.0, 0.3, 0.1)   # clearly not the squad's pale yellow-white
 const ENEMY_CORE_COLOR := Color(1.0, 0.78, 0.35)
+## Gang and boss gunfire (return fire, the boss's gun: owner 2026-11-13) cannot be dodged: the
+## sim takes its loss when it is fired. It is drawn as what it is, a bullet: a fast amber streak
+## that hits within GUN_MAX_S, never a slow red projectile that seems to chase a squad changing
+## lane. Red, slow and lane-marked stays the look of the attacks a lane change dodges.
+const GUN_SPEED := 150.0
+const GUN_MIN_S := 0.08
+const GUN_MAX_S := 0.3
+const GUN_SCALE := {"egun": Vector3(1.0, 1.0, 3.2), "egun_big": Vector3(1.7, 1.7, 3.6)}
+const GUN_COLOR := Color(1.0, 0.72, 0.18)
+const GUN_CORE_COLOR := Color(1.0, 0.97, 0.8)
 
 var font: Font
 
@@ -39,10 +49,11 @@ var _parts: Array = []     # {pos, vel, t, life, col, size, grav}
 var _knife_mm: MultiMesh
 var _bullet_mm: MultiMesh
 var _etracer_mm: MultiMesh # enemy tracers and sniper rounds (orange-red)
+var _egun_mm: MultiMesh    # gang and boss gunfire (amber streaks, GUN_SCALE)
 var _gren_mm: MultiMesh    # grenades and the boss's barrage shells (lit, tumbling)
 var _lob_mm: MultiMesh     # firebomb bottles (lit, tumbling)
 var _bomb_mm: MultiMesh    # the hero's thrown bombs (round, with a sparking fuse)
-var _n := PackedInt32Array([0, 0, 0, 0, 0, 0])   # per frame: knives, bullets, lobs, bombs, enemy tracers, grenades
+var _n := PackedInt32Array([0, 0, 0, 0, 0, 0, 0])   # per frame: knives, bullets, lobs, bombs, enemy tracers, grenades, gunfire
 ## The squad's x (LevelView sets it every frame): incoming fire aimed at the squad follows it
 ## across the lanes, so a tracer always ends on the figure it hits.
 var track_x := 0.0
@@ -73,6 +84,7 @@ func _ready() -> void:
 	var em := _unshaded_vertex_mat() as StandardMaterial3D
 	em.vertex_color_is_srgb = true   # the authored orange-red, not a washed-out linear one
 	_etracer_mm = _mm(_enemy_tracer_mesh(), MAX_ENEMY_PROJ, false, em)
+	_egun_mm = _mm(_gunfire_mesh(), MAX_ENEMY_PROJ, false, em)
 	_gren_mm = _mm(_grenade_mesh(), MAX_LOB, false, _lit_vertex_mat())
 	_lob_mm = _mm(_bottle_mesh(), MAX_LOB, false, _lit_vertex_mat())
 	# The bomb is drawn flat and near-black like the HUD's bomb icon, with a pale rim.
@@ -98,6 +110,7 @@ func prewarm(at: Vector3) -> void:
 	lob(at, at + Vector3(0, 0, -0.5), 0.3, 0.2)
 	bomb(at, at + Vector3(0, 0, -0.5), 0.3, 0.2)
 	enemy_shoot(at, at + Vector3(0, 0, 0.5), false)
+	enemy_shoot(at, at + Vector3(0, 0, 0.5), false, "egun", 0.3)
 	enemy_lob("grenade", at, at + Vector3(0, 0, 0.5), 0.3, 0.2)
 	blast(at, 1.0, 0.0)
 	burst(at, Color.WHITE, 2, 0.1, 0.2, 0.1, 0.0, 0.0)
@@ -173,7 +186,7 @@ func enemy_shoot(from: Vector3, to: Vector3, track := true, kind := "etracer", t
 	if _eproj.size() >= MAX_ENEMY_PROJ:
 		return 0.0
 	if t < 0.0:
-		t = enemy_flight(from.distance_to(to))
+		t = gun_flight(from.distance_to(to)) if GUN_SCALE.has(kind) else enemy_flight(from.distance_to(to))
 	t = maxf(t, 0.05)
 	var p := {"pos": from, "vel": (to - from) / t, "t": t, "kind": kind, "spin": 0.0, "grav": 0.0}
 	if track:
@@ -186,6 +199,11 @@ func enemy_shoot(from: Vector3, to: Vector3, track := true, kind := "etracer", t
 ## How long an enemy tracer flies `dist` metres (about 1 s from 50 m).
 static func enemy_flight(dist: float) -> float:
 	return clampf(dist / ENEMY_TRACER_SPEED, ENEMY_TRACER_MIN_S, ENEMY_TRACER_MAX_S)
+
+
+## How long a gunfire streak (GUN_SCALE kinds) flies `dist` metres: a bullet, at most GUN_MAX_S.
+static func gun_flight(dist: float) -> float:
+	return clampf(dist / GUN_SPEED, GUN_MIN_S, GUN_MAX_S)
 
 
 ## A lobbed enemy projectile in the incoming pool: "lob" (a molotov's bottle), "grenade" or
@@ -355,6 +373,7 @@ func _tick_proj(delta: float) -> void:
 	_bomb_mm.visible_instance_count = _n[3]
 	_etracer_mm.visible_instance_count = _n[4]
 	_gren_mm.visible_instance_count = _n[5]
+	_egun_mm.visible_instance_count = _n[6]
 
 
 ## Moves and draws one projectile list (the squad's or the incoming pool), counting into _n.
@@ -419,6 +438,12 @@ func _tick_list(list: Array, delta: float, grow: bool) -> void:
 			basis = basis * Basis(Vector3.RIGHT, float(p["spin"]))
 			_knife_mm.set_instance_transform(_n[0], Transform3D(basis, p["pos"]))
 			_n[0] += 1
+		elif GUN_SCALE.has(kind):
+			if _n[6] < MAX_ENEMY_PROJ:
+				var gs: Vector3 = GUN_SCALE[kind]
+				var gf := clampf((-(p["pos"] as Vector3).z + 6.0) / ENEMY_FAR_M, 1.0, ENEMY_FAR_MAX) if grow else 1.0
+				_egun_mm.set_instance_transform(_n[6], Transform3D(basis.scaled_local(gs * Vector3(gf, gf, sqrt(gf))), p["pos"]))
+				_n[6] += 1
 		elif ENEMY_SCALE.has(kind):
 			if _n[4] < MAX_ENEMY_PROJ:
 				var es: Vector3 = ENEMY_SCALE[kind]
@@ -610,6 +635,15 @@ func _enemy_tracer_mesh() -> Mesh:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	_cube(st, Vector3(0, 0, 0.12), Vector3(0.15, 0.15, 0.9), ENEMY_TRACER_COLOR)
 	_cube(st, Vector3(0, 0, -0.42), Vector3(0.19, 0.19, 0.26), ENEMY_CORE_COLOR)
+	return st.commit()
+
+
+## Gunfire (GUN_SCALE): an amber streak with a white-hot head (the end that leads).
+func _gunfire_mesh() -> Mesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_cube(st, Vector3(0, 0, 0.1), Vector3(0.1, 0.1, 0.9), GUN_COLOR)
+	_cube(st, Vector3(0, 0, -0.42), Vector3(0.13, 0.13, 0.18), GUN_CORE_COLOR)
 	return st.commit()
 
 
