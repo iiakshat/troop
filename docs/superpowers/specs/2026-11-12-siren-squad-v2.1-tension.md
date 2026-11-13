@@ -172,7 +172,7 @@ Targets per level:
 | hard levels: slot 9 of each district, lieutenants, bosses | 35-60% | 30-40% |
 
 - Random routes are only a floor: at least 5% of random routes win, so the level is never a single-path puzzle.
-  - Calibrator, 2026-11-13: the floor is **1%** (owner to confirm). At 5%, the gate spread stopped 35 of 50 levels above the greedy band. At 1%, 35 of 50 reach it, and the noisy first-try fail rate rises to a median of about 25-30% on normal levels. See DECISIONS.md.
+  - Calibrator, 2026-11-13: the floor went to 1% for one pass (at 5% the gate spread stopped 35 of 50 levels above the greedy band). The review fix gave every row a second good lane, and the floor is back at **5%** on all 50 levels (`tune.gd RANDOM_FLOOR`). See DECISIONS.md.
 - **No-ad guarantee**: the stored route at the no-ad pace (power profile, no powers) wins every level, so replays always get through.
 
 **Guard checks** (`tune.gd checks=1` and the level test), so this never silently regresses:
