@@ -36,16 +36,18 @@
       "per_row": 4, "spacing": 0.9, "row_h": 0.9, "y0": 1.45, "amp_scale": 1.0
     },
     "pistol": {
-      "_note": "First person, iron sights. mag rounds per magazine; reload_s = reload animation; kick_deg = muzzle rise per shot, recovered over recover_s. speed = bullet speed along the range (m/s); slow = time scale while a bullet is out.",
+      "_note": "First person, iron sights. mag rounds per magazine; reload_s = reload animation; kick_deg = muzzle rise per shot, recovered over recover_s. speed = bullet speed along the range (m/s); slow = time scale while a bullet is out. Bullet cam (pistol, bow, sniper; a shot that will break a bottle; a tap skips it): the flight lasts about cam_s real seconds (time scale = flight / cam_s, at least cam_min_scale), filmed by a camera cam_rig = [back, side, up, lead] metres from the projectile (cam_bullet = the round's drawn scale); the camera stops cam_stop metres short of the bottle and holds on the shatter for cam_hold real seconds while the clock comes back from cam_hold_scale to exactly 1.",
       "distance": 13.0, "speed": 120.0, "gravity": 9.8, "hit_radius": 0.15, "aspect": 1.7,
       "eye_y": 1.62, "mag": 6, "reload_s": 1.15, "kick_deg": 4.5, "recover_s": 0.4, "fov": 24.0, "zero": 10.0,
       "sens": 0.06, "slow": 0.3,
+      "cam_s": 0.8, "cam_min_scale": 0.05, "cam_stop": 1.6, "cam_hold": 0.6, "cam_hold_scale": 0.35, "cam_bullet": 3.5, "cam_rig": [0.25, 0.06, 0.2, 0.25],
       "per_row": 4, "spacing": 0.75, "row_h": 0.8, "y0": 1.45, "amp_scale": 0.8
     },
     "bow": {
-      "_note": "First person. Hold to draw (draw_s to full), drag to aim, release to loose. The pin sight is set for a full draw with no wind at the base distance; past steady_s the arm starts to shake. Wind pushes sideways (difficulty.wind x wind).",
+      "_note": "First person. Hold to draw (draw_s to full), drag to aim, release to loose. The pin sight is set for a full draw with no wind at the base distance; held at full draw past steady_s the tired arm makes the pin drift slowly (at most shake_deg, eased in over 2.5 s, under 1 Hz) and its ring turns amber (owner 2026-11-13: it used to shake at 2-5 Hz up to 1.35 degrees). Wind pushes sideways (difficulty.wind x wind). Bullet cam numbers: see pistol.",
       "distance": 17.0, "speed_min": 12.0, "speed_max": 30.0, "gravity": 9.8, "hit_radius": 0.19, "aspect": 1.5,
-      "eye_y": 1.6, "draw_s": 0.8, "steady_s": 2.2, "shake_deg": 0.9, "wind": 1.0, "fov": 28.0, "sens": 0.06,
+      "eye_y": 1.6, "draw_s": 0.8, "steady_s": 2.5, "shake_deg": 0.35, "wind": 1.0, "fov": 28.0, "sens": 0.06,
+      "cam_s": 0.95, "cam_min_scale": 0.05, "cam_stop": 2.6, "cam_hold": 0.6, "cam_hold_scale": 0.35, "cam_rig": [0.35, 0.1, 0.22, 0.6],
       "per_row": 4, "spacing": 0.8, "row_h": 0.85, "y0": 1.2, "amp_scale": 0.8
     },
     "stars": {
@@ -55,11 +57,12 @@
       "per_row": 4, "spacing": 0.85, "row_h": 0.9, "y0": 1.4, "amp_scale": 0.9
     },
     "sniper": {
-      "_note": "Rooftop to rooftop. Touch to raise the scope, drag to aim, release to fire. Sway (breathing) + tremor; for steady_s after scoping in the sway drops to steady_k, then grows to worse_k. Zeroed at `zero` metres. cycle_s = bolt action. bullet_cam = time scale of the slow-motion bullet camera on a hit. fog_mult = the street fog's density while the far roof is shot (a daylight district's fog washes the set out; v2.1 guest snipers).",
+      "_note": "Rooftop to rooftop. Touch to raise the scope, drag to aim, release to fire. Sway = slow breathing (sway_deg) + slow tremor (tremor_deg, about 1.3 Hz), functions of the time held: steady_k x sway_deg until steady_s after scoping in, then it rises smoothly over worse_s to worse_k (at most 1) and stays there, shown by the breath arc on the scope's rim (owner 2026-11-13: worse_k was 2.4 with a 30 Hz tremor, the 'aggressive' jump after 2-3 s). Zeroed at `zero` metres. cycle_s = bolt action. Bullet cam numbers: see pistol. fog_mult = the street fog's density while the far roof is shot (a daylight district's fog washes the set out; v2.1 guest snipers).",
       "distance": 105.0, "speed": 300.0, "gravity": 9.8, "zero": 100.0, "hit_radius": 0.19, "aspect": 1.6,
       "eye_y": 1.6, "elevation": 14.0, "fov": 46.0, "scope_fov": 2.8, "sens": 0.012,
-      "sway_deg": 0.28, "tremor_deg": 0.05, "steady_s": 1.6, "steady_k": 0.15, "worse_k": 2.4, "worse_s": 3.0,
-      "cycle_s": 0.95, "bullet_cam": 0.22, "fog_mult": 0.35,
+      "sway_deg": 0.2, "tremor_deg": 0.02, "steady_s": 2.5, "steady_k": 0.15, "worse_k": 0.5, "worse_s": 4.0,
+      "cycle_s": 0.95, "fog_mult": 0.35,
+      "cam_s": 1.1, "cam_min_scale": 0.05, "cam_stop": 3.0, "cam_hold": 0.7, "cam_hold_scale": 0.3, "cam_bullet": 5.0, "cam_rig": [0.25, 0.06, 0.2, 0.25],
       "per_row": 4, "spacing": 0.9, "row_h": 0.9, "y0": 1.2, "amp_scale": 1.0
     }
   }

@@ -38,6 +38,7 @@ const STAGE_KNIFE_IN := 0.04    # metres a stuck knife's tip sinks into the plan
 const INTRO := 0.75             # real seconds of the burst-in camera move
 const IN_HEAD_R := 0.6          # m from the eye: the camera is in the hero's head (his body is hidden)
 const INTRO_HEAD_R := 1.4       # the burst-in rushing into his head hides him from this far out
+const FILM_HEAD_R := 1.8        # the bullet cam hides him while it is this close to his eye
 
 ## LevelView's level-load prewarm (spec v2 §3): the finale is built while the level loads
 ## (`dormant`: stash, bottles, HUD, weapon), drawn out of sight for the first frames with one of
@@ -80,6 +81,7 @@ var _rack: Node3D
 var _reticle: MeshInstance3D
 var _aim := Vector2(0, 1.8)
 var _aiming := false
+var _aim_finger := 0          # touch index of the finger aiming the knife
 var _knife: Node3D = null
 var _knife_from := Vector3.ZERO
 var _knife_to := Vector3.ZERO   # aimed point (BottleLogic's line)
@@ -379,28 +381,43 @@ func _notification(what: int) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _mode:
+		var st := event as InputEventScreenTouch
+		if st != null and st.pressed and _mode.film_skip() and not _mode.input_while_busy:
+			return   # a tap skips the bullet cam (the bow still gets it: a held finger draws next)
 		if _state == "aim" or (_mode.input_while_busy and _state in ["intro", "flying", "impact"]):
 			_mode.handle_input(event)
+		elif st != null and not st.pressed:
+			_mode.forget_finger(st.index)
 		return
 	if _state != "aim":
 		return
 	var pos := Vector2.ZERO
 	var pressed := false
 	var released := false
+	var index := 0
 	if event is InputEventScreenTouch:
 		pos = (event as InputEventScreenTouch).position
+		index = (event as InputEventScreenTouch).index
 		pressed = event.pressed
 		released = not event.pressed
 	elif event is InputEventScreenDrag:
 		pos = (event as InputEventScreenDrag).position
+		index = (event as InputEventScreenDrag).index
 		pressed = true
 	else:
 		return
+	# Only the finger that pressed first aims (a thumb resting on the glass used to make the
+	# ring leap between the two fingers).
+	if _aiming and index != _aim_finger:
+		return
 	if pressed:
 		_aiming = true
+		_aim_finger = index
 		_aim = _screen_to_wall(pos)
 	elif released and _aiming:
 		_aiming = false
+		if (event as InputEventScreenTouch).canceled:
+			return
 		_aim = _screen_to_wall(pos)
 		_throw_knife(_aim)
 
@@ -955,6 +972,10 @@ func camera_in_head() -> bool:
 	var d := _cam.origin.distance_to(e)
 	if _state == "intro" and _rest_view().origin.distance_to(e) < IN_HEAD_R:
 		return d < INTRO_HEAD_R
+	if _mode and _mode.filming():
+		# The bullet cam starts behind the arrow or round, which leaves from his face: from
+		# behind his head his hair would fill the first frames.
+		return d < FILM_HEAD_R
 	return d < IN_HEAD_R
 
 

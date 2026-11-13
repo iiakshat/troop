@@ -5,9 +5,13 @@ extends FinaleWeapon
 ## pin over a bottle, release to loose. The bow stands at the left edge, low, and swings to point
 ## at the pin, so neither it nor the nocked arrow ever covers a bottle. The pin is set for a
 ## full draw with no wind at the base distance: a weak draw drops short, wind (shown top left,
-## different every arrow) pushes it sideways. Held at full draw past steady_s the pin shakes. Arrows leave the bow, fly a real
-## gravity arc and stick where they land. A finger held down while an arrow is still out starts
-## the next draw as soon as the bow is ready, so no press (and no arrow) is ever lost.
+## different every arrow) pushes it sideways. Held at full draw past steady_s the arm tires:
+## the pin starts a slow, small drift (shake_deg at most, eased in over TIRE_S, a function of the
+## time held, never of frames) and its ring turns from white to amber, so the change is seen.
+## Arrows leave the bow, fly a real gravity arc and stick where they land; an arrow that will
+## break a bottle is filmed in slow motion from just behind and above it (the bullet cam,
+## FinaleWeapon). A finger held down while an arrow is still out starts the next draw as soon
+## as the bow is ready, so no press (and no arrow) is ever lost.
 
 const BOW_AT := Vector3(-0.077, -0.108, -0.42)  # the grip in camera space (left edge, low)
 const BOW_SCALE := 0.4                           # the whole bow, so riser and arrow fit the narrow lens
@@ -15,6 +19,7 @@ const CANT := 0.28                               # radians the bow leans left (u
 const DRAW_MAX := 0.42                           # metres (bow scale) the nock comes back at full draw
 const FLY_SCALE := 1.4                           # a flying arrow is drawn larger to read at range
 const BLEND_M := 4.0                             # metres over which a loosed arrow joins the aim line
+const TIRE_S := 2.5                              # seconds past steady_s for the drift to reach shake_deg
 
 var _bow: Node3D
 var _arrow: Node3D                # the nocked arrow (child of the bow)
@@ -24,6 +29,7 @@ var _held := 0.0                  # seconds at full draw
 var _flight: Dictionary = {}      # {node, o, v, t0, wind, res, end, streak, from}
 var _stuck: Array = []            # {node, t, basis, tip}
 var _hold := 0.0
+var _film_target := Vector3.ZERO  # the bottle the bullet cam holds on (world)
 var _shake := Vector2.ZERO
 var _rest := Vector2.ZERO         # (yaw, pitch) of the still camera
 var _rng := RandomNumberGenerator.new()
@@ -107,6 +113,10 @@ func handle_input(event: InputEvent) -> void:
 					_loose(velocity(aim_dir(_shake.x, _shake.y), power_speed(_draw), base_zero()))
 				else:
 					_draw = 0.0
+		"cancel":
+			if not _auto:
+				_drawing = false
+				_draw = 0.0
 
 
 ## Keeps the pin on screen (the camera does not turn to follow it).
@@ -114,8 +124,25 @@ func _clamp_aim() -> void:
 	var vp := shot.hud.get_viewport().get_visible_rect().size
 	var half_h := deg_to_rad(float(wcfg.get("fov", 28.0))) * 0.5
 	var half_v := atan(tan(half_h) * vp.y / maxf(vp.x, 1.0))
-	yaw = clampf(yaw, _rest.x - half_h * 0.85, _rest.x + half_h * 0.85)
-	pitch = clampf(pitch, _rest.y - half_v * 0.6, _rest.y + half_v * 0.6)
+	goal.x = clampf(goal.x, _rest.x - half_h * 0.85, _rest.x + half_h * 0.85)
+	goal.y = clampf(goal.y, _rest.y - half_v * 0.6, _rest.y + half_v * 0.6)
+
+
+## The tired arm's drift (yaw, pitch radians) after `held` seconds at full draw: nothing until
+## steady_s, then a slow wander (about 0.4-0.9 Hz) eased in over TIRE_S up to shake_deg. Smooth
+## in `held`, so it never jumps between frames and looks the same at 30 or 60 fps.
+static func shake_at(held: float, w: Dictionary) -> Vector2:
+	var over := held - float(w.get("steady_s", 2.2))
+	if over <= 0.0:
+		return Vector2.ZERO
+	var amp := deg_to_rad(float(w.get("shake_deg", 0.3))) * smoothstep(0.0, TIRE_S, over)
+	var t := over
+	return Vector2(sin(t * 2.9) + 0.45 * sin(t * 5.3 + 1.0), sin(t * 2.3 + 0.4) + 0.45 * sin(t * 4.1 + 2.0)) * amp * 0.69
+
+
+## 0 while the hold is steady, rising to 1 as the arm tires (the pin's ring turns amber).
+static func tiredness(held: float, w: Dictionary) -> float:
+	return smoothstep(0.0, TIRE_S, held - float(w.get("steady_s", 2.2)))
 
 
 ## Autoplay: draw fully on the next bottle (allowing for wind and drop), then loose.
@@ -161,6 +188,13 @@ func _loose(v: Vector3) -> void:
 	_held = 0.0
 	shot._state = "flying"
 	shot._scale = 0.6
+	if not (res["hits"] as Array).is_empty():
+		# Bullet cam: filmed from just behind and above the arrow, a pale streak behind it.
+		var trail := FinaleWeapon.streak_mesh(Color(1.0, 0.97, 0.9, 0.55), 0.012)
+		add_child(trail)
+		_flight["trail"] = trail
+		_flight["target"] = int((res["hits"] as Array)[0])
+		film_begin(float(res["t"]) - shot._ft)
 	shot.hud.hide_reticle()
 	Sfx.play("swoosh", 0.0, 1.3)
 	Sfx.play("thunk", -12.0, 1.8)
@@ -170,17 +204,19 @@ func _loose(v: Vector3) -> void:
 func tick(delta: float, _d: float) -> void:
 	if starts_draw(_idle(), _auto, _touch, _drawing):
 		_start_draw()
+	follow_aim(delta, float(wcfg.get("sens", 0.06)))
 	if _drawing:
 		_draw = minf(_draw + delta / float(wcfg.get("draw_s", 0.8)), 1.0)
 		if _draw >= 1.0:
 			_held += delta
+	else:
+		_held = 0.0   # the arm only tires while it holds a draw
 	if _auto:
 		_auto_tick()
-	# Holding full draw too long: the arm starts to shake (and it shakes the pin and the shot).
-	var over := maxf(_held - float(wcfg.get("steady_s", 2.2)), 0.0)
-	var amp := deg_to_rad(float(wcfg.get("shake_deg", 0.9))) * minf(over / 1.5, 1.5)
-	var tt := Time.get_ticks_msec() / 1000.0
-	_shake = Vector2(sin(tt * 13.0) + 0.6 * sin(tt * 29.0 + 1.0), sin(tt * 17.0 + 2.0) + 0.5 * sin(tt * 31.0)) * amp * 0.6
+	# Holding full draw long: the tired arm drifts the pin (and the shot) slowly and a little
+	# (it used to shake at 2-5 Hz, growing to 1.35 degrees, right after steady_s).
+	_shake = shake_at(_held, wcfg)
+	shot.hud.set_reticle_tired(tiredness(_held, wcfg))
 	var cam := Transform3D(view_basis_for(_rest, Vector2(yaw, pitch)), eye())
 	var a := cam.basis.inverse() * aim_dir(_shake.x, _shake.y)
 	_bow.global_transform = cam * bow_pose(a, _draw)
@@ -196,6 +232,9 @@ func tick(delta: float, _d: float) -> void:
 		shot.hud.hide_reticle()
 	if not _flight.is_empty():
 		_tick_flight(delta)
+	elif filming():
+		# The arrow is in; the bullet cam finishes its hold on the shatter.
+		film_hold(delta, _film_target)
 	elif _hold > 0.0:
 		_hold -= delta
 		if _hold <= 0.0:
@@ -210,7 +249,20 @@ func _update_string() -> void:
 	place_arrow(_bow, _arrow, _draw)
 
 
-func _tick_flight(_delta: float) -> void:
+## Where the arrow's tip is `t` game seconds after the loose (world): it leaves from the bow low
+## left and joins the aim line within a few metres.
+func _tip_at(f: Dictionary, t: float) -> Vector3:
+	var v: Vector3 = f["v"]
+	var p := shot.to_world(logic.trajectory(f["o"], v, t, float(f["wind"])))
+	var blend := clampf(v.length() * t / BLEND_M, 0.0, 1.0)
+	return p + (f["from"] as Vector3) * (1.0 - blend * blend * (3.0 - 2.0 * blend))
+
+
+func _dir_at(f: Dictionary, t: float) -> Vector3:
+	return ((f["v"] as Vector3) + Vector3(float(f["wind"]), -logic.gravity(), 0) * t).normalized()
+
+
+func _tick_flight(delta: float) -> void:
 	var f := _flight
 	var t := shot._ft - float(f["t0"])
 	var end: Dictionary = f["end"]
@@ -218,23 +270,30 @@ func _tick_flight(_delta: float) -> void:
 	var res: Dictionary = f["res"]
 	var hits: Array = res["hits"]
 	var tt := minf(t, t_end)
-	var o: Vector3 = f["o"]
-	var v: Vector3 = f["v"]
-	var w := float(f["wind"])
-	var p := shot.to_world(logic.trajectory(o, v, tt, w))
-	# It leaves from the bow low left and joins the aim line within a few metres.
-	var blend := clampf(v.length() * tt / BLEND_M, 0.0, 1.0)
-	p += (f["from"] as Vector3) * (1.0 - blend * blend * (3.0 - 2.0 * blend))
-	var vel := v + Vector3(w, -logic.gravity(), 0) * tt
+	var p := _tip_at(f, tt)
 	var node: Node3D = f["node"]
 	# The arrow's origin is its nock: put the tip on the flight point.
-	var dir := vel.normalized()
+	var dir := _dir_at(f, tt)
 	var al := WeaponModels.ARROW_LEN * FLY_SCALE
 	node.global_transform = Transform3D(Basis.looking_at(dir, Vector3.UP).scaled_local(Vector3.ONE * FLY_SCALE), p - dir * al)
+	if f.has("trail"):
+		FinaleWeapon.place_streak(f["trail"], _tip_at(f, maxf(tt - 0.9 / maxf((f["v"] as Vector3).length(), 1.0), 0.0)) - dir * al, p - dir * al, 0.35)
+	if f.has("target") and filming():
+		var target := shot._bottle_center(int(f["target"]), shot._ft)
+		_film_target = target
+		if not film_holding():
+			var arrive := float(res["t"]) - float(f["t0"])
+			var ta := FinaleWeapon.film_anchor_t(minf(t, arrive), arrive, float(wcfg.get("cam_stop", 2.4)) / maxf((f["v"] as Vector3).length(), 1.0))
+			film_fly(delta, _tip_at(f, ta), _dir_at(f, ta), p, dir, al, target)
+		else:
+			film_hold(delta, target)
 	if not bool(f["broke"]) and not hits.is_empty() and shot._ft >= float(res["t"]):
 		f["broke"] = true
 		shot.break_bottle(int(hits[0]), dir, int(f["streak"]))
+		film_hit()
 	if t >= t_end:
+		if f.has("trail"):
+			(f["trail"] as Node3D).queue_free()
 		if hits.is_empty():
 			shot.show_miss()
 			Sfx.play("thunk", 1.0, 0.9)
@@ -245,8 +304,11 @@ func _tick_flight(_delta: float) -> void:
 		node.global_position += dir * 0.06
 		_stuck.append({"node": node, "t": 0.0, "basis": node.global_transform.basis, "tip": p + dir * 0.06})
 		_flight = {}
-		_hold = 0.75 if not hits.is_empty() else 0.5
-		shot._scale = 1.0
+		if filming():
+			_hold = 0.1   # the film's own hold on the shatter comes first
+		else:
+			_hold = 0.75 if not hits.is_empty() else 0.5
+			shot._scale = 1.0
 
 
 ## Stuck arrows quiver about their buried tip.
@@ -263,10 +325,11 @@ func _tick_stuck(delta: float) -> void:
 
 
 func warm_parts() -> Array:
-	return [WeaponModels.arrow()]
+	return [WeaponModels.arrow(), FinaleWeapon.streak_mesh(Color(1.0, 0.97, 0.9, 0.55), 0.012)]
 
 
 func finish() -> void:
+	film_end()
 	visible = false
 	if is_instance_valid(shot.hud):
 		shot.hud.hide_reticle()

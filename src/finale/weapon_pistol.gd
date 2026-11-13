@@ -33,6 +33,7 @@ var _new_mag: Node3D
 var _old_mag: Dictionary = {}   # {node, vel, t}
 var _down_pos := Vector2.ZERO
 var _drag_total := Vector2.ZERO
+var _film_target := 0           # the bottle the bullet cam holds on after the hit
 
 
 func _ready() -> void:
@@ -120,6 +121,14 @@ func _fire(v: Vector3) -> void:
 		"broke": false, "streak": logic.streak, "muzzle": _gun.get_node("Gun").to_global(MUZZLE)}
 	shot._state = "flying"
 	shot._scale = float(wcfg.get("slow", 0.3))
+	if not (res["hits"] as Array).is_empty():
+		# Bullet cam: the round itself, big enough to read, filmed from just behind it.
+		var round_node := WeaponModels.bullet(float(wcfg.get("cam_bullet", 3.5)))
+		round_node.top_level = true
+		add_child(round_node)
+		_bullet["round"] = round_node
+		_bullet["target"] = int((res["hits"] as Array)[0])
+		film_begin(float(res["t"]) - shot._ft)
 	kick += deg_to_rad(float(wcfg.get("kick_deg", 4.5)))
 	_snap = 1.0
 	_slide_t = 0.0
@@ -157,6 +166,7 @@ func _start_reload() -> void:
 
 
 func tick(delta: float, d: float) -> void:
+	follow_aim(delta, float(wcfg.get("sens", 0.06)))
 	# Recoil settles over recover_s; the gun's own snap is quicker.
 	var rec := deg_to_rad(float(wcfg.get("kick_deg", 4.5))) / maxf(float(wcfg.get("recover_s", 0.4)), 0.05)
 	kick = move_toward(kick, 0.0, rec * delta)
@@ -188,29 +198,63 @@ func tick(delta: float, d: float) -> void:
 		shot.hud.hide_reticle()
 	if not _bullet.is_empty():
 		_tick_bullet(delta)
+	elif filming():
+		# The bullet cam holds on the shatter, then the aim comes back.
+		if film_hold(delta, shot._bottle_center(_film_target, shot._ft)):
+			_hold = 0.0
+			_shot_done()
 	elif _hold > 0.0:
 		_hold -= delta
 		if _hold <= 0.0:
-			shot._scale = 1.0
-			shot.shot_over()
-			if shot._state == "aim" and logic.needs_reload():
-				shot.hud.show_reload(true)
+			_shot_done()
 
 
-func _tick_bullet(_delta: float) -> void:
+func _shot_done() -> void:
+	shot._scale = 1.0
+	shot.shot_over()
+	if shot._state == "aim" and logic.needs_reload():
+		shot.hud.show_reload(true)
+
+
+## Where the round is `t` game seconds after the shot (world): it leaves the muzzle and blends
+## onto the line of sight within a few metres.
+func _round_at(b: Dictionary, t: float) -> Vector3:
+	var p := shot.to_world(logic.trajectory(b["o"], b["v"], t))
+	var blend := clampf(t * speed() / 3.0, 0.0, 1.0)
+	return p + ((b["muzzle"] as Vector3) - eye()) * (1.0 - blend)
+
+
+func _round_dir(b: Dictionary, t: float) -> Vector3:
+	return ((b["v"] as Vector3) + Vector3(0, -logic.gravity(), 0) * t).normalized()
+
+
+func _tick_bullet(delta: float) -> void:
 	var b := _bullet
 	var t := shot._ft - float(b["t0"])
 	var res: Dictionary = b["res"]
 	var arrive := float(res["t"]) - float(b["t0"]) if not (res["hits"] as Array).is_empty() else float(b["wall"]["t"]) - float(b["t0"])
 	var end_t := minf(t, arrive)
-	var p := shot.to_world(logic.trajectory(b["o"], b["v"], end_t))
-	# The tracer leaves the muzzle and blends onto the line of sight within a few metres.
-	var blend := clampf(end_t * speed() / 3.0, 0.0, 1.0)
-	p += ((b["muzzle"] as Vector3) - eye()) * (1.0 - blend)
-	var tail := shot.to_world(logic.trajectory(b["o"], b["v"], maxf(end_t - 1.4 / speed(), 0.0)))
-	FinaleWeapon.place_streak(b["tracer"], tail, p)
+	var p := _round_at(b, end_t)
+	if filming():
+		# Beside the lens a 1.4 m tracer would be a wide bar across the screen: a short, thin
+		# streak just behind the round instead.
+		FinaleWeapon.place_streak(b["tracer"], _round_at(b, maxf(end_t - 0.45 / speed(), 0.0)), p, 0.45)
+	else:
+		FinaleWeapon.place_streak(b["tracer"], _round_at(b, maxf(end_t - 1.4 / speed(), 0.0)), p)
+	var dir_now := _round_dir(b, end_t)
+	if b.has("round"):
+		var rn: Node3D = b["round"]
+		rn.global_transform = Transform3D(Basis.looking_at(dir_now, Vector3.UP), p)
+	if filming() and not film_holding() and b.has("target"):
+		var stop := float(wcfg.get("cam_stop", 1.5)) / speed()
+		var ta := FinaleWeapon.film_anchor_t(end_t, arrive, stop)
+		var length := 0.034 * float(wcfg.get("cam_bullet", 3.5))
+		film_fly(delta, _round_at(b, ta), _round_dir(b, ta), p, dir_now, length,
+			shot._bottle_center(int(b["target"]), shot._ft))
 	if t >= arrive:
 		(b["tracer"] as Node3D).queue_free()
+		if b.has("round"):
+			(b["round"] as Node3D).queue_free()
 		var hits: Array = res["hits"]
 		var dir := (b["v"] as Vector3).normalized()
 		if hits.is_empty():
@@ -222,8 +266,12 @@ func _tick_bullet(_delta: float) -> void:
 		else:
 			shot.break_bottle(int(hits[0]), dir, int(b["streak"]))
 			_hold = 0.55
-		shot._scale = 1.0
+			_film_target = int(hits[0])
 		_bullet = {}
+		if filming():
+			film_hit()
+		else:
+			shot._scale = 1.0
 
 
 func _tick_casings(d: float) -> void:
@@ -308,10 +356,12 @@ func warm(on: bool) -> void:
 
 func warm_parts() -> Array:
 	return [FinaleWeapon.streak_mesh(Color(1.0, 0.85, 0.45, 0.9), 0.014), WeaponModels.casing(),
-		WeaponModels.magazine(), World._box(Vector3(0.05, 0.05, 0.01), Color(0.06, 0.05, 0.04))]
+		WeaponModels.magazine(), World._box(Vector3(0.05, 0.05, 0.01), Color(0.06, 0.05, 0.04)),
+		WeaponModels.bullet(float(wcfg.get("cam_bullet", 3.5)))]
 
 
 func finish() -> void:
+	film_end()
 	visible = false
 	if is_instance_valid(shot.hud):
 		shot.hud.hide_reticle()
