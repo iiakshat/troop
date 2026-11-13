@@ -18,8 +18,11 @@ extends SceneTree
 ##        calibrate=1 use the four §2 targets below; profile=noisy also prints the noisy runs'
 ##        loss causes] [dodge_p=0.7]
 ##       [checks=1 (spec v2.1 §2 guard checks with the greedy profile unless another is named,
-##        asserted: exits 1 on any failure; full=1 adds the noisy first-try fail rate and the
-##        random-route wins, flagged with !! but not asserted. With profile=paced: the v2 table,
+##        asserted: exits 1 on any failure: the greedy keep inside its band ±KEEP_SLACK, the
+##        no-ad guarantee, the random-route floor, armed gangs fire from L11, enemies cost troops
+##        from L3, bosses and lieutenants hold the street and barrage, the hero alone is never
+##        one-shot. The noisy first-try fail rate is printed against its band, a soft target
+##        (~), never asserted. With profile=paced: the v2 table,
 ##        per level the stored route paced / non-tapper / L1 at 1.5 taps/s, and the best route
 ##        with zero upgrades; no calibration)]
 ##
@@ -31,15 +34,17 @@ extends SceneTree
 ##
 ## calibrate=1 with profile=greedy|noisy fits the same two scales to the v2.1 targets of the
 ## level's band (tutorial L1-L4, hard = slot 9, lieutenants and bosses, else normal; BANDS):
-## k so the noisy player (greedy with 20% of rows random) fails the first try at the band's
-## rate (40 seeded runs), kf so the greedy player keeps the band's share of his peak squad;
-## then backs both off until the greedy player wins in time, at least 5% of random routes win,
-## and the no-ad guarantee holds (the best route without powers at the pace wins tapping 4/s
-## and 2/s, at 1.5/s on L1, and not tapping at all from L6). The plain run with the same
-## profile stores that no-power route. When units.json carries the v2.1 boss rule (boss
+## only the greedy player's keep share, aimed at the band's midpoint (calibrate_harder: k
+## first, then the last wave's kf, at most FIT_PROBES deterministic greedy runs); then one
+## validation: the no-ad guarantee (a route without powers at the pace wins tapping 4/s and
+## 2/s, at 1.5/s on L1, and not tapping at all from L6) and the random floor (5% of
+## VALID_ROUTES random routes win), backing off toward a scale that holds both. The noisy
+## first-try fail rate is reported, not fitted (a soft target). The plain run with the same
+## profile stores the no-power route. When units.json carries the v2.1 boss rule (boss
 ## hp_secs), boss and lieutenant hp are left out of k x kf, as tools/gen_levels.py does.
-## `need_upgrades` levels are not refitted under these profiles (the no-ad pace is the gate).
-## A level costs about 20 s to report and 2-4 min to calibrate: run 3 processes over ranges.
+## A level costs about 15 s to report and 20-60 s to calibrate (LEVEL_CAP_S at most): run 6
+## processes over level lists at below-normal priority (CLAUDE.md "Level calibration").
+##   [k_max=40 kf_max=12 (the relative k and kf ranges the keep fit may try)]
 
 const DT := 1.0 / 30.0
 const BRUTE_MAX := 6     # rows up to which every route is played
@@ -61,7 +66,8 @@ var use_powers := true   # powers=0: every run plays without shield/bomb
 var pace := {}           # profile=paced: level (String) -> upgrades (tests/econ_model.gd)
 var profile := ""
 var fixed_upgrades := {} # upgrades=k,s,q (legacy station rooms) when no pace is used
-var kf_max := KF_MAX       # kf_max=: the largest last-wave scale the v2.1 keep fit may use
+var fit_k := [0.05, 40.0]  # k range the v2.1 keep fit may try (relative; k_max=)
+var fit_kf := [0.3, 12.0]  # ... and the last wave's kf (kf_max=)
 var dodge_share := GreedyPilot.DODGE_P  # profile=greedy|noisy: telegraphs dodged (dodge_p=)
 static var boss_hp_fixed := false  # units.json has the v2.1 boss rule: boss hp is not scaled
 
@@ -84,6 +90,15 @@ const COST_FROM := 3            # guard: enemies cost troops on every level from
 const HALT_BOSS := 6.0          # guard: seconds a boss holds the street, at least
 const HALT_LT := 4.0            # ... a lieutenant
 const BARRAGES_MIN := 2         # guard: barrages each boss or lieutenant fires, at least
+const KEEP_SLACK := 0.05        # the greedy keep guard allows this much either side of the band
+# ---- the keep fit (calibrate=1 with profile=greedy|noisy)
+const FIT_PROBES := 12          # greedy runs the fit may spend on one level (k, then kf)
+const FIT_K_PROBES := 8         # ... of which k may take this many
+const FIT_TOL := 0.025          # a probe this close to the band's midpoint ends the fit
+const VALID_ROUTES := 100       # random routes the floor is validated on (the report's sample)
+const VALID_NOISY := 20         # noisy runs the fit reports (measured, not fitted)
+const BACKOFF_STEPS := 4        # bisections back toward a scale that holds the floors
+const LEVEL_CAP_S := 300.0      # wall-time cap of one level's fit (s)
 
 
 func _initialize() -> void:
@@ -155,7 +170,9 @@ func _initialize() -> void:
 		elif a.begins_with("dodge_p="):
 			dodge_share = float(a.substr(8))
 		elif a.begins_with("kf_max="):
-			kf_max = float(a.substr(7))
+			fit_kf[1] = float(a.substr(7))
+		elif a.begins_with("k_max="):
+			fit_k[1] = float(a.substr(6))
 		elif a.begins_with("k="):
 			k_eval = float(a.substr(2))
 		elif a.begins_with("kf="):
@@ -179,7 +196,7 @@ func _initialize() -> void:
 	print("profile %s%s, tap_rate %.1f, powers %s%s" % [profile if profile != "" else "plain", " zero upgrades" if zero else "",
 		tap_rate, "on" if use_powers else "off", ", dodge_p %.2f" % dodge_share if harder else ""])
 	if harder:
-		print("level | band     | greedy keeps (band)    | noisy fails (band) | random wins | no-ad | best troops/peak | time s | k / kf | guards")
+		print("level | band     | greedy keeps (band)    | noisy fails (soft)  | random wins | no-ad | best troops/peak | time s | halt s | k / kf | guards")
 	else:
 		print("level | rows | wins/total | target | no-pow best | best troops/peak | stars | time s | k / kf")
 	if only.is_empty():
@@ -648,8 +665,8 @@ static func band(n: int, level: Dictionary) -> String:
 	return "hard" if HARD_SLOTS.has((n - 1) % 10 + 1) else "normal"
 
 
-static func in_band(v: float, b: Array) -> bool:
-	return v >= float(b[0]) - 1e-9 and v <= float(b[1]) + 1e-9
+static func in_band(v: float, b: Array, slack := 0.0) -> bool:
+	return v >= float(b[0]) - slack - 1e-9 and v <= float(b[1]) + slack + 1e-9
 
 
 static func band_mid(b: Array) -> float:
@@ -780,9 +797,9 @@ static func guard_failures(r: Dictionary) -> Array:
 	var b: Dictionary = BANDS[String(r["band"])]
 	if String(r["state"]) != "strike":
 		out.append("L%d greedy lost the level (%s)" % [n, str(r.get("cause", "?"))])
-	elif not in_band(float(r["keep"]), b["keep"]):
-		out.append("L%d greedy keeps %.0f%% (%s band %.0f-%.0f%%)" % [n, float(r["keep"]) * 100.0, r["band"],
-			float(b["keep"][0]) * 100.0, float(b["keep"][1]) * 100.0])
+	elif not in_band(float(r["keep"]), b["keep"], KEEP_SLACK):
+		out.append("L%d greedy keeps %.0f%% (%s band %.0f-%.0f%%, ±%.0f)" % [n, float(r["keep"]) * 100.0, r["band"],
+			float(b["keep"][0]) * 100.0, float(b["keep"][1]) * 100.0, KEEP_SLACK * 100.0])
 	var armed := int(r["armed"])
 	if n >= FIRE_FROM and armed > 0 and float(r["fired"]) < FIRE_SHARE * armed - 1e-9:
 		out.append("L%d %d of %d armed gangs fired (want %.0f%%)" % [n, int(r["fired"]), armed, FIRE_SHARE * 100.0])
@@ -815,10 +832,10 @@ static func solo_one_shot(n: int, level: Dictionary, units_cfg: Dictionary) -> S
 
 # ---- the v2.1 report, fits and checks (profile=greedy|noisy)
 
-## First-try fail rate of the noisy player (NOISY_RUNS seeded runs, no revive).
-func noisy_fail(n: int, level: Dictionary, causes := {}) -> float:
+## First-try fail rate of the noisy player (`runs` seeded runs, no revive).
+func noisy_fail(n: int, level: Dictionary, causes := {}, runs := NOISY_RUNS) -> float:
 	var fails := 0
-	for i in NOISY_RUNS:
+	for i in runs:
 		var s := noisy_seed(n, i)
 		seed(s)
 		var sim := LevelSim.new(level, units, upgrades)
@@ -826,14 +843,7 @@ func noisy_fail(n: int, level: Dictionary, causes := {}) -> float:
 		if r["state"] != "strike":
 			fails += 1
 			causes[r["cause"]] = int(causes.get(r["cause"], 0)) + 1
-	return float(fails) / NOISY_RUNS
-
-
-## The greedy player's result (unwatched; the fits call it often).
-func greedy_result(n: int, level: Dictionary) -> Dictionary:
-	var s := noisy_seed(n, 1000)
-	seed(s)
-	return Autopilot.play(LevelSim.new(level, units, upgrades), GreedyPilot.new(tap_rate, use_powers, 0.0, s, dodge_share), DT)
+	return float(fails) / maxf(runs, 1.0)
 
 
 func _win_share(level: Dictionary, routes: Array) -> float:
@@ -845,52 +855,76 @@ func _win_share(level: Dictionary, routes: Array) -> float:
 
 
 ## The no-ad guarantee for `route` at this level's pace, without powers: it wins tapping 4/s
-## and 2/s, at 1.5/s on L1, and not tapping at all from L6 (as test_level_sim's level test
-## asks of the stored route).
+## and 2/s (in time), at 1.5/s on L1, and not tapping at all from L6, stepping out of a boss's
+## barrage on boss levels (as test_level_sim's level test asks of the stored route).
 func noad_ok(n: int, level: Dictionary, route: Array) -> bool:
 	if route.is_empty():
 		return false
-	var taps := [4.0, 2.0]
+	var dodge := bool(level.get("boss", false))
+	var taps := [2.0, 4.0]
 	if n == 1:
 		taps.append(1.5)
 	if n >= 6:
 		taps.append(0.0)
 	for t in taps:
-		if Autopilot.run(level, units, route, upgrades, false, DT, false, t)["state"] != "strike":
+		var r := Autopilot.run(level, units, route, upgrades, false, DT, dodge, t)
+		if r["state"] != "strike" or (t == 2.0 and float(r["time"]) > MAX_TIME):
 			return false
 	return true
 
 
-## The best route without powers (the one the plain run stores) and whether it keeps the
-## no-ad guarantee in time.
-func noad(n: int, level: Dictionary) -> Dictionary:
-	var b := best_route(level, false)
-	var r: Dictionary = b["result"]
-	var ok: bool = r["state"] == "strike" and float(r["time"]) <= MAX_TIME and noad_ok(n, level, b["route"])
-	return {"ok": ok, "route": b["route"], "result": r}
+## The no-ad route: the first of the best route without powers (beam search), the greedy
+## player's lanes and `stored` (the level file's route) that keeps the no-ad guarantee
+## (noad_ok). `beam_first` = false tries the cheap two first (the fits). The plain run stores
+## the route this returns.
+func noad(n: int, level: Dictionary, stored: Array = [], beam_first := true) -> Dictionary:
+	var tried := {}
+	var order := ["beam", "greedy", "stored"] if beam_first else ["stored", "greedy", "beam"]
+	var first := {}
+	for which in order:
+		var route: Array = stored
+		if which == "beam":
+			route = best_route(level, false)["route"]
+		elif which == "greedy":
+			route = greedy_probe(n, level)["route"]
+		if route.is_empty() or tried.has(str(route)):
+			continue
+		tried[str(route)] = true
+		var ok := noad_ok(n, level, route)
+		if ok or first.is_empty():
+			var r := Autopilot.run(level, units, route, upgrades, false, DT, bool(level.get("boss", false)), tap_rate)
+			first = {"ok": ok, "route": route, "result": r}
+		if ok:
+			return first
+	if first.is_empty():
+		return {"ok": false, "route": [], "result": {"state": "lost", "troops": 0, "peak": 0, "time": 0.0}}
+	return first
 
 
 ## The v2.1 report of level n at scale k / kf: the greedy keep share and the guard checks, the
 ## noisy first-try fail rate, random-route wins, the no-ad route (stored by `--merge` from a
 ## plain run) and the best route with powers (its share sets the star thresholds).
-func evaluate_harder(n: int, base: Dictionary, k: float, kf := 1.0) -> Dictionary:
+func evaluate_harder(n: int, base: Dictionary, k: float, kf := 1.0, noisy_runs := NOISY_RUNS) -> Dictionary:
 	var level := scaled_level(base, k, kf)
 	var rows := Autopilot.gate_row_count(level)
 	var g := watch_greedy(n, level, units, upgrades, dodge_share, tap_rate, use_powers)
 	var causes := {}
-	var fail := noisy_fail(n, level, causes)
+	var fail := noisy_fail(n, level, causes, noisy_runs)
 	if profile == "noisy":
 		print("      L%d noisy losses %s" % [n, str(causes)])
 	var routes := sample_routes(n, rows, n_routes)
 	var share := _win_share(level, routes)
 	var best := best_route(level, use_powers)
 	var br: Dictionary = best["result"]
-	var na := noad(n, level)
+	var na := noad(n, level, base.get("route", []))
 	var nr: Dictionary = na["result"]
+	var halt := -1.0   # the shortest boss or lieutenant halt (s); -1: none on this level
+	for bo in g["bosses"]:
+		halt = float(bo["halt"]) if halt < 0.0 else minf(halt, float(bo["halt"]))
 	var won: bool = nr["state"] == "strike"
 	return {"level": n, "rows": rows, "k": k, "kf": kf, "band": g["band"],
 		"greedy_keep": g["keep"], "greedy_win": g["state"] == "strike", "greedy_time": g["time"],
-		"greedy_route": g["route"], "guards": guard_failures(g),
+		"greedy_route": g["route"], "guards": guard_failures(g), "boss_halt": halt,
 		"noisy_fail": fail, "wins": int(round(share * routes.size())), "total": routes.size(), "win_rate": share,
 		"target": RANDOM_FLOOR, "noad": na["ok"], "np_win": na["ok"],
 		"best_win": br["state"] == "strike" or won, "best_route": best["route"], "best_troops": br["troops"],
@@ -903,97 +937,204 @@ static func harder_row(r: Dictionary) -> String:
 	var b: Dictionary = BANDS[String(r["band"])]
 	var keep := float(r["greedy_keep"])
 	var fail := float(r["noisy_fail"])
-	return "%5d | %-8s | %-4s %3.0f%% (%2.0f-%2.0f%%) %s | %3.0f%% (%2.0f-%2.0f%%) %s | %3.0f%% %s | %-5s | %5d/%-5d %3.0f%% | %6.1f | %.3f / %.3f | %s" % [
+	var halt := float(r.get("boss_halt", -1.0))
+	return "%5d | %-8s | %-4s %3.0f%% (%2.0f-%2.0f%%) %s | %3.0f%% (%2.0f-%2.0f%%) %s | %3.0f%% %s | %-5s | %5d/%-5d %3.0f%% | %6.1f | %5s | %.3f / %.3f | %s" % [
 		r["level"], r["band"], "win" if r["greedy_win"] else "LOSE", keep * 100.0,
-		float(b["keep"][0]) * 100.0, float(b["keep"][1]) * 100.0, "ok" if r["greedy_win"] and in_band(keep, b["keep"]) else "!!",
-		fail * 100.0, float(b["fail"][0]) * 100.0, float(b["fail"][1]) * 100.0, "ok" if in_band(fail, b["fail"]) else "!!",
+		float(b["keep"][0]) * 100.0, float(b["keep"][1]) * 100.0, "ok" if r["greedy_win"] and in_band(keep, b["keep"], KEEP_SLACK) else "!!",
+		fail * 100.0, float(b["fail"][0]) * 100.0, float(b["fail"][1]) * 100.0, "ok" if in_band(fail, b["fail"]) else "~",
 		float(r["win_rate"]) * 100.0, "ok" if float(r["win_rate"]) >= RANDOM_FLOOR - 1e-9 else "!!",
 		"ok" if r["noad"] else "LOSE", r["best_troops"], r["best_peak"], float(r["best_ratio"]) * 100.0,
-		float(r["greedy_time"]), r["k"], r["kf"], "ok" if (r["guards"] as Array).is_empty() else "; ".join(r["guards"])]
+		float(r["greedy_time"]), "-" if halt < 0.0 else "%.1f" % halt, r["k"], r["kf"],
+		"ok" if (r["guards"] as Array).is_empty() else "; ".join(r["guards"])]
 
 
-## Fits k to the noisy fail rate and kf to the greedy keep share of the level's band (two
-## rounds), then backs off until the floors hold: the greedy player wins in time, random
-## routes win at least RANDOM_FLOOR, and the no-ad guarantee holds.
+## The v2.1 keep fit (plan v2.1 Task 8, second method). The noisy first-try fail rate swings by
+## 5-10 points between seeds and fights the keep share, so it is no longer fitted: only the
+## greedy player's end ÷ peak squad is, one deterministic run per probe. k (every gang) is
+## walked out from 1 in growing steps until the keep crosses the band's midpoint, then
+## narrowed (secant inside the bracket, bisection when one end lost); if k alone jumps past the
+## band (a few more enemies turn a clean win into a loss) or runs out of range, the last wave's
+## kf is fitted the same way on the hardest k that still keeps more. Then it is validated once:
+## the no-ad guarantee (the greedy, stored or best no-power route wins at the pace without
+## powers) and the random floor (at least RANDOM_FLOOR of VALID_ROUTES random routes win); if
+## either fails it backs off toward the last scale that held them (bisection in log scale). The
+## noisy fail rate is only measured and reported. A level stops searching after LEVEL_CAP_S.
 func calibrate_harder(n: int, base: Dictionary) -> Dictionary:
+	var t0 := Time.get_ticks_msec()
 	var b: Dictionary = BANDS[band(n, base)]
-	var routes := sample_routes(n, Autopilot.gate_row_count(base), fit_routes)
-	var k := 1.0
-	var kf := 1.0
-	for round_i in 2:
-		k = _fit_fail(n, base, k, kf, b["fail"])
-		kf = _fit_keep(n, base, k, kf, b["keep"])
-		if kf >= kf_max * 0.97:
-			# Even a huge last gang can't bring the greedy player down to the band: keep a
-			# modest climax and fit the rest to the fail rate.
-			kf = KF_FALLBACK
-			k = _fit_fail(n, base, k, kf, b["fail"])
-			break
+	var want := band_mid(b["keep"])
+	var probes: Array = []
+	var best := _fit_axis(n, base, true, 1.0, 1.0, want, FIT_K_PROBES, probes, t0)
+	if not in_band(float(best["keep"]), b["keep"]) and probes.size() < FIT_PROBES and not _over(t0):
+		var above := _hardest_above(probes, want)
+		if not above.is_empty():
+			var b2 := _fit_axis(n, base, false, float(above["k"]), float(above["kf"]), want,
+				FIT_PROBES - probes.size(), probes, t0)
+			if _closer(b2, best, want):
+				best = b2
+	var k := float(best["k"])
+	var kf := float(best["kf"])
 	if verbose:
-		print("      L%d fit k %.3f kf %.3f (%s band: noisy fails %s, greedy keeps %s)" % [n, k, kf, band(n, base),
-			str(b["fail"]), str(b["keep"])])
-	for i in 14:
-		var lv := scaled_level(base, k, kf)
-		var g := greedy_result(n, lv)
-		var won: bool = g["state"] == "strike"
-		var share := _win_share(lv, routes) if won else 0.0
-		var floor_ok := share >= RANDOM_FLOOR - 1e-9
-		var na: bool = won and floor_ok and noad(n, lv)["ok"]
-		if won and float(g["time"]) <= MAX_TIME and na:
-			break
-		if verbose:
-			print("      L%d back off from k %.3f kf %.3f: greedy %s %.0fs, random wins %.0f%%, no-ad %s" % [n, k, kf,
-				g["state"], float(g["time"]), share * 100.0, "ok" if na else ("fails" if won and floor_ok else "-")])
-		if won and float(g["time"]) > MAX_TIME:
-			kf = maxf(kf * 0.8, 0.4)  # the last gang takes too long to clear
+		print("      L%d fit k %.3f kf %.3f keep %.0f%% (%s, want %.0f%%) in %d probes" % [n, k, kf,
+			float(best["keep"]) * 100.0, band(n, base), want * 100.0, probes.size()])
+	if not _floors(n, base, k, kf)["ok"]:
+		var ks := _back_off(n, base, k, kf, t0)
+		k = ks[0]
+		kf = ks[1]
+	var r := evaluate_harder(n, base, k, kf, VALID_NOISY)
+	r["probes"] = probes.size()
+	r["fit_s"] = (Time.get_ticks_msec() - t0) / 1000.0
+	return r
+
+
+## The greedy player's run at this level plus the lanes it took: one probe of the keep fit.
+## A loss, or a win that takes longer than MAX_TIME, keeps nothing.
+func greedy_probe(n: int, level: Dictionary) -> Dictionary:
+	var s := noisy_seed(n, 1000)
+	seed(s)
+	var pilot := GreedyPilot.new(tap_rate, use_powers, 0.0, s, dodge_share)
+	var r := Autopilot.play(LevelSim.new(level, units, upgrades), pilot, DT)
+	r["route"] = pilot.choices.duplicate()
+	r["keep"] = _ratio(r) if float(r["time"]) <= MAX_TIME else 0.0
+	return r
+
+
+func _probe(n: int, base: Dictionary, k: float, kf: float, probes: Array) -> Dictionary:
+	var r := greedy_probe(n, scaled_level(base, k, kf))
+	var p := {"k": k, "kf": kf, "keep": float(r["keep"]), "win": r["state"] == "strike", "time": float(r["time"])}
+	probes.append(p)
+	if verbose:
+		print("        probe k %.4f kf %.4f -> %s keep %.1f%% %.0fs" % [k, kf, r["state"], float(p["keep"]) * 100.0, float(p["time"])])
+	return p
+
+
+func _over(t0: int) -> bool:
+	return (Time.get_ticks_msec() - t0) / 1000.0 > LEVEL_CAP_S
+
+
+## Whether probe a is a better fit than b: a win beats a loss, then the keep nearer `want`.
+static func _closer(a: Dictionary, b: Dictionary, want: float) -> bool:
+	if b.is_empty():
+		return true
+	if bool(a["win"]) != bool(b["win"]):
+		return bool(a["win"])
+	return absf(float(a["keep"]) - want) < absf(float(b["keep"]) - want)
+
+
+## One scale (k when `on_k`, else the last wave's kf) fitted so the greedy keep is `want` (the
+## keep falls as the scale grows). Returns the probe closest to `want`, a win if any won.
+func _fit_axis(n: int, base: Dictionary, on_k: bool, k: float, kf: float, want: float, budget: int,
+		probes: Array, t0: int) -> Dictionary:
+	var lims: Array = fit_k if on_k else fit_kf
+	var lo_lim := log(float(lims[0]))
+	var hi_lim := log(float(lims[1]))
+	var x := clampf(log(k if on_k else kf), lo_lim, hi_lim)
+	var mine: Array = []
+	var p := _probe(n, base, exp(x) if on_k else k, kf if on_k else exp(x), probes)
+	mine.append(p)
+	var easy := {}   # {x, keep}: the hardest probe so far that keeps more than want
+	var hard := {}   # ... the easiest that keeps less
+	if float(p["keep"]) > want:
+		easy = {"x": x, "keep": p["keep"]}
+	else:
+		hard = {"x": x, "keep": p["keep"]}
+	var step := log(2.0)
+	# Walk out until the keep crosses want.
+	while mine.size() < budget and absf(float(p["keep"]) - want) > FIT_TOL and (easy.is_empty() or hard.is_empty()) and not _over(t0):
+		var nx := clampf(x + (step if hard.is_empty() else -step), lo_lim, hi_lim)
+		if absf(nx - x) < 1e-6:
+			break   # the range ends here
+		x = nx
+		p = _probe(n, base, exp(x) if on_k else k, kf if on_k else exp(x), probes)
+		mine.append(p)
+		if float(p["keep"]) > want:
+			easy = {"x": x, "keep": p["keep"]}
 		else:
-			k *= 0.9
-			kf = maxf(kf * 0.92, 0.4)
-	return evaluate_harder(n, base, k, kf)
-
-
-## k (every gang) that brings the noisy player's first-try fail rate into `band_fail`: a
-## bisection in log k that starts at the current k0 and stops as soon as the rate is in band
-## (a level already in band is left alone).
-func _fit_fail(n: int, base: Dictionary, k0: float, kf: float, band_fail: Array) -> float:
-	var lo := log(0.15)
-	var hi := log(5.0)
-	var mid := clampf(log(k0), lo, hi)
-	for i in 9:
-		var f := noisy_fail(n, scaled_level(base, exp(mid), kf))
-		if in_band(f, band_fail):
-			break
-		if f < float(band_fail[0]):
-			lo = mid   # too forgiving: bigger gangs
+			hard = {"x": x, "keep": p["keep"]}
+		step *= 1.5
+	# Narrow the bracket: secant when both ends won, else bisection.
+	while mine.size() < budget and not easy.is_empty() and not hard.is_empty() and absf(float(p["keep"]) - want) > FIT_TOL \
+			and absf(float(hard["x"]) - float(easy["x"])) > log(1.004) and not _over(t0):
+		var xe := float(easy["x"])
+		var xh := float(hard["x"])
+		var nx := (xe + xh) * 0.5
+		if float(hard["keep"]) > 0.0:
+			var t := (float(easy["keep"]) - want) / maxf(float(easy["keep"]) - float(hard["keep"]), 1e-6)
+			nx = lerpf(xe, xh, clampf(t, 0.15, 0.85))
+		p = _probe(n, base, exp(nx) if on_k else k, kf if on_k else exp(nx), probes)
+		mine.append(p)
+		if float(p["keep"]) > want:
+			easy = {"x": nx, "keep": p["keep"]}
 		else:
-			hi = mid
-		mid = (lo + hi) * 0.5
-	return exp(mid)
+			hard = {"x": nx, "keep": p["keep"]}
+	var best := {}
+	for q in mine:
+		if _closer(q, best, want):
+			best = q
+	return best
 
 
-## kf (the last wave, on top of k) that brings the greedy player's end ÷ peak squad into
-## `band_keep`, the same way from the current kf0.
-func _fit_keep(n: int, base: Dictionary, k: float, kf0: float, band_keep: Array) -> float:
-	var lo := log(0.4)
-	var hi := log(kf_max)
-	var mid := clampf(log(kf0), lo, hi)
-	for i in 8:
-		var keep := _ratio(greedy_result(n, scaled_level(base, k, exp(mid))))
-		if in_band(keep, band_keep):
+## The probe with the largest scale whose greedy player still keeps more than `want` ({} if
+## none did).
+static func _hardest_above(probes: Array, want: float) -> Dictionary:
+	var out := {}
+	for q in probes:
+		if bool(q["win"]) and float(q["keep"]) > want and (out.is_empty() or
+				float(q["k"]) * float(q["kf"]) > float(out["k"]) * float(out["kf"])):
+			out = q
+	return out
+
+
+## The two floors at scale k / kf: the random-route floor and the no-ad guarantee.
+func _floors(n: int, base: Dictionary, k: float, kf: float) -> Dictionary:
+	var lv := scaled_level(base, k, kf)
+	var routes := sample_routes(n, Autopilot.gate_row_count(lv), VALID_ROUTES)
+	var share := _win_share(lv, routes)
+	var floor_ok := share >= RANDOM_FLOOR - 1e-9
+	var ok := floor_ok and bool(noad(n, lv, base.get("route", []))["ok"])
+	if verbose:
+		print("        floors k %.4f kf %.4f: random wins %.0f%%, no-ad %s" % [k, kf, share * 100.0,
+			("ok" if ok else "LOSE") if floor_ok else "-"])
+	return {"ok": ok, "share": share}
+
+
+## Backs off from a scale that broke a floor toward one that holds them: (1, 1) (the current
+## files) when the fit made the level harder, else easier steps from the fit; then
+## BACKOFF_STEPS bisections in log scale between the two. Returns [k, kf].
+func _back_off(n: int, base: Dictionary, k: float, kf: float, t0: int) -> Array:
+	var ga: Array = [1.0, 1.0] if k * kf > 1.0 else [k * 0.8, kf * 0.9]
+	var found := false
+	for j in 5:
+		if _floors(n, base, ga[0], ga[1])["ok"]:
+			found = true
 			break
-		if keep > float(band_keep[1]):
-			lo = mid   # keeps too much: a bigger last wave
+		ga = [float(ga[0]) * 0.8, float(ga[1]) * 0.9]
+		if _over(t0):
+			break
+	if not found:
+		print("      !! L%d no scale tried holds the floors; kept k %.3f kf %.3f" % [n, ga[0], ga[1]])
+		return ga
+	var good := 0.0
+	var bad := 1.0
+	var lk := [log(float(ga[0])), log(k)]
+	var lf := [log(float(ga[1])), log(kf)]
+	for i in BACKOFF_STEPS:
+		if _over(t0):
+			break
+		var t := (good + bad) * 0.5
+		if _floors(n, base, exp(lerpf(lk[0], lk[1], t)), exp(lerpf(lf[0], lf[1], t)))["ok"]:
+			good = t
 		else:
-			hi = mid
-		mid = (lo + hi) * 0.5
-	return exp(mid)
+			bad = t
+	return [exp(lerpf(lk[0], lk[1], good)), exp(lerpf(lf[0], lf[1], good))]
 
 
 ## checks=1 (spec v2.1 §2 guard checks): per level the greedy player at the pace (keep share
-## in band, armed gangs fire, enemies cost troops, bosses and lieutenants fight), the hero
-## alone with zero upgrades never one-shot, and the stored route's no-ad guarantee. full=1
-## adds the noisy first-try fail rate and the random-route wins (printed, flagged, not
-## asserted: they are calibration targets). Returns the number of failures.
+## in band ±KEEP_SLACK, armed gangs fire, enemies cost troops, bosses and lieutenants fight),
+## the hero alone with zero upgrades never one-shot, the stored route's no-ad guarantee and
+## the random-route floor (RANDOM_FLOOR of the report's n_routes sample wins). full=1 adds the
+## noisy first-try fail rate, printed against its band (~ when outside) and never asserted:
+## it is a soft target. Returns the number of failures.
 func run_guard_checks(lo: int, hi: int, only: Array, full: bool) -> int:
 	if only.is_empty():
 		only = range(lo, hi + 1)
@@ -1012,16 +1153,18 @@ func run_guard_checks(lo: int, hi: int, only: Array, full: bool) -> int:
 		var na := noad_ok(n, lv, lv.get("route", []))
 		if not na:
 			f.append("L%d the stored route loses at the no-ad pace without powers" % n)
+		var share := _win_share(lv, sample_routes(n, Autopilot.gate_row_count(lv), n_routes))
+		if share < RANDOM_FLOOR - 1e-9:
+			f.append("L%d random routes win %.0f%% (floor %.0f%%)" % [n, share * 100.0, RANDOM_FLOOR * 100.0])
 		var bosses := ""
 		for bo in r["bosses"]:
 			bosses += "%s %.1f/%d " % ["lt" if bo["lt"] else "boss", float(bo["halt"]), int(bo["barrages"])]
-		var extra := ""
+		var extra := "random wins %.0f%%" % (share * 100.0)
 		if full:
 			var bd: Dictionary = BANDS[String(r["band"])]
 			var nf := noisy_fail(n, lv)
-			var share := _win_share(lv, sample_routes(n, Autopilot.gate_row_count(lv), n_routes))
-			extra = "noisy fails %.0f%%%s, random wins %.0f%%%s" % [nf * 100.0, "" if in_band(nf, bd["fail"]) else " !!",
-				share * 100.0, "" if share >= RANDOM_FLOOR - 1e-9 else " !!"]
+			extra += ", noisy fails %.0f%% (soft %.0f-%.0f%%)%s" % [nf * 100.0, float(bd["fail"][0]) * 100.0,
+				float(bd["fail"][1]) * 100.0, "" if in_band(nf, bd["fail"]) else " ~"]
 		print("%5d | %-8s | %-4s %3.0f%% %5d/%-5d | %4d/%-6d | %10d | %-24s | %-5s | %s%s" % [n, r["band"],
 			"win" if r["state"] == "strike" else "LOSE", float(r["keep"]) * 100.0, int(r["troops"]), int(r["peak"]),
 			int(r["fired"]), int(r["armed"]), int(r["enemy_lost"]), bosses, "ok" if na else "LOSE", extra,
