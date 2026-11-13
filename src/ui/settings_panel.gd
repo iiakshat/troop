@@ -21,7 +21,7 @@ Analytics: Godotx Firebase by Paulo Coutinho (MIT),
 Google Firebase"""
 
 
-const PRIVACY_URL := "https://iiakshat.github.io/troop/privacy/"   # docs/privacy/index.html on GitHub Pages
+const PRIVACY_URL := "https://github.com/iiakshat/troop/blob/main/docs/PRIVACY.md"   # public without a Pages build (Actions is billing-locked); docs/privacy/index.html once Pages works
 
 func _ready() -> void:
 	UiKit.full_rect(self)

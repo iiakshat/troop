@@ -1,14 +1,9 @@
 # Siren Squad: Privacy Policy
 
-> **Draft for the owner.** Fill in the two `[...]` fields, check it against the build you ship, then
-> host it (GitHub Pages on the public repo works) and paste the URL into the Play Console. It
-> describes the build as of spec v2 (2026-11-12): AdMob and Firebase Analytics, a mixed audience,
-> and a neutral age screen. If an SDK or setting changes, update this page and
-> `docs/play_data_safety.md` together. The page to host is `docs/privacy/index.html` (same text,
-> mobile-friendly HTML; hosting steps in `docs/privacy/README.md`): keep it in step with this file.
+<!-- Maintainers: this file is the public policy (linked from the game's Settings and the Play Console). Keep it in step with docs/privacy/index.html and docs/play_data_safety.md whenever an SDK or setting changes. -->
 
-**Last updated:** [date of publishing]
-**Developer:** axnex (Gurugram, India). **Contact:** [contact email]
+**Last updated:** 13 November 2026
+**Developer:** axnex (Gurugram, India). **Contact:** jakshat569@gmail.com
 
 Siren Squad is an offline arcade game. You need no account, and we never ask for your name, email,
 phone number, contacts, photos or precise location. The game plays fully offline. When the phone is
@@ -95,7 +90,7 @@ on your phone until you uninstall the game or clear its data.
   age question again. A younger player's answer keeps Firebase off.
 - **Ads:** reset or delete your advertising ID in Android settings; in the EEA/UK, change your ad
   consent from the consent form.
-- **Questions, access or deletion:** email [contact email]. Because we never collect your name or
+- **Questions, access or deletion:** email jakshat569@gmail.com. Because we never collect your name or
   email, tell us roughly when you played. We will delete what we can identify within 30 days.
 
 If you are a parent and believe your child's data reached us, email us and we will delete it.
