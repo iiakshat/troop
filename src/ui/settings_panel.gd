@@ -57,6 +57,7 @@ func _ready() -> void:
 	scroll.custom_minimum_size = Vector2(580, 400)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	col.add_child(scroll)
+	UiKit.touch_scroll(scroll)
 	var credits := UiKit.label(CREDITS, 24, UiKit.INK, 0, true)
 	credits.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	credits.custom_minimum_size = Vector2(560, 0)
