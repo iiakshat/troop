@@ -50,7 +50,8 @@ const MINUS_WINDOW := 0.3
 const MINUS_HOLD := 0.9
 const MINUS_RED := Color("ff3b3b")
 const MINUS_Y := 1.6             # the -N's anchor: at the squad's front line, below the hero's head
-const REACH_SIZE := Vector2(1.7, 0.2)   # the reach bar under a gang's count (m, at scale 1)
+const REACH_SIZE := Vector2(1.7, 0.22)  # the reach bar under a gang's count (m, at scale 1)
+const REACH_BG := Color(0.93, 0.95, 1.0, 0.5)   # its empty part: pale, so "melts first" reads too
 const RF_TRACER_MIN := 3         # a volley draws at least this many tracers (its shooters; the rest miss)
 const MINUS_Z := 0.8
 ## Spec v2.1 §1.2-1.3: a telegraph marks its lane where the squad stands, in its kind's colour,
@@ -67,7 +68,7 @@ const LASER_NEAR_W := 0.1        # ... and this wide where it meets the lane (a 
 const SPOT_Z := -2.0             # where a grenade, bottle or sniper round lands: just ahead of the hero
 const THREAT_TINT := {"snipe": Color(1.0, 0.1, 0.1), "grenade": Color(1.0, 0.4, 0.06),
 	"firebomb": Color(1.0, 0.58, 0.05), "barrage": Color(1.0, 0.06, 0.18), "lt_barrage": Color(1.0, 0.16, 0.5),
-	"sweep": Color(1.0, 0.04, 0.3), "crane": Color(1.0, 0.5, 0.06), "steam": Color(1.0, 0.86, 0.6),
+	"sweep": Color(1.0, 0.04, 0.3), "crane": Color(1.0, 0.5, 0.06), "steam": Color(1.0, 0.72, 0.3),
 	"chopper": Color(1.0, 0.12, 0.08)}
 ## Review v2.1: the district hazards (units.json hazards) on screen. The docks' container drops
 ## from CRANE_Y onto the marked lane; the mill's vents burst steam from the road; uptown's
@@ -823,7 +824,7 @@ func _on_horde_spawn(h: Dictionary, lieutenant := false) -> void:
 		# Review v2.1 (honest numbers): a bar under the count, measured against the squad's
 		# firepower: its red share is how much of the squad the people who would reach it are
 		# worth (LevelSim.reach_estimate); empty = the squad's fire melts it before contact.
-		var bg := _quad(REACH_SIZE, Color(0.04, 0.04, 0.07, 0.62), 9)
+		var bg := _quad(REACH_SIZE, REACH_BG, 9)
 		var fill := _quad(REACH_SIZE, MINUS_RED, 10)
 		for q in [bg, fill]:
 			var m := q.material_override as StandardMaterial3D
@@ -1312,7 +1313,7 @@ func _on_telegraph(e: Dictionary) -> void:
 					th3["lane"] = int(l)
 					_threats.append(th3)
 			for l in lanes:
-				fx.burst(Vector3(LANE_X[int(l)], 0.2, SHELL_Z - 1.0), Color(0.95, 0.95, 0.95), 8, 1.6, 0.35, 0.8, -1.5)
+				fx.burst(Vector3(LANE_X[int(l)], 0.2, SHELL_Z - 1.0), Color(0.95, 0.95, 0.95), 8, 1.6, 0.35, 0.8, 2.0, -1.0)
 			_sfx("fire", "swoosh", -9.0, 2.0)
 		"chopper":
 			var ch: Dictionary = _choppers.get(src, {})
@@ -1426,8 +1427,9 @@ func _on_attack_land(e: Dictionary) -> void:
 		"steam":
 			for l in lanes:
 				var v := Vector3(LANE_X[int(l)], 0.2, SHELL_Z - 1.0)
-				fx.burst(v, Color(1, 1, 1), 34, 7.5, 0.6, 0.9, -3.0, 1.0)
-				fx.burst(v, Color(1.0, 0.6, 0.2), 10, 4.0, 0.3, 0.4, -1.0)
+				# Hot steam bursts up out of the road (white, rising), with an orange glow at the vent.
+				fx.burst(v, Color(1, 1, 1), 34, 5.0, 0.7, 1.0, 7.0, -2.0)
+				fx.burst(v, Color(1.0, 0.6, 0.2), 10, 3.0, 0.35, 0.45, 2.0, 0.0)
 			_sfx("fire", "swoosh", -2.0, 0.7)
 			world.shake(0.6)
 		"chopper":
@@ -1706,7 +1708,29 @@ func _chopper_node() -> Node3D:
 	rotor.add_child(_part(Vector3(7.0, 0.06, 0.32), Color(0.12, 0.12, 0.14), Vector3.ZERO))
 	rotor.add_child(_part(Vector3(0.32, 0.06, 7.0), Color(0.12, 0.12, 0.14), Vector3.ZERO))
 	n.add_child(rotor)
-	n.add_child(_part(Vector3(1.5, 1.2, 3.0), Color("2b2f36"), Vector3.ZERO))
+	n.add_child(_part(Vector3(1.5, 1.2, 3.0), Color("4a5260"), Vector3.ZERO))
+	# A blinking red light and a searchlight down onto the lane it hovers over (it reads at night).
+	var red := MeshInstance3D.new()
+	red.mesh = _box_mesh(Vector3(0.3, 0.3, 0.3))
+	red.material_override = _mat(Color(1.0, 0.1, 0.08), true)
+	red.position = Vector3(0, -0.7, 0.9)
+	n.add_child(red)
+	var beam := MeshInstance3D.new()
+	var cone := CylinderMesh.new()
+	cone.top_radius = 0.25
+	cone.bottom_radius = 1.6
+	cone.height = CHOPPER_Y
+	beam.mesh = cone
+	var bm := StandardMaterial3D.new()
+	bm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	bm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	bm.albedo_color = Color(1.0, 0.95, 0.7, 0.22)
+	bm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	beam.material_override = bm
+	beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	beam.position = Vector3(0, -CHOPPER_Y * 0.5, 0)
+	n.add_child(beam)
 	n.add_child(_part(Vector3(1.2, 0.8, 1.0), Color("7fb8e6"), Vector3(0, 0.1, 1.5)))
 	n.add_child(_part(Vector3(0.35, 0.4, 3.6), Color("2b2f36"), Vector3(0, 0.25, -3.0)))
 	n.add_child(_part(Vector3(0.1, 1.0, 0.7), Color("2b2f36"), Vector3(0, 0.75, -4.6)))
@@ -2353,6 +2377,7 @@ func _update_visuals(d: float) -> void:
 			ls = clampf(cam.global_position.distance_to(Vector3(0, 0, lz)) / 18.0, 1.0, 2.2)
 		lab.scale = Vector3.ONE * ls
 		var ly := (4.6 if hv["kind"] == "brute" else 3.6) * ENEMY_SCALE * 0.85 + 0.3 * (ls - 1.0)
+		var stacked := false
 		# Escorts walking with a boss: their count sits above the boss's bar, never on his chest.
 		# A gang walking ahead of a boss keeps its count low, just over its own heads, so the
 		# boss behind it stays in sight (spec v2 §5).
@@ -2366,6 +2391,7 @@ func _update_visuals(d: float) -> void:
 				var bar_top: float = (bv["bar"] as Node3D).position.y + 0.4 * (bv["bar"] as Node3D).scale.y
 				ly = maxf(ly, bar_top + 0.75 * ls)
 				lz = (bv["bar"] as Node3D).position.z
+				stacked = true
 			elif float(bv["h"]["z"]) < lz and int(bv["h"]["count"]) > 0:
 				ly = minf(ly, CHAR_H * ENEMY_SCALE * crowd_scale(offs.size()) + 0.45 * ls)
 				# Seen from above and behind the squad, that can still land on the boss's
@@ -2375,6 +2401,11 @@ func _update_visuals(d: float) -> void:
 					ly = bar.position.y + 0.4 * bar.scale.y + 0.7 * ls
 					lz = bar.position.z
 		lab.position = Vector3(0, ly, lz)
+		# Stacked over a boss bar it is drawn over everything like the bar's own number (the HQ
+		# far behind could otherwise sort over it).
+		lab.no_depth_test = stacked
+		lab.render_priority = 12 if stacked else 2
+		lab.outline_render_priority = 11 if stacked else 1
 		var shown := LevelSim.boss_hp(h) if hv.get("leader", false) else int(h["count"])
 		if shown != int(hv["shown"]):
 			hv["shown"] = shown
