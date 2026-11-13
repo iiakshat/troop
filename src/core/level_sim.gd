@@ -74,6 +74,7 @@ var mark_gap := 0.0     # telegraph.min_gap_s between two marks
 var fk_every_max := 1.5 # telegraph.fire_k_max: fire_k speeds the specials' attacks up to this
 var _last_mark := -1.0e9  # sim time of the last telegraph
 var bomb_silence := 0.0 # powers.bomb.silence_s: a bombed gang's guns stay quiet this long
+var volley_s := 0.0     # return_fire.volley_s: a gang's shots go out together this often (0 = every tick)
 var finish_hold: float
 var boss_hit_every: float
 var lane_w := 2.8          # metres between lane centres
@@ -170,6 +171,7 @@ func _init(level: Dictionary = {}, units_cfg: Dictionary = {}, upgrades: Diction
 	mark_gap = maxf(float(tg.get("min_gap_s", 0.0)), 0.0)
 	fk_every_max = maxf(float(tg.get("fire_k_max", 1.5)), 0.01)
 	bomb_silence = float(units_cfg["powers"].get("bomb", {}).get("silence_s", 0.0))
+	volley_s = maxf(float(units_cfg.get("return_fire", {}).get("volley_s", 0.0)), 0.0)
 	finish_hold = float(w.get("finish_hold", 14.0))
 	boss_hit_every = float(w.get("boss_hit_every", 0.1))
 	lane_w = float(w.get("lane_width", lane_w))
@@ -546,8 +548,11 @@ func _blast(b: Dictionary, bz: float, target) -> void:
 
 
 ## Brings the squad back after a loss (once per level): `troops` people (the hero plus
-## constables), gangs that were on top of the squad are shoved back, and a short shield
-## covers the restart. Returns false if the level isn't lost or was already revived.
+## constables), and a short shield covers the restart. Gangs within `push` m are shoved back to
+## it, and one that was in melee pays the troops it took in that clash (review v2.1: a revive
+## used to walk straight back into the gang that won); a boss or lieutenant goes back to his
+## halt line (world.boss_halt), where his barrage can be dodged again. Returns false if the
+## level isn't lost or was already revived.
 func revive(troops: int) -> bool:
 	if state != "lost" or revived:
 		return false
@@ -555,11 +560,17 @@ func revive(troops: int) -> bool:
 	squad.counts["hero"] = 1
 	squad.add("constable", maxi(troops, 1) - 1)
 	var push := float(revive_cfg.get("push", 14.0))
-	for h in hordes:
-		if front_z(h) > -push:
-			h["melee"] = false
-			h["melee_t"] = 0.0
-			h["z"] = -push + killed_rows(h) * float(h["row_gap"])
+	for h in hordes.duplicate():
+		var back := boss_halt if h["boss"] else push
+		if not h["melee"] and front_z(h) <= -back:
+			continue
+		var took := int(h.get("took", 0)) if h["melee"] else 0
+		h["melee"] = false
+		h["melee_t"] = 0.0
+		h["took"] = 0
+		h["z"] = -back + killed_rows(h) * float(h["row_gap"])
+		if took > 0 and not h["boss"]:
+			_kill(h, mini(took, int(h["count"])))
 	_end_attacks()  # (already called off when the squad fell; a safety net)
 	shield_t = maxf(shield_t, float(revive_cfg.get("shield", 2.0)))
 	state = "run"
@@ -1059,6 +1070,21 @@ func _kill(h: Dictionary, k: int) -> void:
 			_boss_hit(h, true)
 		hordes.erase(h)
 		out.append({"type": "horde_cleared", "horde": h["id"]})
+		_call_off(int(h["id"]), ["snipe"])
+
+
+## A gang that died takes no aimed shot: its pending attacks of these kinds are called off (an
+## `attack_land` with cancelled = true, as _end_attacks). What is already in the air (a grenade,
+## a bottle, a shell) still lands; a sniper's round is never fired, and the view drops his mark
+## and laser the moment he dies.
+func _call_off(src: int, kinds: Array) -> void:
+	for a in attacks.duplicate():
+		if int(a["src"]) != src or not kinds.has(String(a["kind"])):
+			continue
+		attacks.erase(a)
+		var ev := _land_event(a, false, false, 0)
+		ev["cancelled"] = true
+		out.append(ev)
 
 
 func _front_horde(reach: float):
@@ -1097,6 +1123,25 @@ static func row_size(h: Dictionary) -> int:
 ## Position of the frontmost living row.
 static func front_z(h: Dictionary) -> float:
 	return float(h["z"]) - killed_rows(h) * float(h["row_gap"])
+
+
+## Review v2.1 (honest numbers): how many of gang `h` would reach the squad if the squad's whole
+## fire went to it from now on: its people less what that fire kills (riot shields first) before
+## its front meets the squad. A gang that stops short (gunmen) never walks in: 0; one in melee:
+## all of it. LevelView's reach bar shows it beside the gang's count, measured against the
+## squad's firepower. An estimate for the eye; the battle never reads it.
+func reach_estimate(h: Dictionary) -> int:
+	var n := int(h["count"])
+	if n <= 0 or h["boss"]:
+		return 0
+	if h["melee"]:
+		return n
+	if h["stopped"] or float(h.get("stop", 0.0)) > 0.0:
+		return 0
+	var t := maxf(contact_z - front_z(h), 0.0) / maxf(S_base + float(h["speed"]), 0.1)
+	var hp := maxf(float(h["hp"]), 0.001)
+	var dmg := squad.dps(stats, weapons, int(h["armour"]), hp, n) * t - float(h["shield"])
+	return maxi(n - int(floor(maxf(dmg, 0.0) / hp)), 0)
 
 
 ## True while a gang's guns reach the squad (spec v2 §12.2 return fire: carries guns, front
@@ -1213,22 +1258,49 @@ func _boss_fire(h: Dictionary, dt: float) -> void:
 			h["bt"] = bevery   # due: it goes as soon as a mark is free
 			break
 		h["bt"] = float(h["bt"]) - bevery
-		_telegraph("lt_barrage" if h["lieutenant"] else "barrage", int(h["id"]), float(cfg.get("warn_s", 1.0)),
-			-1, boss_pm(int(_by_district(cfg.get("barrage_pct", 0)))), "boss")
+		var pm := boss_pm(int(_by_district(cfg.get("barrage_pct", 0))))
+		var nb := int(h.get("barrages", 0))
+		h["barrages"] = nb + 1
+		var sweep_every := int(cfg.get("sweep_every", 0))
+		if sweep_every > 0 and nb % sweep_every == sweep_every - 1:
+			# His second pattern (review v2.1): a sweep over two lanes, the squad's and one
+			# beside it, leaving one lane safe (from an outer lane that is two lanes over).
+			_telegraph("sweep", int(h["id"]), float(cfg.get("sweep_warn_s", 1.5)), -1, pm, "boss",
+				sweep_lanes(squad_lane(), nb / sweep_every))
+		else:
+			_telegraph("lt_barrage" if h["lieutenant"] else "barrage", int(h["id"]), float(cfg.get("warn_s", 1.0)),
+				-1, pm, "boss")
+
+
+## The two lanes a sweep covers when the squad stands in `lane`: that lane and its neighbour
+## toward the middle; from the middle lane the side alternates with `i` (deterministic).
+static func sweep_lanes(lane: int, i: int) -> Array:
+	if lane == 0:
+		return [0, 1]
+	if lane == 2:
+		return [1, 2]
+	return [0, 1] if i % 2 == 0 else [1, 2]
 
 
 ## Marks the squad's lane (where it stands now) for an attack landing `warn` s later:
 ## `base` troops (-1 = none) capped at `pm` per mille of the squad then, `cause` for the loss.
 ## Event `telegraph` {kind, lane, src (horde id), x, z (where it lands), land_t (sim time),
 ## id, t (warn s)}.
-func _telegraph(kind: String, src: int, warn: float, base: int, pm: int, cause: String) -> void:
+func _telegraph(kind: String, src: int, warn: float, base: int, pm: int, cause: String, lanes: Array = []) -> void:
 	var l := squad_lane()
-	var a := {"id": _new_id(), "kind": kind, "lane": l, "src": src, "land": time + warn,
+	if lanes.is_empty():
+		lanes = [l]
+	var a := {"id": _new_id(), "kind": kind, "lane": l, "lanes": lanes, "src": src, "land": time + warn,
 		"base": base, "pm": pm, "cause": cause, "x": lane_x(l), "z": 0.0}
 	attacks.append(a)
 	_last_mark = time
-	out.append({"type": "telegraph", "id": a["id"], "kind": kind, "lane": l, "src": src,
+	out.append({"type": "telegraph", "id": a["id"], "kind": kind, "lane": l, "lanes": lanes, "src": src,
 		"x": a["x"], "z": a["z"], "land_t": a["land"], "t": warn})
+
+
+## The lanes an attack in the air covers (a sweep: two; anything else: the lane it marked).
+static func attack_lanes(a: Dictionary) -> Array:
+	return a.get("lanes", [a["lane"]])
 
 
 ## Telegraphed attacks whose time has come land on the lane they marked. The hit is decided
@@ -1239,7 +1311,7 @@ func _land_attacks() -> void:
 		if time < float(a["land"]):
 			continue
 		attacks.erase(a)
-		var hit := squad_lane() == int(a["lane"])
+		var hit := attack_lanes(a).has(squad_lane())
 		var blocked := hit and shield_t > 0.0
 		var lost := 0
 		if hit and not blocked:
@@ -1252,8 +1324,8 @@ func _land_attacks() -> void:
 
 
 func _land_event(a: Dictionary, hit: bool, blocked: bool, lost: int) -> Dictionary:
-	return {"type": "attack_land", "id": a["id"], "kind": a["kind"], "lane": a["lane"], "src": a["src"],
-		"x": a["x"], "z": a["z"], "lost": lost, "blocked": blocked, "hit": hit}
+	return {"type": "attack_land", "id": a["id"], "kind": a["kind"], "lane": a["lane"], "lanes": attack_lanes(a),
+		"src": a["src"], "x": a["x"], "z": a["z"], "lost": lost, "blocked": blocked, "hit": hit}
 
 
 ## Calls off every attack still in the air (the squad fell, revived or reached the stash): an
@@ -1289,12 +1361,19 @@ func _return_fire(dt: float) -> void:
 		if not h["rf_open"]:
 			h["rf_open"] = true
 			opening = true
+			h["rf_vt"] = 0.0
 			# (The opening volley is the same on every level: fire_k scales the rate only.)
 			h["rf_acc"] = float(h["rf_acc"]) + float(rf_cfg.get("open", 0))
 		h["rf_acc"] = float(h["rf_acc"]) + float(shooters(h)) * float(h["rf_rate"]) * dt
+		# The shots go out together, a volley every volley_s (review v2.1: one shot every 0.6 s
+		# was a single dash nobody saw), the opening volley at once.
+		h["rf_vt"] = float(h.get("rf_vt", 0.0)) + dt
+		if not opening and float(h["rf_vt"]) < volley_s - 1e-9:
+			continue
 		var shots := int(floor(float(h["rf_acc"])))
 		if shots <= 0:
 			continue
+		h["rf_vt"] = 0.0
 		h["rf_acc"] = float(h["rf_acc"]) - shots
 		var blocked := shield_t > 0.0
 		var lost := 0
@@ -1303,7 +1382,7 @@ func _return_fire(dt: float) -> void:
 			if n > 0:
 				lost = _hurt(n, String(h["enemy"]), h["id"], false)
 		out.append({"type": "return_fire", "horde": h["id"], "x": 0.0, "z": front_z(h), "shots": shots,
-			"lost": lost, "blocked": blocked, "opening": opening})
+			"shooters": shooters(h), "lost": lost, "blocked": blocked, "opening": opening})
 		if state != "run":
 			return
 
@@ -1354,6 +1433,16 @@ static func clash_strikers(met: int, row: int, power: int, cap_pct: int, gangs :
 	return clampi(met * cap_pct / 100 / maxi(power, 1) / maxi(gangs, 1), 1, row)
 
 
+## A boss's (or lieutenant's) fists in contact: cap_pct % of the squad he met per melee tick (at
+## least 1), never more than his `power`; cap_pct 0 = his whole power (the old one-tick strike).
+## So he grinds a squad down over a few seconds like a gang (review v2.1: he used to take a
+## revived squad in one tick).
+static func boss_swing(met: int, power: int, cap_pct: int) -> int:
+	if cap_pct <= 0:
+		return maxi(power, 0)
+	return mini(maxi(met * cap_pct / 100, 1), maxi(power, 1))
+
+
 ## Return fire and the boss's gun never take the hero while the squad never had a follower
 ## this level (a hero-alone opening, spec v2.1 §1.1); once followers joined he falls last.
 func _spare_hero(n: int) -> int:
@@ -1381,6 +1470,7 @@ func _contacts(dt: float) -> void:
 			h["melee"] = true
 			h["melee_t"] = 0.0
 			h["met"] = squad.total()
+			h["took"] = 0
 			out.append({"type": "melee_start", "horde": h["id"], "met": h["met"]})
 		h["melee_t"] = float(h["melee_t"]) - dt
 		if float(h["melee_t"]) > 0.0:
@@ -1389,11 +1479,17 @@ func _contacts(dt: float) -> void:
 		var row := mini(row_size(h), int(h["count"]))
 		var shielded := shield_t > 0.0
 		var strikers := row
-		if not h["boss"]:
-			strikers = clash_strikers(int(h.get("met", squad.total())), row, int(h["power"]), melee_cap_pct, gangs)
+		var met := int(h.get("met", squad.total()))
+		var hit := 0
+		if h["boss"]:
+			hit = boss_swing(met, int(h["power"]), melee_cap_pct)
+		else:
+			strikers = clash_strikers(met, row, int(h["power"]), melee_cap_pct, gangs)
+			hit = strikers * int(h["power"])
 		var lost := 0
 		if not shielded:
-			lost = _hurt(strikers * int(h["power"]), String(h["enemy"]), h["id"], false)
+			lost = _hurt(hit, String(h["enemy"]), h["id"], false)
+			h["took"] = int(h.get("took", 0)) + lost
 		out.append({"type": "melee", "horde": h["id"], "enemies": strikers, "lost": lost, "shielded": shielded})
 		if h["boss"]:
 			continue  # the boss keeps swinging: he never falls to his own strike
@@ -1714,7 +1810,7 @@ func clone() -> LevelSim:
 	var c := LevelSim.new()
 	for p in ["S", "S_base", "accel", "fire_range", "spawn_dist", "contact_z", "melee_tick",
 			"boss_halt", "fire_k", "boss_k", "melee_cap_pct", "mark_max", "mark_gap", "fk_every_max", "_last_mark",
-			"bomb_silence", "finish_hold", "boss_hit_every", "weapons", "enemy_defs", "obstacle_defs",
+			"bomb_silence", "volley_s", "finish_hold", "boss_hit_every", "weapons", "enemy_defs", "obstacle_defs",
 			"powers", "rf_cfg", "boss_cfg", "lt_cfg", "revive_cfg", "star_cfg", "lane", "squad_x", "_x_driven", "lane_w", "form_half",
 			"fig_cap", "fig_r", "gate_clear_s", "gang_priority", "gang_figs", "district", "caps",
 			"coin_ref", "tap_heat", "tap_auto", "tap_per", "heat_sum", "heat_t",

@@ -840,7 +840,8 @@ func test_boosters_come_in_through_upgrades() -> void:
 func test_generated_levels_follow_the_rules() -> void:
 	var hint_ids := {}
 	var lucky_levels: Array = []
-	var offers := ["num+", "mul", "recruit", "weapon", "power", "foe_div", "foe_strip", "turncoat", "pct+"]
+	var offers := ["num+", "mul", "recruit", "turncoat", "pct+"]   # growth offers (a special is a third lane)
+	var specials := ["weapon", "power", "foe_div", "foe_strip"]
 	for n in range(1, Config.LEVEL_COUNT + 1):
 		var lv := Config.level(n)
 		check(not lv.is_empty(), "level %d exists" % n)
@@ -874,6 +875,7 @@ func test_generated_levels_follow_the_rules() -> void:
 							bosses += 1
 				"gates":
 					var n_off := 0
+					var n_special := 0
 					var lanes := {}
 					for g in e["gates"]:
 						lanes[int(g["lane"])] = true
@@ -882,16 +884,22 @@ func test_generated_levels_follow_the_rules() -> void:
 							op += "+" if int(g["v"]) > 0 else "-"
 						if offers.has(op):
 							n_off += 1
+						elif specials.has(op):
+							n_special += 1
 						if op == "recruit":
 							check(int(units["allies"][g["unit"]]["unlock"]) <= n, "L%d: %s recruit before its unlock" % [n, g["unit"]])
 					for l in 3:
 						if not lanes.has(l) and not obstacle_lanes.has("%d:%d" % [int(e["at"]), l]):
 							failures.append("L%d row at %d: lane %d holds neither a gate nor an obstacle" % [n, int(e["at"]), l])
-					check(n_off >= 1, "L%d row at %d has an offer" % [n, int(e["at"])])
+					check(n_off + n_special >= 1, "L%d row at %d has an offer" % [n, int(e["at"])])
+					# Review v2.1: from L4 every row has two growth offers (a second good lane);
+					# a lucky row has three, a special takes the third lane instead of an obstacle.
+					if n >= 4:
+						check(n_off >= 2, "L%d row at %d has two growth offers" % [n, int(e["at"])])
 					if n_off >= 3:
 						lucky += 1
 		eq(bosses, 1 if n % 10 == 0 else 0, "L%d boss" % n)
-		check(lucky <= 1, "L%d at most one lucky row" % n)
+		check(lucky <= 1, "L%d at most one lucky row (%d)" % [n, lucky])
 		if lucky > 0:
 			lucky_levels.append(n)
 		# Spec v2.1 §4.1/§5: at the level's own pace; Rush levels and L1 (45-50 s) run shorter.
@@ -1420,7 +1428,9 @@ func test_return_fire_caps_and_figures() -> void:
 	var figs := int(units["return_fire"]["figures_shown"])
 	var cap_pct := int(units["return_fire"]["volley_cap_pct"])
 	eq(figs, int(units["world"]["formation_figures"]), "one hit is one visible figure")
-	eq(cap_pct, 5, "volley cap 5 %")
+	eq(cap_pct, 8, "volley cap 8 % (a volley every volley_s, review v2.1)")
+	var vs := float(units["return_fire"]["volley_s"])
+	check(vs >= 1.2 and vs <= 1.5, "a gang's shots go out together every %.1f s (1.2-1.5)" % vs)
 	var maxs: Array = units["return_fire"]["max_shooters"]
 	eq(maxs.size(), 5, "max shooters per district")
 	# A 1,000 squad: the opening volley is one shot = one figure = ceil(1000 / 72) troops.
@@ -1432,7 +1442,7 @@ func test_return_fire_caps_and_figures() -> void:
 	eq(int(first.get("lost", 0)), 14, "one hit = ceil(1000 / 72) troops")
 	if not sim.hordes.is_empty():
 		eq(LevelSim.shooters(sim.hordes[0]), int(maxs[0]), "40 gunmen, district 1: capped shooters")
-	# A burst of shots in one tick is capped at 5 % of the squad.
+	# A burst of shots in one volley is capped at volley_cap_pct % of the squad.
 	var fast := _fight_sim([{"enemy": "gunman", "n": 40, "hp": 100000, "return_fire": {"rate": 200.0, "share": 100, "from_district": 1}}], 1000)
 	var checked := 0
 	for i in 2000:
@@ -1444,7 +1454,7 @@ func test_return_fire_caps_and_figures() -> void:
 			var per := (before + figs - 1) / figs
 			var want := mini(int(e["shots"]) * per, maxi(per, before * cap_pct / 100))
 			eq(int(e["lost"]), mini(want, before), "volley loss is capped (squad %d, %d shots)" % [before, int(e["shots"])])
-			check(int(e["lost"]) <= maxi(per, before * cap_pct / 100), "never more than 5 %% of %d" % before)
+			check(int(e["lost"]) <= maxi(per, before * cap_pct / 100), "never more than the cap of %d" % before)
 			checked += 1
 		if checked >= 6 or fast.state != "run":
 			break
@@ -1454,7 +1464,7 @@ func test_return_fire_caps_and_figures() -> void:
 	if not d5.hordes.is_empty():
 		eq(LevelSim.shooters(d5.hordes[0]), int(maxs[4]), "district 5 fields more shooters")
 	eq(LevelSim.volley_loss(1000, 1, figs, cap_pct), 14, "volley_loss: one shot")
-	eq(LevelSim.volley_loss(1000, 10, figs, cap_pct), 50, "volley_loss: capped at 5 %")
+	eq(LevelSim.volley_loss(1000, 10, figs, cap_pct), 80, "volley_loss: capped at 8 %")
 	eq(LevelSim.volley_loss(10, 3, figs, cap_pct), 1, "a small squad still loses at least one per volley")
 	eq(LevelSim.volley_loss(0, 3, figs, cap_pct), 0, "nothing from nothing")
 

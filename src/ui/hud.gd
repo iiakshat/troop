@@ -12,6 +12,13 @@ var _troops: HBoxContainer
 var _troops_pop := 0.0
 var _troops_n := -1        # the count shown (a drop pulses the pill red)
 var _troops_hurt := 0.0    # spec v2.1 §1.1: 1 on a loss, fading
+## Review v2.1: every loss also shows as a red -N tucked under the troop pill, never on the
+## enemy's side of the street (losses within MINUS_WINDOW s add up, shown MINUS_HOLD s).
+const MINUS_WINDOW := 0.3
+const MINUS_HOLD := 0.9
+var _minus: Label
+var _minus_n := 0
+var _minus_t := 0.0        # seconds since the last loss
 var _power: HBoxContainer
 var _power_shown := -1.0
 var _power_text := ""
@@ -88,6 +95,15 @@ func _ready() -> void:
 	tcol.add_child(pills)
 	pills.add_child(_troops)
 	pills.add_child(_power)
+	_minus = Label.new()
+	_minus.add_theme_font_override("font", UiKit.FONT)
+	_minus.add_theme_font_size_override("font_size", 34)
+	_minus.add_theme_color_override("font_color", Color("ff3b3b"))
+	_minus.add_theme_color_override("font_outline_color", UiKit.INK)
+	_minus.add_theme_constant_override("outline_size", 10)
+	_minus.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_minus.visible = false
+	add_child(_minus)
 	_cap_bar = ProgressBar.new()
 	_cap_bar.show_percentage = false
 	_cap_bar.custom_minimum_size = Vector2(0, 16)
@@ -219,6 +235,12 @@ func set_troops(n: int) -> void:
 	_troops_pop = 1.0
 	if _troops_n >= 0 and n < _troops_n:
 		_troops_hurt = 1.0   # spec v2.1 §1.1: a loss pulses the pill red
+		if _minus_t > MINUS_WINDOW + 0.05 or not _minus.visible:
+			_minus_n = 0
+		_minus_n += _troops_n - n
+		_minus_t = 0.0
+		_minus.text = "-" + NumFormat.fmt(_minus_n)
+		_minus.visible = true
 	_troops_n = n
 	_cap_bar.value = n
 	# Full squad: the bar turns gold.
@@ -312,6 +334,15 @@ func enter_finale() -> void:
 
 
 func _process(delta: float) -> void:
+	if _minus.visible:
+		_minus_t += delta
+		if _minus_t > MINUS_HOLD:
+			_minus.visible = false
+		else:
+			var r := _troops.get_global_rect()
+			_minus.size = _minus.get_minimum_size()
+			_minus.global_position = Vector2(r.position.x + (r.size.x - _minus.size.x) * 0.5, r.end.y + 2.0)
+			_minus.modulate.a = clampf((MINUS_HOLD - _minus_t) / 0.3, 0.0, 1.0)
 	if _troops_pop > 0.0:
 		_troops_pop = maxf(_troops_pop - delta * 4.0, 0.0)
 		_troops.pivot_offset = _troops.size * 0.5

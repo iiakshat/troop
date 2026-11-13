@@ -501,7 +501,17 @@ func test_level_weapon_overrides_district() -> void:
 		check(not b.guest, "level %d: no guest" % lv)
 		eq(b.stash, String(cfg["district_stash"][str(b.district)]), "level %d: the district's stash" % lv)
 	eq(BottleLogic.new(cfg, 4).weapon, "pistol", "L4: the first gift is the pistol")
-	eq(BottleLogic.new(cfg, 13).weapon, "bow", "L13: the bow")
+	eq(BottleLogic.new(cfg, 13).weapon, "stars", "L13: the stars")
+	# Review v2.1: the guests rotate. No guest follows itself, and the same slot of neighbouring
+	# districts carries different guests.
+	var keys: Array = lw.keys().map(func(k): return int(k))
+	keys.sort()
+	for i in range(1, keys.size()):
+		check(String(lw[str(keys[i])]) != String(lw[str(keys[i - 1])]), "L%d's guest differs from L%d's" % [keys[i], keys[i - 1]])
+		if keys[i] - keys[i - 1] == 10 or lw.has(str(keys[i] - 10)):
+			var prev := str(keys[i] - 10)
+			if lw.has(prev):
+				check(String(lw[str(keys[i])]) != String(lw[prev]), "L%d's guest differs from L%s's (same slot)" % [keys[i], prev])
 	eq(BottleLogic.new(cfg, 19).stash, "rooftop", "a guest sniper shoots from its roof")
 	check(BottleLogic.new(cfg, 19).wcfg.has("elevation"), "with the roof's height")
 	# No schedule: the district weapon everywhere. A schedule naming the district's own weapon or
@@ -531,13 +541,13 @@ func test_guest_weapon_uses_current_tier() -> void:
 	check(String(info["art"]).ends_with("finale_pistol_t1.png"), "tier 1 art (%s)" % info["art"])
 	check(ResourceLoader.exists(String(info["art"])), "the art exists")
 	eq(save, before, "the gift leaves the save alone")
-	# A replay after buying into tier 2 (L29 is a guest pistol too).
-	save["unlocked"] = 29
+	# A replay after buying into tier 2 (L23 is a guest pistol too).
+	save["unlocked"] = 23
 	Armory.set_index(save, tid, Armory.steps_per_tier(tid) + 1)
 	eq(Armory.level(save, tid).x, 2, "bought into tier 2")
 	before = save.duplicate(true)
-	var owned := BottleLogic.new(Armory.apply_finale(cfg, save), 29)
-	eq(owned.weapon, "pistol", "L29 is a guest pistol")
+	var owned := BottleLogic.new(Armory.apply_finale(cfg, save), 23)
+	eq(owned.weapon, "pistol", "L23 is a guest pistol")
 	check(int(owned.wcfg["mag"]) > int(cfg["weapons"]["pistol"]["mag"]), "the owned tier's bigger magazine")
 	check(float(owned.wcfg["kick_deg"]) < float(cfg["weapons"]["pistol"]["kick_deg"]), "and its softer kick")
 	eq(owned.wcfg, BottleLogic.new(Armory.apply_finale(cfg, save), 11).wcfg, "the same handling as the district's own pistol")

@@ -128,7 +128,7 @@ func refresh(gate: Dictionary, ticked := false) -> void:
 	# Recruits: the rank's icon sits above the number, so the number has the lane's width.
 	var tag: Label3D = p["tag"]
 	tag.position.x = 0.0
-	set_size(tag, fit_size(tag, tag.text, FIT_W, 120))
+	set_size(tag, fit_size(tag, tag.text, FIT_W, 120, 28))
 	tag_icon.position = Vector3(0, 2.9 + 0.5 * glyph_h(tag) + 0.5, 0)
 	if blocked:
 		_board_up(p)

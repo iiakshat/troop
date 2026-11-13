@@ -306,7 +306,7 @@ func test_burst_in_never_flies_through_the_heros_head() -> void:
 ## level loads; woken, it hands the weapon over as a gift (the real weapon hidden until the gift
 ## reaches the hand), then aims with it.
 func test_guest_level_rests_with_its_gift_weapon() -> void:
-	var cases := {4: "pistol", 13: "bow", 19: "sniper"}
+	var cases := {4: "pistol", 16: "bow", 19: "sniper"}
 	for lv in cases:
 		var parts := _view(lv)
 		var view: LevelView = parts[0]

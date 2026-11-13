@@ -76,6 +76,9 @@ var cal_all := {}        # config/levels/calibration.json (the current k and kf 
 var _weak := {}          # weak_units() cache
 var _floor_broke := false  # a floor broke during this level's fit (calibrate_harder)
 var random_floor := RANDOM_FLOOR  # the fit's random floor (floor=0.01: an experiment, never the checks)
+var _last_cap := -1      # this level's fit: the most people its last wave may hold (LAST_MAX x the greedy peak)
+var cap_last := false    # cap=1: the fit holds the last wave at LAST_MAX x the greedy peak (an experiment)
+var mistakes := true     # evaluate_harder measures the one-mistake routes (mistakes=0: skip, a quicker report)
 static var boss_hp_fixed := false  # units.json has the v2.1 boss rule: boss hp is not scaled
 
 # ---- spec v2.1 §2 targets (plan v2.1 Task 7)
@@ -88,7 +91,17 @@ const BANDS := {
 const TUTORIAL_LEVELS := 4      # L1-L4 are the tutorial band
 const HARD_SLOTS := [5, 9, 10]  # lieutenant, hard gauntlet, boss (when a level has no archetype)
 const HARD_ARCHETYPES := ["lieutenant", "hard_gauntlet", "boss"]
-const RANDOM_FLOOR := 0.01      # at least this share of random routes wins (spec v2.1 §2 said 5 %: DECISIONS.md)
+const RANDOM_FLOOR := 0.05      # at least this share of random routes wins (spec v2.1 §2; back at 5 % once every row has a second good lane, review v2.1)
+## Review v2.1 asked for the last wave at most 4x the greedy peak squad. Tried (cap=1): at 4x the
+## Harder band was out of reach (keep 89-100 % with every gang x5-12 and fire_k 2; the squad's fire
+## melts a crowd of its own size in moments), so the number stays the fit's dial and the view shows
+## each gang's honest danger beside its count instead (LevelView reach bar). The report lists it.
+const LAST_MAX := 4.0
+const LAST_SLACK := 1.02        # ... the checks allow this much rounding
+const CAP_CHECK := false        # the checks assert LAST_MAX (off: see above)
+## Review v2.1 (gate cliff): at most this share of the one-mistake routes (the greedy route with
+## exactly one row in another lane) may lose, per band.
+const MISTAKE_MAX := {"tutorial": 0.25, "normal": 0.25, "hard": 0.40}
 const NOISY_RUNS := 40          # noisy runs per first-try fail rate
 const NOISY_SHARE := 0.2        # the noisy player's share of random rows
 const FIRE_FROM := 11           # guard: from this level ...
@@ -192,6 +205,10 @@ func _initialize() -> void:
 			full = true
 		elif a.begins_with("floor="):
 			random_floor = float(a.substr(6))
+		elif a == "mistakes=0":
+			mistakes = false
+		elif a == "cap=1":
+			cap_last = true
 		elif a == "sweep=1":
 			sweep = true
 		elif a.begins_with("fp="):
@@ -859,6 +876,7 @@ static func watch_greedy(n: int, level: Dictionary, units_cfg: Dictionary, up: D
 		"floor_bound": bool(level.get("floor_bound", false)),
 		"lost": float(w["enemy_lost"]) / maxf(float(res["peak"]), 1.0), "mix": w["mix"],
 		"gap_med": median_gap(w["marks"]), "max_air": w["max_air"], "marks": (w["marks"] as Array).size(),
+		"last_wave": last_wave_count(level),
 		"bosses": w["bosses"].values(), "solo_shot": w["solo_shot"], "route": pilot.choices.duplicate()}
 
 
@@ -902,6 +920,10 @@ static func guard_failures(r: Dictionary) -> Array:
 			out.append("L%d %s fired %d barrages (want %d)" % [n, who, int(bo["barrages"]), BARRAGES_MIN])
 	if String(r.get("solo_shot", "")) != "":
 		out.append("L%d the hero alone was one-shot (%s)" % [n, r["solo_shot"]])
+	# Review v2.1: with cap=1 the last wave is at most LAST_MAX x the peak (else report only).
+	if CAP_CHECK and r.has("last_wave") and float(r["last_wave"]) > LAST_MAX * LAST_SLACK * maxf(float(r["peak"]), 1.0):
+		out.append("L%d last wave %d is %.1fx the greedy peak %d (want at most %.0fx)" % [n, int(r["last_wave"]),
+			float(r["last_wave"]) / maxf(float(r["peak"]), 1.0), int(r["peak"]), LAST_MAX])
 	# Advisor A3: a human can read the marks (one at a time, about a second apart).
 	if float(r.get("gap_med", -1.0)) >= 0.0 and int(r.get("marks", 0)) >= 3 and float(r["gap_med"]) < GAP_MIN - 1e-6:
 		out.append("L%d telegraphs %.2f s apart (median, want %.1f)" % [n, float(r["gap_med"]), GAP_MIN])
@@ -1023,7 +1045,9 @@ func evaluate_harder(n: int, base: Dictionary, k: float, kf := 1.0, noisy_runs :
 	for bo in g["bosses"]:
 		halt = float(bo["halt"]) if halt < 0.0 else minf(halt, float(bo["halt"]))
 	var won: bool = nr["state"] == "strike"
+	var mk := one_mistakes(n, level, units, upgrades, g["route"]) if mistakes else {"lost": 0, "total": 0}
 	return {"level": n, "rows": rows, "k": k, "kf": kf, "fire_k": fk, "boss_k": bk, "band": g["band"],
+		"mistake_lost": mk["lost"], "mistake_total": mk["total"], "last_wave": g["last_wave"], "peak": g["peak"],
 		"greedy_keep": g["keep"], "greedy_lost": g["lost"], "greedy_mix": g["mix"], "gap_med": g["gap_med"],
 		"max_air": g["max_air"], "greedy_win": g["state"] == "strike", "greedy_time": g["time"],
 		"greedy_route": g["route"], "guards": guard_failures(g), "boss_halt": halt,
@@ -1041,7 +1065,10 @@ static func harder_row(r: Dictionary) -> String:
 	var fail := float(r["noisy_fail"])
 	var halt := float(r.get("boss_halt", -1.0))
 	var mix: Dictionary = r.get("greedy_mix", {})
-	return "%5d | %-8s | %-4s %3.0f%% (%2.0f-%2.0f%%) %s | %3.0f%% %s m%3.0f r%3.0f | %3.0f%% (%2.0f-%2.0f%%) %s | %3.0f%% %s | %-5s | %5d/%-5d %3.0f%% | %6.1f | %5s | %.3f / %.3f / %.3f / %.2f | %s" % [
+	var mt := int(r.get("mistake_total", 0))
+	var ms := float(r.get("mistake_lost", 0)) / float(mt) if mt > 0 else 0.0
+	var lw := float(r.get("last_wave", 0)) / maxf(float(r.get("peak", 1)), 1.0)
+	return "%5d | %-8s | %-4s %3.0f%% (%2.0f-%2.0f%%) %s | %3.0f%% %s m%3.0f r%3.0f | %3.0f%% (%2.0f-%2.0f%%) %s | %3.0f%% %s | %-5s | %5d/%-5d %3.0f%% | %6.1f | %5s | %.3f / %.3f / %.3f / %.2f | 1-miss %2d/%-2d %3.0f%% %s | last x%.1f %s | %s" % [
 		r["level"], r["band"], "win" if r["greedy_win"] else "LOSE", keep * 100.0,
 		float(b["keep"][0]) * 100.0, float(b["keep"][1]) * 100.0, "ok" if r["greedy_win"] and in_band(keep, b["keep"], KEEP_SLACK) else "!!",
 		float(r.get("greedy_lost", 0.0)) * 100.0, "ok" if float(r.get("greedy_lost", 0.0)) <= lost_max(b) + 1e-9 else "!!",
@@ -1050,7 +1077,9 @@ static func harder_row(r: Dictionary) -> String:
 		float(r["win_rate"]) * 100.0, "ok" if float(r["win_rate"]) >= RANDOM_FLOOR - 1e-9 else "!!",
 		"ok" if r["noad"] else "LOSE", r["best_troops"], r["best_peak"], float(r["best_ratio"]) * 100.0,
 		float(r["greedy_time"]), "-" if halt < 0.0 else "%.1f" % halt, r["k"], r["kf"], float(r.get("fire_k", 1.0)),
-		float(r.get("boss_k", 1.0)), "ok" if (r["guards"] as Array).is_empty() else "; ".join(r["guards"])]
+		float(r.get("boss_k", 1.0)), int(r.get("mistake_lost", 0)), mt, ms * 100.0,
+		"ok" if ms <= float(MISTAKE_MAX[String(r["band"])]) + 1e-9 else "!!", lw, "" if lw <= LAST_MAX * LAST_SLACK else "~",
+		"ok" if (r["guards"] as Array).is_empty() else "; ".join(r["guards"])]
 
 
 ## The most of its peak the greedy player may lose to enemies over a level of band `b` (advisor
@@ -1090,6 +1119,13 @@ func calibrate_harder(n: int, base: Dictionary) -> Dictionary:
 	# Stale values from before the fire_k bounds are clamped into them first.
 	var sc := {"k": _clamp_rel(n, base, "k", 1.0), "kf": _clamp_rel(n, base, "kf", 1.0),
 		"fk": _clamp_rel(n, base, "fk", 1.0), "bk": _clamp_rel(n, base, "bk", 1.0)}
+	# cap=1 (review v2.1, an experiment): the last wave holds at most LAST_MAX x the greedy peak
+	# squad. The peak comes from the gate rows, so the first run sets the cap for the whole fit;
+	# every probe trims kf to it (_probe).
+	_last_cap = -1
+	if cap_last:
+		var first := greedy_probe(n, scaled_level(base, sc["k"], sc["kf"], sc["fk"], sc["bk"]))
+		_last_cap = int(floor(LAST_MAX * float(first["peak"])))
 	var best := _probe(n, base, sc, probes)
 	var chosen := {}
 	if _fits(best, b) and _floors(n, base, sc)["ok"]:
@@ -1189,6 +1225,7 @@ func greedy_probe(n: int, level: Dictionary, ucfg := {}) -> Dictionary:
 
 
 func _probe(n: int, base: Dictionary, sc: Dictionary, probes: Array) -> Dictionary:
+	sc = _capped(base, sc)
 	var r := greedy_probe(n, scaled_level(base, sc["k"], sc["kf"], sc["fk"], sc.get("bk", 1.0)))
 	var p := {"k": sc["k"], "kf": sc["kf"], "fk": sc["fk"], "bk": sc.get("bk", 1.0), "keep": float(r["keep"]),
 		"lost": float(r["lost"]), "win": r["state"] == "strike", "time": float(r["time"])}
@@ -1199,6 +1236,53 @@ func _probe(n: int, base: Dictionary, sc: Dictionary, probes: Array) -> Dictiona
 			sc["fk"], sc.get("bk", 1.0), r["state"], float(p["keep"]) * 100.0, float(p["lost"]) * 100.0, float(p["time"]),
 			mix_share(r["mix"], "melee") * 100.0, mix_share(r["mix"], "rf") * 100.0])
 	return p
+
+
+## `sc` with kf trimmed so the last wave holds at most _last_cap people (review v2.1; no cap set:
+## unchanged). The last wave scales with k x kf, so a larger k leaves a smaller kf.
+func _capped(base: Dictionary, sc: Dictionary) -> Dictionary:
+	if _last_cap <= 0:
+		return sc
+	var out := sc.duplicate()
+	for i in 4:
+		var lw := last_wave_count(scaled_level(base, out["k"], out["kf"]))
+		if lw <= _last_cap:
+			break
+		out["kf"] = float(out["kf"]) * float(_last_cap) / float(lw) * 0.995
+	return out
+
+
+## The people in a level's last wave (its boss or lieutenant left out).
+static func last_wave_count(level: Dictionary) -> int:
+	var last: Dictionary = {}
+	for e in level.get("events", []):
+		if e["type"] == "wave":
+			last = e
+	var n := 0
+	for g in last.get("groups", []):
+		if not _is_boss_group(g):
+			n += int(g["n"])
+	return n
+
+
+## Review v2.1 (gate cliff): the greedy route with exactly one row taken in another lane, every
+## such route played like the greedy player (taps, powers, dodging). {lost, total}.
+static func one_mistakes(n: int, level: Dictionary, units_cfg: Dictionary, up: Dictionary, route: Array) -> Dictionary:
+	var lost := 0
+	var total := 0
+	for i in route.size():
+		for l in 3:
+			if l == int(route[i]):
+				continue
+			var r := route.duplicate()
+			r[i] = l
+			seed(noisy_seed(n, 3000 + i * 3 + l))
+			var res := Autopilot.play(LevelSim.new(level, units_cfg, up),
+				Autopilot.new(r, true, true, GreedyPilot.TAPS, GreedyPilot.DODGE_P))
+			total += 1
+			if String(res["state"]) != "strike":
+				lost += 1
+	return {"lost": lost, "total": total}
 
 
 func _over(t0: int) -> bool:
@@ -1515,10 +1599,16 @@ func run_guard_checks(lo: int, hi: int, only: Array, full: bool) -> int:
 		var share := _win_share(lv, sample_routes(n, Autopilot.gate_row_count(lv), n_routes))
 		if share < RANDOM_FLOOR - 1e-9:
 			f.append("L%d random routes win %.0f%% (floor %.0f%%)" % [n, share * 100.0, RANDOM_FLOOR * 100.0])
+		var mk := one_mistakes(n, lv, units, upgrades, r["route"])
+		var mshare := float(mk["lost"]) / maxf(float(mk["total"]), 1.0)
+		if mshare > float(MISTAKE_MAX[String(r["band"])]) + 1e-9:
+			f.append("L%d %d of %d one-mistake routes lose (%.0f%%, want at most %.0f%%)" % [n, int(mk["lost"]),
+				int(mk["total"]), mshare * 100.0, float(MISTAKE_MAX[String(r["band"])]) * 100.0])
 		var bosses := ""
 		for bo in r["bosses"]:
 			bosses += "%s %.1f/%d " % ["lt" if bo["lt"] else "boss", float(bo["halt"]), int(bo["barrages"])]
-		var extra := "random wins %.0f%%" % (share * 100.0)
+		var extra := "random wins %.0f%%, 1-miss loses %d/%d, last x%.1f" % [share * 100.0, int(mk["lost"]), int(mk["total"]),
+			float(r["last_wave"]) / maxf(float(r["peak"]), 1.0)]
 		if full:
 			var bd: Dictionary = BANDS[String(r["band"])]
 			var nf := noisy_fail(n, lv)

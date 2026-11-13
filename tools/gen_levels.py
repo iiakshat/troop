@@ -57,6 +57,7 @@ RF = UNITS.get("return_fire", {})
 RF_OPEN = float(RF.get("open", 0))
 RF_CAP = int(RF.get("volley_cap_pct", 0))
 RF_FIGS = max(int(RF.get("figures_shown", W.get("formation_figures", 72))), 1)
+RF_VOLLEY_S = max(float(RF.get("volley_s", 0.0)), 0.0)
 BOSS_CFG = UNITS.get("boss", {})
 LT_CFG = UNITS.get("lieutenant", {})
 LT_BANNER = "LIEUTENANT"
@@ -120,6 +121,14 @@ def clash_strikers(met: int, row: int, power: int, cap_pct: int = MELEE_CAP, gan
     return min(max(met * cap_pct // 100 // max(power, 1) // max(gangs, 1), 1), row)
 
 
+def boss_swing(met: int, power: int, cap_pct: int = MELEE_CAP) -> int:
+    """LevelSim.boss_swing: a boss in contact takes cap_pct % of the squad he met per melee
+    tick (at least 1), never more than his power (0 = his whole power)."""
+    if cap_pct <= 0:
+        return max(power, 0)
+    return min(max(met * cap_pct // 100, 1), max(power, 1))
+
+
 def boss_hp(d: int, dps: float, lieutenant: bool = False) -> int:
     """Spec v2.1 section 1.3: a boss (lieutenant) lasts hp_secs of the expected squad's dps.
     Never scaled by the calibration k x kf (apply_scale skips bosses)."""
@@ -164,21 +173,25 @@ ARCHETYPES = {1: "gauntlet", 2: "rush", 3: "ambush", 4: "night", 5: "lieutenant"
 #              guarding offers; obstacle_w = weight x per obstacle kind
 #   all_kinds  every enemy kind unlocked so far fights in the level (Hard gauntlet)
 #   look       per-level street look on top of the district's (config/world_look.json looks)
+#   first_row  metres to the first gate row (default 36; review v2.1: each archetype opens its own way)
+#   cage_first the first beat's gang is a hostage cage (Rescue)
+#   armed_open the opening gang (opening) is an armed mix, with no AMBUSH banner (Hard gauntlet)
 ARCH = {
     "gauntlet": {},
-    "rush": {"speed": 1.2, "beats": 6, "min_secs": 44.0, "combo_p": 0.85, "row_gap": 20, "wave_after": 26,
-             "next_gap": 24, "mixes": {"fast": 3.0, "bikers": 3.0, "crowd": 1.5}, "loss_k": 0.85, "look": "rush"},
+    "rush": {"speed": 1.2, "beats": 7, "min_secs": 44.0, "combo_p": 1.0, "row_gap": 20, "wave_after": 26,
+             "next_gap": 24, "mixes": {"fast": 3.0, "bikers": 3.0, "crowd": 1.5}, "loss_k": 0.85, "look": "rush",
+             "first_row": 28},
     "ambush": {"opening": True, "mixes": {"gunline": 3.0, "molotov": 3.0, "snipers": 3.0, "grenadiers": 3.0,
                "warband": 2.5, "bikers": 2.0, "siege": 2.0}, "pincer_p": 0.35, "beats_k": 0.85},
-    "night": {"wave_after": 26, "look": "night"},
-    "lieutenant": {},
-    "rescue": {"cages": 2},
+    "night": {"wave_after": 26, "look": "night", "first_row": 24},
+    "lieutenant": {"first_row": 44},
+    "rescue": {"cages": 2, "cage_first": True},
     "horde": {"beats_k": 0.6, "combo_p": 0.7, "wave_after": 44, "next_gap": 40, "mul_w": 3.4, "mul_every": True,
               "loss_k": 1.25,
               "mixes": {"crowd": 3.0, "fast": 2.5, "brutes": 1.5, "riot": 1.5, "bikers": 1.2}},
-    "storm": {"one_offer": 0.35, "guard_p": 0.45, "obstacle_w": {"pothole": 2.0, "car": 1.6, "barricade": 1.5},
-              "look": "storm"},
-    "hard": {"all_kinds": True, "loss_k": 1.15},
+    "storm": {"guard_p": 0.45, "obstacle_w": {"pothole": 2.0, "car": 1.6, "barricade": 1.5},
+              "look": "storm", "first_row": 30},
+    "hard": {"all_kinds": True, "loss_k": 1.15, "opening": True, "armed_open": True},
     "boss": {},
 }
 CAR_LEVEL = 9          # cars first show up here (spec v2.1 §4.2: their hint card at L9)
@@ -448,7 +461,7 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05, fire_k: float = 1.0, bos
                    "rf_rate": float(rf.get("rate", 0.0)) * fire_k if rf_on else 0.0,
                    "rf_share": int(rf.get("share", 0)),
                    "rf_max": int(by_district(RF.get("max_shooters", 1 << 30), sq.d)), "rf_open": False,
-                   "rf_range": float(rf.get("range", RF.get("range", 50.0))), "rf_acc": 0.0})
+                   "rf_range": float(rf.get("range", RF.get("range", 50.0))), "rf_acc": 0.0, "rf_vt": 0.0})
     pending: list[list] = []  # telegraphed attacks in the air: [land time, base, per mille]
     had = sq.total() > 1      # return fire never takes a hero who never had followers
     last_mark = [-1.0e9]
@@ -549,12 +562,18 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05, fire_k: float = 1.0, bos
             # each hit one figure's troops, a volley capped (volley_loss).
             if h["n"] <= 0 or h["rf_rate"] <= 0 or h["melee"] or front(h) < -h["rf_range"]:
                 continue
-            if not h["rf_open"]:
+            opening = not h["rf_open"]
+            if opening:
                 h["rf_open"] = True
+                h["rf_vt"] = 0.0
                 h["rf_acc"] += RF_OPEN
             h["rf_acc"] += min((h["n"] * h["rf_share"] + 99) // 100, h["rf_max"]) * h["rf_rate"] * dt
+            h["rf_vt"] += dt   # one volley every RF_VOLLEY_S (LevelSim volley_s), the opening at once
+            if not opening and h["rf_vt"] < RF_VOLLEY_S - 1e-9:
+                continue
             shots = int(math.floor(h["rf_acc"]))
             if shots > 0:
+                h["rf_vt"] = 0.0
                 h["rf_acc"] -= shots
                 n = volley_loss(sq.total(), shots)
                 sq.lose(n if had else min(n, sq.total() - 1))
@@ -577,7 +596,10 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05, fire_k: float = 1.0, bos
             h["mt"] = float(W["melee_tick"])
             row = min(row_size(h), h["n"])
             # The crowd clash (LevelSim._contacts): a capped share of the squad it met strikes.
-            strikers = row if h["boss"] else clash_strikers(h["met"], row, h["power"], MELEE_CAP, gangs)
+            if h["boss"]:
+                sq.lose(boss_swing(h["met"], h["power"]))
+                continue
+            strikers = clash_strikers(h["met"], row, h["power"], MELEE_CAP, gangs)
             sq.lose(strikers * h["power"])
             if not h["boss"]:
                 h["n"] -= strikers
@@ -868,19 +890,12 @@ def offer_kinds(rng: random.Random, level: int, n: int, ctx: dict) -> list[str]:
         pool.append(("recruit", 2.4 + 0.04 * level))
     if level >= 11:
         pool.append(("pct", 1.0))
-    if level >= 5 and not ctx.get("weapon_done"):
-        pool.append(("weapon", 0.8))
-    if level >= 3:
-        pool.append(("power", 0.6))
-    if level >= 5 and ctx.get("next_armour"):
-        pool.append(("foe_strip", 1.5))
-    if level >= 8:
-        pool.append(("foe_div", 0.7))
     if level >= 11:
         pool.append(("turncoat", 0.7))
     kinds: list[str] = []
-    # At least one growth offer in every row (Horde: a x gate in every row).
-    first = rng.choices([k for k, _ in pool if k in GROWTH], [w for k, w in pool if k in GROWTH])[0]
+    # Growth offers only (review v2.1: a special is the row's third lane, special_kind). Horde: a
+    # x gate in every row.
+    first = rng.choices([k for k, _ in pool], [w for _, w in pool])[0]
     if ctx.get("mul_every"):
         first = "mul"
     kinds.append(first)
@@ -890,6 +905,24 @@ def offer_kinds(rng: random.Random, level: int, n: int, ctx: dict) -> list[str]:
             continue
         kinds.append(k)
     return kinds
+
+
+def special_kind(rng: random.Random, level: int, ctx: dict) -> str:
+    """A special offer for the row's third lane ('' = none this row): a weapon, a power or a
+    foe mod, each from its unlock level, at SPECIAL_P of rows (spec v2.1 §4: utilities with an
+    honest 'use' read; review v2.1: never the row's second-best lane)."""
+    pool = []
+    if level >= 5 and not ctx.get("weapon_done"):
+        pool.append(("weapon", 0.8))
+    if level >= 3:
+        pool.append(("power", 0.6))
+    if level >= 5 and ctx.get("next_armour"):
+        pool.append(("foe_strip", 1.5))
+    if level >= 8:
+        pool.append(("foe_div", 0.7))
+    if not pool or rng.random() >= SPECIAL_P:
+        return ""
+    return rng.choices([k for k, _ in pool], [w for _, w in pool])[0]
 
 
 def best_choice(sq: Sq, gates: list[dict]) -> dict | None:
@@ -908,6 +941,66 @@ def best_choice(sq: Sq, gates: list[dict]) -> dict | None:
             if g["op"] in ("weapon", "power"):
                 return g
     return best
+
+
+# Review v2.1 (gate cliff): every row has a second good lane. Its two growth offers are sized so
+# the weaker leaves at least SECOND_MIN of the stronger's planned firepower (drawn up to
+# SECOND_TOP), so one row that does not take the biggest number never decides the level. The
+# third lane is the row's cost or utility: an obstacle, a red gate or (SPECIAL_P of rows from
+# their unlock) a special offer (weapon, power, foe mods), never the second-best growth lane.
+SECOND_MIN = 0.80
+SECOND_TOP = 0.95
+SPECIAL_P = 0.32
+SPECIALS = ("weapon", "power", "foe_strip", "foe_div")
+
+
+def gate_power(sq: Sq, g: dict) -> float:
+    """The planned firepower after taking gate `g` (a turncoat's people join as constables)."""
+    s2 = sq.copy()
+    if g["op"] == "turncoat":
+        s2.add("constable", int(g["n"]))
+    else:
+        apply_gate(s2, g)
+    return s2.power()
+
+
+def is_growth(g: dict) -> bool:
+    return g["op"] in ("mul", "recruit", "turncoat") or (g["op"] in ("num", "pct") and g.get("v", 0) > 0 and "step" not in g)
+
+
+def resize_to(sq: Sq, g: dict, target: float) -> dict:
+    """Gate `g` (a growth offer in its lane) resized so taking it leaves about `target` planned
+    firepower: a +N, a recruit or a turncoat changes its number; a % gate or a second x gate
+    becomes a +N (the larger k is never shrunk)."""
+    base = sq.power()
+    lane = g["lane"]
+    need = max(target - base, 1.0)
+    if g["op"] == "recruit":
+        n = max(2, int(math.ceil(need / max(sq_value(g["unit"]), 0.01))))
+        return {"lane": lane, "op": "recruit", "unit": g["unit"], "n": nice(n)}
+    if g["op"] == "turncoat":
+        n = nice(max(6, int(math.ceil(need))))
+        if n >= 10000:
+            n = int(round(n / 1000.0)) * 1000
+        return {"lane": lane, "op": "turncoat", "n": n}
+    return {"lane": lane, "op": "num", "v": nice(max(3, int(math.ceil(need))))}
+
+
+def second_good(rng: random.Random, sq: Sq, gates: list[dict]) -> None:
+    """Sizes the row's weaker growth offer to SECOND_MIN..SECOND_TOP of the stronger's planned
+    firepower (in place). Rows with fewer than two growth offers are left alone."""
+    growth = [g for g in gates if is_growth(g)]
+    if len(growth) < 2:
+        return
+    growth.sort(key=lambda g: gate_power(sq, g), reverse=True)
+    best = gate_power(sq, growth[0])
+    second = growth[1]
+    if gate_power(sq, second) >= SECOND_MIN * best - 1e-9:
+        return
+    new = resize_to(sq, second, best * rng.uniform(SECOND_MIN, SECOND_TOP))
+    if gate_power(sq, new) > best + 1e-9 and new["op"] == "num":
+        new["v"] = max(3, int(new["v"] * 0.9))
+    gates[gates.index(second)] = new
 
 
 # ------------------------------------------------------------------ calibration
@@ -1270,7 +1363,7 @@ def generate(level: int) -> dict:
     next_gap = int(R.get("next_gap", 30))
     combo_p = float(R.get("combo_p", 0.3))
     loss_k = float(R.get("loss_k", 1.0))
-    pos = 36
+    pos = int(R.get("first_row", 36))
     lucky_left = 1 if level % LUCKY_EVERY == 1 else 0
     lucky_beat = rng.randrange(2, 5)
     mixes = [m for m in MIXES if mix_ok(m, level)]
@@ -1289,6 +1382,9 @@ def generate(level: int) -> dict:
     cage_beats: set = set()
     if R.get("cages"):
         cage_beats = set(rng.sample(range(2, beats - 1), min(int(R["cages"]), max(beats - 3, 0))))
+        if R.get("cage_first") and cage_beats:
+            cage_beats.discard(max(cage_beats))
+            cage_beats.add(0)
     beat = 0
     armed_n = 0
     prev_kinds: list[str] = []
@@ -1301,7 +1397,9 @@ def generate(level: int) -> dict:
         if beat == 0:
             # The first gang is the plain screen, except an Ambush's: armed or fast.
             mix_name = "crowd"
-            if R.get("opening"):
+            if R.get("armed_open"):
+                mix_name = rng.choice([m for m in mixes if mix_armed(m, level)] or ["crowd"])
+            elif R.get("opening"):
                 mix_name = rng.choice([m for m in ("gunline", "fast", "bikers") if m in mixes] or ["crowd"])
         elif last and not boss and not need:
             hard = [m for m in mixes if m in ("gunline", "grenadiers", "siege", "warband", "molotov", "snipers", "brutes", "riot")]
@@ -1322,18 +1420,24 @@ def generate(level: int) -> dict:
         n_rows = 2 if combo else 1
         for r in range(n_rows):
             at = pos + row_gap * r
+            # Two growth offers in every row (review v2.1: a second good lane), three in a lucky
+            # row; the third lane holds an obstacle, a red gate or a special offer.
             n_off = 2
             if lucky_left and beat == lucky_beat and r == 0:
                 n_off = 3
                 lucky_left = 0
-            elif rng.random() < 0.12 + 0.3 * diff + float(R.get("one_offer", 0.0)) and not (beat == 0 and r == 0):
-                n_off = 1
             lanes = [0, 1, 2]
             rng.shuffle(lanes)
-            offer_lanes = sorted(lanes[:n_off])
-            kinds = offer_kinds(rng, level, n_off, ctx)
-            if combo and r == 1 and len(prev_kinds) == 2 and set(prev_kinds) == {"add", "mul"} and n_off == 2:
+            kinds = offer_kinds(rng, level, 2, ctx)
+            if combo and r == 1 and len(prev_kinds) == 2 and set(prev_kinds) == {"add", "mul"}:
                 kinds = ["mul", "add"] if prev_kinds[0] == "add" else ["add", "mul"]
+            special = "" if beat == 0 and r == 0 else special_kind(rng, level, ctx)
+            if n_off == 3:
+                kinds = kinds + [special or offer_kinds(rng, level, 1, ctx)[0]]
+            elif special:
+                kinds = kinds + [special]
+                n_off = 3
+            offer_lanes = lanes[:n_off]
             gates = []
             for lane, kind in zip(offer_lanes, kinds):
                 g = offer(rng, kind, sq, lane, level, ctx)
@@ -1345,6 +1449,8 @@ def generate(level: int) -> dict:
                 for g in gates:
                     if g["op"] == "num" and prev_add is not None:
                         g["v"] = prev_add
+            second_good(rng, sq, gates)
+            prev_kinds = kinds[:2]
             obstacles = []
             for lane in lanes[n_off:]:
                 first_row = beat == 0 and r == 0
@@ -1370,7 +1476,6 @@ def generate(level: int) -> dict:
             gates.sort(key=lambda g: g["lane"])
             events.append({"at": at, "type": "gates", "gates": gates})
             events.extend(obstacles)
-            prev_kinds = kinds
             prev_add = next((g["v"] for g in gates if g["op"] == "num" and g.get("v", 0) > 0), None)
             pick = best_choice(sq, gates)
             if pick is not None:
@@ -1405,7 +1510,7 @@ def generate(level: int) -> dict:
         wave = {"at": wave_at, "type": "wave", "groups": groups}
         if last and not boss:
             wave["label"] = rng.choice([b for b in WAVE_BANNERS if not (R.get("opening") and b == "AMBUSH")])
-        elif beat == 0 and R.get("opening"):
+        elif beat == 0 and R.get("opening") and not R.get("armed_open"):
             wave["label"] = "AMBUSH"
         elif arch == "horde" and beat == 1:
             wave["label"] = "BIG GANG"
@@ -1428,8 +1533,9 @@ def generate(level: int) -> dict:
         lanes = [0, 1, 2]
         rng.shuffle(lanes)
         gates = [offer(rng, "mul" if sq.total() < max(90, cap_of(d) * 3 // 10) else "recruit", sq, lanes[0], level, ctx),
+                 offer(rng, "add", sq, lanes[2], level, ctx),
                  {"lane": lanes[1], "op": "power", "id": "bomb", "n": 1}]
-        gates.append(red_gate(rng, sq, lanes[2], level))
+        second_good(rng, sq, gates)
         gates.sort(key=lambda g: g["lane"])
         events.append({"at": at, "type": "gates", "gates": gates})
         pick = best_choice(sq, gates)
@@ -1599,6 +1705,12 @@ def merge(paths: list[str]) -> None:
                     entry[fk] = round(float(r[fk]), 3)
             if "noad" in r:
                 entry["noad"] = bool(r["noad"])
+            # Review v2.1: the share of one-mistake routes that lose, and the last wave over the
+            # greedy peak (tune.gd one_mistakes, LAST_MAX).
+            if int(r.get("mistake_total", 0)) > 0:
+                entry["one_miss"] = round(int(r["mistake_lost"]) / int(r["mistake_total"]), 3)
+            if int(r.get("peak", 0)) > 0 and "last_wave" in r:
+                entry["last_x"] = round(int(r["last_wave"]) / int(r["peak"]), 2)
             # The fit could not bring the greedy keep down into its band without breaking a
             # floor (the random floor or the no-ad guarantee): a known exception the level test
             # allows above the band (DECISIONS.md, v2.1 random floor).

@@ -59,23 +59,26 @@
   "_attack_note": "Spec v2.1 section 1.2: the specials (enemies with `attack`) act before they die. From the moment their front is within attack.start_m (beyond the squad's fire_range) they mark the squad's lane (a `telegraph`: snipe = laser, grenade and firebomb = lane mark); first_shot s after that the first, then every shoot_every (snipers, grenadiers) or throw_every (molotovs) s. Each lands attack.warn_s later on the lane it marked: the squad is hit only if it still stands in that lane then (its real position), and the shield blocks it. A landed attack costs count x shot_dmg (or x burn) troops, but never more than cap_pct % of the squad right now (at least 1). They keep walking to stop_at; once stopped, the rows behind walk up as the front rows fall, so the living front stays at stop_at (inside the squad's reach). A level's fire_k (config/levels, fitted by tests/tune.gd calibrate=1 within 0.5-2) makes its gangs after the first fire fire_k x the return-fire shots per second and attack min(fire_k, telegraph.fire_k_max) x as often (the opening volley and bosses keep their numbers; a level's boss_k, 0.5-1.5, scales its boss's or lieutenant's gun_pct and barrage_pct, in per mille). telegraph: at most max_in_air marks in the air at once and at least min_gap_s between two marks; an attack that is due waits for a free one. aim: true marks a laser sniper (Codex).",
   "telegraph": { "max_in_air": 2, "min_gap_s": 0.9, "fire_k_max": 1.5 },
   "return_fire": {
-    "_note": "Spec v2.1 section 1.1 (v2 section 12.2): gangs with guns fire at the squad while their front is within `range` metres (more than fire_range: they outrange the squad) and not in melee. On first entering range a gang fires `open` shots at once (the opening volley); after that its shooters fire rate shots/s each. Shooters per gang = share % of it (rounded up) but at most max_shooters[district - 1]. Each hit takes one visible figure: max(1, ceil(squad / figures_shown)) troops, lowest rank first, and one volley (one event) takes at most volley_cap_pct % of the squad (at least one hit). The hero falls last: while the squad never had a follower this level (a hero-alone opening) return fire never takes him; once followers joined he falls when he is the only one left. SHIELD blocks it, a bomb kills shooters. Per enemy: return_fire = {rate, share, optional range and from_district}; gangs fire back from from_district on (an enemy's own from_district overrides it; gunmen: 1).",
+    "_note": "Spec v2.1 section 1.1 (v2 section 12.2): gangs with guns fire at the squad while their front is within `range` metres (more than fire_range: they outrange the squad) and not in melee. On first entering range a gang fires `open` shots at once (the opening volley); after that its shooters fire rate shots/s each. Shooters per gang = share % of it (rounded up) but at most max_shooters[district - 1]. Each hit takes one visible figure: max(1, ceil(squad / figures_shown)) troops, lowest rank first, and one volley (one event) takes at most volley_cap_pct % of the squad (at least one hit). A gang's shots go out together, one volley every volley_s s (review v2.1: single shots were invisible), the opening volley at once. The hero falls last: while the squad never had a follower this level (a hero-alone opening) return fire never takes him; once followers joined he falls when he is the only one left. SHIELD blocks it, a bomb kills shooters. Per enemy: return_fire = {rate, share, optional range and from_district}; gangs fire back from from_district on (an enemy's own from_district overrides it; gunmen: 1).",
     "from_district": 2,
     "range": 50.0,
     "open": 1,
     "max_shooters": [3, 3, 4, 5, 6],
-    "volley_cap_pct": 5,
+    "volley_cap_pct": 8,
+    "volley_s": 1.3,
     "figures_shown": 72
   },
   "boss": {
-    "_note": "Spec v2.1 section 1.3, the district boss (enemies.boss without `lieutenant`). HP: hp_secs[district - 1] s of the expected squad's damage per second at that level (tools/gen_levels.py; calibration.json boss_dps, measured by Autopilot.boss_dps), never scaled by the calibration k x kf; he halts the street (world.boss_halt) at least halt_min_s on the expected route. Barrage: barrage_first s after he halts, then every barrage_every s, he marks the squad's lane (telegraph `barrage`); warn_s later it lands there and takes barrage_pct[district - 1] % of the squad (at least 1); changing lane dodges it, the shield blocks it. His gun (every enemies.boss.shoot_every s within shoot_range) takes gun_pct % of the squad per shot (at least 1; never the hero of a squad that never had followers). barrage_every 0 = no barrage.",
+    "_note": "Spec v2.1 section 1.3, the district boss (enemies.boss without `lieutenant`). HP: hp_secs[district - 1] s of the expected squad's damage per second at that level (tools/gen_levels.py; calibration.json boss_dps, measured by Autopilot.boss_dps), never scaled by the calibration k x kf; he halts the street (world.boss_halt) at least halt_min_s on the expected route. Barrage: barrage_first s after he halts, then every barrage_every s, he marks the squad's lane (telegraph `barrage`); warn_s later it lands there and takes barrage_pct[district - 1] % of the squad (at least 1); changing lane dodges it, the shield blocks it. Every sweep_every-th barrage is a sweep instead (review v2.1, his second pattern): it marks two lanes, the squad's and the one beside it toward the middle (from the middle lane the side alternates), leaving one lane safe, and lands sweep_warn_s later. In contact his fists take world.melee_cap_pct % of the squad he met per melee tick, never more than his power (LevelSim.boss_swing). His gun (every enemies.boss.shoot_every s within shoot_range) takes gun_pct % of the squad per shot (at least 1; never the hero of a squad that never had followers). barrage_every 0 = no barrage.",
     "hp_secs": [12, 13, 13, 14, 15],
     "halt_min_s": 6.0,
     "barrage_every": 2.5,
     "barrage_first": 1.0,
     "warn_s": 1.0,
     "barrage_pct": [12, 13, 15, 16, 18],
-    "gun_pct": 2
+    "sweep_every": 2,
+    "sweep_warn_s": 1.5,
+    "gun_pct": 3
   },
   "lieutenant": {
     "_note": "Spec v2.1 section 1.3: the mini-boss of slot 5 (L5, 15, 25, 35, 45; tools/gen_levels.py lieutenant_wave). A boss group with \"lieutenant\": true: he fights like the boss (halt, bar, gun, barrage `lt_barrage`) with these numbers, is drawn `scale` x a thug with his own tint and a smaller bar, and liberates nothing.",
@@ -85,7 +88,9 @@
     "barrage_first": 1.0,
     "warn_s": 1.0,
     "barrage_pct": [8, 9, 10, 11, 12],
-    "gun_pct": 1,
+    "sweep_every": 3,
+    "sweep_warn_s": 1.5,
+    "gun_pct": 2,
     "scale": 2.4
   },
   "obstacles": {
@@ -105,9 +110,9 @@
     "headstart": 5
   },
   "revive": {
-    "_note": "Once per level after a loss (rewarded ad): squad back to pct % of its peak, gangs within push metres are shoved back to push, and a shield (s) covers the restart; it outlasts one molotov throw cycle (throw_every + flight) so a firebomb already on its way cannot undo the revive.",
+    "_note": "Once per level after a loss (rewarded ad): squad back to pct % of its peak, gangs within push metres are shoved back to push (one that was in melee pays the troops it took in that clash; a boss or lieutenant goes back to world.boss_halt), and a shield (s) covers the restart; it outlasts one molotov throw cycle (throw_every + flight) so a firebomb already on its way cannot undo the revive.",
     "pct": 50,
-    "push": 14.0,
+    "push": 40.0,
     "shield": 4.0
   },
   "stars": {

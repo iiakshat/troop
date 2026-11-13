@@ -43,7 +43,7 @@ func drive(sim: LevelSim) -> void:
 	# attacking), a gang is in melee, or a telegraphed attack is about to land on the squad.
 	var danger := false
 	for a in sim.attacks:
-		if int(a["lane"]) == sim.squad_lane() and float(a["land"]) - sim.time < 0.25:
+		if LevelSim.attack_lanes(a).has(sim.squad_lane()) and float(a["land"]) - sim.time < 0.25:
 			danger = true
 	for h in sim.hordes:
 		if int(h["count"]) <= 0:
@@ -73,8 +73,13 @@ func _dodge(sim: LevelSim, want: int) -> int:
 	var hot := {}
 	var flee := false
 	for a in sim.attacks:
-		hot[int(a["lane"])] = true
-		if int(a["lane"]) == want and float(a["land"]) - sim.time <= DODGE_REACT_S and will_dodge(int(a["id"])):
+		var lanes := LevelSim.attack_lanes(a)
+		for l in lanes:
+			hot[int(l)] = true
+		# A sweep covers two lanes, and the way out may be two lanes over: the pilot reacts to it
+		# a little earlier (its warning is longer).
+		var react := DODGE_REACT_S + (0.4 if lanes.size() > 1 else 0.0)
+		if lanes.has(want) and float(a["land"]) - sim.time <= react and will_dodge(int(a["id"])):
 			flee = true
 	if not flee:
 		return want
@@ -142,18 +147,22 @@ static func gate_row_count(level: Dictionary) -> int:
 	return n
 
 
-## Spec v2.1 §1.3, the boss HP rule's "expected squad": the squad's damage per second against
-## the level's boss (or lieutenant) when he halts the street, playing `lanes` with `upgrades`
-## at `tap_rate` (no powers). tools/gen_levels.py sets his HP to hp_secs x this (calibration.json
-## `boss_dps`). The boss gets endless health for the run, so he always reaches the halt. A
-## level with no boss (yet; a lieutenant slot): the squad's dps against boss armour when its
-## last wave's first gang comes out. 0 if the squad falls first. `pilot` (optional) drives
-## instead of a lane-route autopilot: tools/boss_dps.gd passes the calibration profile's greedy
-## player (tests/tune.gd GreedyPilot), the spec's expected squad.
+## Spec v2.1 §1.3, the boss HP rule's "expected squad": the damage per second the squad really
+## deals the level's boss (or lieutenant) over his first hp_secs seconds at the halt, playing
+## `lanes` with `upgrades` at `tap_rate`. tools/gen_levels.py sets his HP to hp_secs x this
+## (calibration.json `boss_dps`), so on that route he falls hp_secs after he halts the street
+## (review v2.1: the old rule took the squad's paper dps against him, while the fire went to
+## his escort first, and fights ran 12-25 s). Shots on the escort in front of him count as time
+## he is not hit, and a bomb's chunk of his health is left out. He gets endless health for the
+## run. A level with no boss (yet; a lieutenant slot): the squad's paper dps against boss armour
+## when its last wave's first gang comes out. 0 if the squad falls first. `pilot` (optional)
+## drives instead of a lane-route autopilot: tools/boss_dps.gd passes the calibration profile's
+## greedy player (tests/tune.gd GreedyPilot), the spec's expected squad.
 static func boss_dps(level: Dictionary, units_cfg: Dictionary, lanes: Array, upgrades := {}, tap_rate := 2.0, dt := 1.0 / 30.0,
 		pilot: Autopilot = null) -> float:
 	var lv := level.duplicate(true)
 	var has_boss := false
+	var lieutenant := false
 	var last_wave := -1
 	var wave := 0
 	for e in lv.get("events", []):
@@ -165,19 +174,41 @@ static func boss_dps(level: Dictionary, units_cfg: Dictionary, lanes: Array, upg
 			if g["enemy"] == "boss":
 				g["hp"] = 1.0e12
 				has_boss = true
+				lieutenant = bool(g.get("lieutenant", false))
 	var sim := LevelSim.new(lv, units_cfg, upgrades)
 	if pilot == null:
 		pilot = Autopilot.new(lanes, false, true, tap_rate, 1.0)
 	var bdef: Dictionary = units_cfg["enemies"]["boss"]
+	var cfg: Dictionary = units_cfg.get("lieutenant" if lieutenant else "boss", {})
+	var secs_v: Variant = cfg.get("hp_secs", 12.0)
+	var secs := float(secs_v[clampi(sim.district, 1, (secs_v as Array).size()) - 1]) if secs_v is Array else float(secs_v)
 	var guard := 0
+	var t0 := -1.0
+	var hp0 := 0.0
+	var bombed := 0.0
+	var boss_id := -1
 	while sim.state == "run" and guard < 40000:
 		pilot.drive(sim)
 		sim.step(dt)
-		sim.drain()
+		for e in sim.drain():
+			if e["type"] == "bomb" and t0 >= 0.0:
+				bombed += float(e.get("boss_dmg", 0))
 		guard += 1
 		for h in sim.hordes:
-			var at_boss: bool = has_boss and h["boss"] and LevelSim.front_z(h) >= -sim.boss_halt
-			var at_last: bool = not has_boss and int(h["wave"]) == last_wave
-			if at_boss or at_last:
+			if not has_boss and int(h["wave"]) == last_wave:
 				return sim.squad.dps(sim.stats, sim.weapons, int(bdef["armour"]), 1.0e9, 1)
+			if has_boss and h["boss"] and t0 < 0.0 and LevelSim.front_z(h) >= -sim.boss_halt:
+				t0 = sim.time
+				boss_id = int(h["id"])
+				hp0 = float(LevelSim.boss_hp(h))
+		if t0 >= 0.0 and sim.time - t0 >= secs - 1e-9:
+			for h in sim.hordes:
+				if int(h["id"]) == boss_id:
+					return maxf(hp0 - float(LevelSim.boss_hp(h)) - bombed, 0.0) / secs
+			return 0.0
+	# The squad fell inside the window: what it dealt him until then (he falls as it does).
+	if t0 >= 0.0:
+		for h in sim.hordes:
+			if int(h["id"]) == boss_id:
+				return maxf(hp0 - float(LevelSim.boss_hp(h)) - bombed, 0.0) / secs
 	return 0.0
