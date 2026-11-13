@@ -39,6 +39,9 @@ const INTRO := 0.75             # real seconds of the burst-in camera move
 const IN_HEAD_R := 0.6          # m from the eye: the camera is in the hero's head (his body is hidden)
 const INTRO_HEAD_R := 1.4       # the burst-in rushing into his head hides him from this far out
 const FILM_HEAD_R := 1.8        # the bullet cam hides him while it is this close to his eye
+const RETURN_S := 0.25          # real s: after a film or a close-up, the knife and star camera is
+                                # back in the aim view this long after it set off (owner 2026-11-13:
+                                # "when pinwheel fails, the camera angle doesnt reset")
 
 ## LevelView's level-load prewarm (spec v2 §3): the finale is built while the level loads
 ## (`dormant`: stash, bottles, HUD, weapon), drawn out of sight for the first frames with one of
@@ -131,6 +134,13 @@ var _blade_color := Color("e6eaf0")
 var _cord_color := Color(0.55, 0.1, 0.12)
 var _later: Array = []        # {t, id, vol}: sounds scheduled in real time
 var _dust_mat: ShaderMaterial
+var _ret_t := -1.0            # real s into the camera's way back to the aim view (-1: not on it)
+var _ret_cam := Transform3D() # ... where it started
+var _ret_fov := AIM_FOV
+var _ret_focus := 6.0
+var _ret_blur := 0.1
+var input_lock := 0.0         # real s new touches are ignored (Tutorial: a lesson's hand shows first)
+var outcomes := 0             # results shown so far (a break or a miss; tests time the way back)
 
 
 func setup(w: World, f: Fx, fnt: Font, level_id: int, troop_count: int, hero: Vector3, bonus: float) -> BottleShot:
@@ -380,6 +390,11 @@ func _notification(what: int) -> void:
 # ---------------------------------------------------------------- input
 
 func _unhandled_input(event: InputEvent) -> void:
+	if input_lock > 0.0 and event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed:
+		return   # a first-run lesson's hand shows before a stray tap can shoot
+	if _mode == null and _state in ["flying", "impact"] and event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed:
+		skip_knife()   # a tap skips the knife's film (like the bullet cam)
+		return
 	if _mode:
 		var st := event as InputEventScreenTouch
 		if st != null and st.pressed and _mode.film_skip() and not _mode.input_while_busy:
@@ -484,6 +499,7 @@ func _throw_knife(aim: Vector2) -> void:
 	_track_h = 0.06 if _throw_n % 2 == 1 else -0.04
 	_state = "flying"
 	_cam_mode = "track"
+	_ret_t = -1.0
 	_real = 0.0
 	_scale = 1.0
 	_reticle.visible = false
@@ -503,6 +519,7 @@ func _process(delta: float) -> void:
 	if _state == "finished":
 		return
 	_tick_sounds(delta)
+	input_lock = maxf(input_lock - delta, 0.0)
 	var d := delta * _scale
 	if _hitstop > 0.0:
 		_hitstop -= delta
@@ -548,13 +565,10 @@ func _process(delta: float) -> void:
 				_knife_frame(delta)
 		"tally":
 			_wait -= delta
-			var k := minf(delta * 3.0, 1.0)
 			if _mode:
 				_mode.tick(delta, d)
 			else:
-				_cam = _cam.interpolate_with(_aim_view(), k)
-				_fov = lerpf(_fov, _aim_fov, k)
-				_focus = lerpf(_focus, _aim_focus, k)
+				aim_camera_frame(delta)
 			if _wait <= 0.0:
 				_state = "finished"
 				_took_camera = false
@@ -579,12 +593,7 @@ func _knife_frame(delta: float) -> void:
 			_reticle.visible = true
 			_reticle.position = Vector3(hero_pos.x + _aim.x, _floor_y + _aim.y, _wall_z + 0.3)
 			_reticle.rotation.z += delta * 2.0
-			var k := minf(delta * 6.0, 1.0)
-			_cam = _cam.interpolate_with(_aim_view(), k)
-			_fov = lerpf(_fov, _aim_fov, k)
-			_focus = lerpf(_focus, _aim_focus, k)
-			_blur = lerpf(_blur, 0.1, k)
-			_roll = 0.0
+			aim_camera_frame(delta)
 		"flying":
 			_fly(delta)
 		"impact":
@@ -597,6 +606,8 @@ func _knife_frame(delta: float) -> void:
 
 ## A shot (and its film) is over: aim again, or tally when nothing is left to do.
 func shot_over() -> void:
+	if _mode == null:
+		begin_return()   # from the knife's close-up back to the aim view
 	if not logic.finished():
 		_state = "aim"
 		_cam_mode = "aim"
@@ -606,6 +617,54 @@ func shot_over() -> void:
 		_cam_mode = "aim"
 		_wait = 1.0
 		Sfx.play("win")
+
+
+## The knife and star camera sets off back to the aim view from wherever it is (a film, a
+## close-up): a timed ease, so it is exactly there RETURN_S later, whatever the frame rate.
+func begin_return() -> void:
+	_ret_t = 0.0
+	_ret_cam = _cam
+	_ret_fov = _fov
+	_ret_focus = _focus if _focus > 0.0 else _aim_focus
+	_ret_blur = _blur
+
+
+## One frame of the knife and star aim camera: the aim view, or the timed way back to it.
+func aim_camera_frame(delta: float) -> void:
+	_roll = 0.0
+	if _ret_t >= 0.0:
+		_ret_t += delta
+		var k := smoothstep(0.0, RETURN_S, _ret_t)
+		_cam = _ret_cam.interpolate_with(_aim_view(), k)
+		_fov = lerpf(_ret_fov, _aim_fov, k)
+		_focus = lerpf(_ret_focus, _aim_focus, k)
+		_blur = lerpf(_ret_blur, 0.1, k)
+		if _ret_t >= RETURN_S:
+			_ret_t = -1.0
+		return
+	_cam = _aim_view()
+	_fov = _aim_fov
+	_focus = _aim_focus
+	_blur = 0.1
+
+
+## True while the weapon's aiming aid shows (the knife's ring, the stars' ready star, the
+## crosshair, pin or rifle): tests check it comes back after every shot.
+func aim_ui_visible() -> bool:
+	if _mode:
+		return _mode.aim_ui_visible()
+	return _reticle != null and _reticle.visible
+
+
+## A tap while a knife flies or holds on its result: it arrives at once (its bottle breaks) and
+## the camera heads back to the aim view.
+func skip_knife() -> void:
+	if _state == "flying" and _knife != null:
+		if not _contacted:
+			_contact()
+		_stick()
+	if _state == "impact":
+		_wait = 0.0
 
 
 ## The sniper's set stands on a roof 105-130 m away: in a daylight district the street's fog
@@ -655,7 +714,7 @@ func _hand_screen() -> Vector2:
 	var cam := world.camera
 	var p := to_world(WeaponStars.HAND)
 	if _mode:
-		for key in ["_gun", "_bow", "_rifle"]:
+		for key in ["_gun", "_bow", "_rifle", "_ready_star"]:
 			var n: Variant = _mode.get(key)
 			if n is Node3D and is_instance_valid(n):
 				p = (n as Node3D).global_position
@@ -730,6 +789,7 @@ func break_bottle(i: int, dir: Vector3, streak: int, loud := true) -> void:
 	var b: Node3D = _bottles[i]
 	if not b.visible:
 		return
+	outcomes += 1
 	var gold := logic.is_gold(i)
 	var decoy := logic.is_decoy(i)
 	var motion := String(logic.layout.get("motion", "static"))
@@ -780,6 +840,7 @@ func break_bottle(i: int, dir: Vector3, streak: int, loud := true) -> void:
 
 ## A shot that broke nothing: the combo is gone.
 func show_miss() -> void:
+	outcomes += 1
 	hud.set_combo(0, 1.0)
 
 

@@ -216,6 +216,11 @@ func finish() -> void:
 	visible = false
 
 
+## True while this weapon's aiming aid shows (the HUD's crosshair or pin by default).
+func aim_ui_visible() -> bool:
+	return shot.hud._reticle != null and shot.hud._reticle.visible
+
+
 ## Level-load prewarm (BottleShot dormant): `on` shows the weapon's parts that only appear
 ## mid-shot (a muzzle flash...) so they draw out of sight while the level loads; off hides them.
 func warm(_on: bool) -> void:

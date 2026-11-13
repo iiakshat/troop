@@ -184,6 +184,21 @@ func test_gate_pick_uses_chevrons() -> void:
 	Game.save["seen_hints"] = keep
 
 
+## Bottle Shot reminder (owner 2026-11-13, the pinwheel): due after the first two throws of a
+## finale both miss (then every two more), or 3 s idle; never once something is broken, and
+## never under a finger. (The live lesson cases are in tests/finale_aim_cases.gd.)
+func test_bottle_reminder_rules() -> void:
+	check(not Tutorial.remind_due(0, 0, 0.5, 0, false), "fresh: nothing")
+	check(not Tutorial.remind_due(1, 0, 0.5, 0, false), "one miss: nothing")
+	check(Tutorial.remind_due(2, 0, 0.5, 0, false), "two misses: the reminder")
+	check(not Tutorial.remind_due(3, 0, 0.5, 2, false), "one more miss after it: not again yet")
+	check(Tutorial.remind_due(4, 0, 0.5, 2, false), "two more: again")
+	check(Tutorial.remind_due(0, 0, Tutorial.REMIND_IDLE_S, 0, false), "3 s idle: the reminder")
+	check(not Tutorial.remind_due(2, 1, 9.0, 0, false), "a bottle broken: never")
+	check(not Tutorial.remind_due(2, 0, 9.0, 0, true), "a finger down: not now")
+	check(Tutorial.uses_hand("bottle_hint"), "the reminder is a hand")
+
+
 func test_power_lesson_has_no_hand() -> void:
 	for id in ["tap", "swipe", "barrel", "bottle_knives", "bottle_reload"]:
 		check(Tutorial.uses_hand(id), "%s is a gesture lesson" % id)

@@ -15,6 +15,10 @@ func _process(_delta: float) -> bool:
 		if game:
 			game.save_path = ""
 		var script: GDScript = load("res://tests/finale_aim_cases.gd")
+		if script == null or not script.can_instantiate():
+			print("FINALE AIM: 0 tests, 1 failed (finale_aim_cases.gd does not compile)")
+			quit(1)   # never hang the test run on a parse error
+			return false
 		var suite = script.new()
 		var total := 0
 		var failed := 0

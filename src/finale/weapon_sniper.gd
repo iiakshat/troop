@@ -26,6 +26,7 @@ var _sway_t := 0.0                # real seconds since the scope went up (the sw
 var _phase := "ready"             # ready | bullet | look (the film's hold) | wait | cycle
 var _flight: Dictionary = {}
 var _cycle_t := 0.0
+var _wait_t := 0.0               # phase wait: real s left on the scope before the bolt
 var _bullet: Node3D
 var _casings: Array = []
 var _look_at := Vector3.ZERO
@@ -234,6 +235,11 @@ func tick(delta: float, d: float) -> void:
 				_scoped = false
 				_scope_k = 0.0
 				_start_cycle()
+		"wait":
+			_wait_t -= delta
+			if _wait_t <= 0.0:
+				_scoped = false
+				_start_cycle()
 		"cycle":
 			_tick_cycle(delta)
 
@@ -333,13 +339,16 @@ func _tick_bullet(delta: float) -> void:
 			_start_hold_then_cycle()
 
 
+## The rifle (or the scope) is up and a shot can go.
+func aim_ui_visible() -> bool:
+	return _phase == "ready" and is_visible_in_tree() and (_rifle.visible or _overlay.alpha > 0.5)
+
+
 func _start_hold_then_cycle() -> void:
-	# Stay on the scope a moment so the miss reads, then lower it and work the bolt.
-	var tw := create_tween()
-	tw.tween_interval(0.6)
-	tw.tween_callback(func():
-		_scoped = false
-		_start_cycle())
+	# Stay on the scope a moment so the miss reads, then lower it and work the bolt (timed in
+	# tick: a tween ran on its own clock, outside the finale's).
+	_phase = "wait"
+	_wait_t = 0.6
 
 
 func _start_cycle() -> void:

@@ -94,6 +94,31 @@ func test_film_anchor_stops_short_smoothly() -> void:
 	near(FinaleWeapon.film_anchor_t(0.1, arrive, stop), 0.1, "rides with it early on")
 
 
+## The pinwheel's aim assist (owner 2026-11-13: "hard to control"): the swipe's line decides,
+## within a small cone; on a line through two bottles the lift point picks (a short flick takes
+## the first); nothing inside the cone is an honest miss.
+func test_stars_aim_assist_reads_the_swipe() -> void:
+	var cone := deg_to_rad(8.0)
+	# Two columns of two bottles, 40 px radius, seen from a thumb at the bottom.
+	var c := [{"s": Vector2(300, 700), "r": 40.0}, {"s": Vector2(300, 520), "r": 40.0},
+		{"s": Vector2(460, 700), "r": 40.0}, {"s": Vector2(460, 520), "r": 40.0}]
+	var a := Vector2(300, 1150)
+	eq(WeaponStars.pick_target(a, Vector2(300, 1000), c, cone), 0, "a short flick straight up: the first bottle on the line")
+	eq(WeaponStars.pick_target(a, Vector2(300, 525), c, cone), 1, "lifted on the upper bottle: that one")
+	eq(WeaponStars.pick_target(a, Vector2(300, 690), c, cone), 0, "lifted on the lower bottle: that one")
+	eq(WeaponStars.pick_target(a, Vector2(316, 1000), c, cone), 0, "a little off the line (well inside the cone): still the bottle")
+	eq(WeaponStars.pick_target(a, a + (Vector2(460, 700) - a) * 0.4, c, cone), 2, "towards the right column: its first bottle")
+	eq(WeaponStars.pick_target(a, Vector2(100, 1000), c, cone), -1, "well off to the side: nothing (an honest miss)")
+	eq(WeaponStars.pick_target(a, a, c, cone), -1, "no swipe: nothing")
+	# The line beats the lift point: lifted short, but pointing at the far bottle.
+	var d := [{"s": Vector2(345, 760), "r": 30.0}, {"s": Vector2(300, 560), "r": 30.0}]
+	eq(WeaponStars.pick_target(Vector2(300, 1150), Vector2(300, 900), d, cone), 1,
+		"pointing straight at the far bottle, lifted short: not the near one beside the line")
+	# No target: the line is carried on to the middle of the set's height.
+	var lp := WeaponStars.line_point(Vector2(300, 1150), Vector2(300, 1050), c)
+	near(lp.y, 610.0, "a short flick at nothing still flies on to the set's height")
+
+
 ## The live cases (real finales in a running tree), in their own process.
 func test_live_finale_aim_and_bullet_cam() -> void:
 	var out: Array = []
