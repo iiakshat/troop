@@ -12,6 +12,8 @@
   "look": "night",
   "need_upgrades": true,
   "fire_k": 6.0,
+  "coin_ref": 661,
+  "route": [2, 2, 0, 2, 1, 2, 2, 2, 0, 2],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -1, "step": 0.5, "max": 4}, {"lane": 1, "op": "mul", "k": 3}, {"lane": 2, "op": "num", "v": 115}]},
     {"at": 62, "type": "wave", "groups": [{"enemy": "thug", "n": 143}]},

@@ -10,6 +10,8 @@
   "stars": {"star2": 10, "star3": 20},
   "charges": {"shield": 1, "bomb": 2},
   "fire_k": 6.0,
+  "coin_ref": 119,
+  "route": [0, 1, 1, 1, 1, 0, 1, 0],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -2, "step": 0.5, "max": 5}, {"lane": 1, "op": "mul", "k": 2}, {"lane": 2, "op": "num", "v": 5}]},
     {"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 46}]},
@@ -31,7 +33,7 @@
     {"at": 423, "type": "wave", "groups": [{"enemy": "knifer", "n": 637}, {"enemy": "biker", "n": 530, "gap": 8}, {"enemy": "molotov", "n": 307, "gap": 16}]},
     {"at": 451, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "inspector", "n": 14}, {"lane": 1, "op": "pct", "v": -50, "inc": 10, "step": 85.7, "max": 30}, {"lane": 2, "op": "power", "id": "bomb", "n": 1}]},
     {"at": 479, "type": "hint", "id": "boss", "icon": "boss", "enemy": "boss"},
-    {"at": 487, "type": "wave", "label": "KINGPIN", "groups": [{"enemy": "thug", "n": 667}, {"enemy": "knifer", "n": 1280, "gap": 8}, {"enemy": "boss", "n": 1, "gap": 22, "hp": 3850}]},
+    {"at": 487, "type": "wave", "label": "KINGPIN", "groups": [{"enemy": "thug", "n": 667}, {"enemy": "knifer", "n": 1280, "gap": 8}, {"enemy": "boss", "n": 1, "gap": 22, "hp": 3150}]},
     {"at": 535, "type": "finish"}
   ]
 }

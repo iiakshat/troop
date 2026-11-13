@@ -10,6 +10,8 @@
   "stars": {"star2": 34, "star3": 64},
   "charges": {"shield": 1, "bomb": 1},
   "fire_k": 6.0,
+  "coin_ref": 7486,
+  "route": [1, 2, 1, 2, 0, 1, 0, 0, 0],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -2, "step": 0.5, "max": 5}, {"lane": 1, "op": "recruit", "unit": "inspector", "n": 36}, {"lane": 2, "op": "mul", "k": 4}]},
     {"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 52}]},

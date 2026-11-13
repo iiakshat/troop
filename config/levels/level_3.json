@@ -11,6 +11,8 @@
   "charges": {"shield": 1},
   "start_heat": 0.5,
   "fire_k": 5.0754,
+  "coin_ref": 201,
+  "route": [0, 1, 0, 2, 0, 2],
   "events": [
     {"at": 30, "type": "wave", "fixed": true, "groups": [{"enemy": "thug", "n": 9}]},
     {"at": 64, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 10}, {"lane": 2, "op": "mul", "k": 3}]},

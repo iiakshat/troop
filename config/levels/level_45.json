@@ -36,7 +36,7 @@
     {"at": 509, "type": "wave", "groups": [{"enemy": "thug", "n": 22178}, {"enemy": "brute", "n": 4703, "gap": 6}]},
     {"at": 537, "type": "gates", "gates": [{"lane": 1, "op": "recruit", "unit": "sniper", "n": 730}, {"lane": 2, "op": "recruit", "unit": "swat", "n": 935}]},
     {"at": 537, "type": "obstacle", "kind": "pothole", "lane": 0, "fall_pct": 30},
-    {"at": 571, "type": "wave", "label": "LIEUTENANT", "groups": [{"enemy": "thug", "n": 51811}, {"enemy": "boss", "lieutenant": true, "n": 1, "hp": 455000, "gap": 18, "power": 100000}]},
+    {"at": 571, "type": "wave", "label": "LIEUTENANT", "groups": [{"enemy": "thug", "n": 51811}, {"enemy": "boss", "lieutenant": true, "n": 1, "hp": 300000, "gap": 18, "power": 100000}]},
     {"at": 611.0, "type": "finish"}
   ]
 }

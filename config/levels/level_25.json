@@ -34,7 +34,7 @@
     {"at": 382, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 60}, {"lane": 1, "op": "num", "v": 40}, {"lane": 2, "op": "num", "v": -50, "step": 20.2, "max": 65, "inc": 5}]},
     {"at": 416, "type": "wave", "groups": [{"enemy": "thug", "n": 178}, {"enemy": "grenadier", "n": 16, "gap": 10}]},
     {"at": 445, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -80, "step": 27.1, "max": 70, "inc": 6}, {"lane": 1, "op": "num", "v": 125}, {"lane": 2, "op": "mul", "k": 3}]},
-    {"at": 479, "type": "wave", "label": "LIEUTENANT", "groups": [{"enemy": "thug", "n": 3677}, {"enemy": "boss", "lieutenant": true, "n": 1, "hp": 4200, "gap": 18, "power": 5000}]},
+    {"at": 479, "type": "wave", "label": "LIEUTENANT", "groups": [{"enemy": "thug", "n": 3677}, {"enemy": "boss", "lieutenant": true, "n": 1, "hp": 3950, "gap": 18, "power": 5000}]},
     {"at": 519.0, "type": "finish"}
   ]
 }
