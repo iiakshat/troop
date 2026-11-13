@@ -1,0 +1,27 @@
+{
+  "_note": "Phone heat (owner 2026-11-13), read by src/autoload/quality.gd; visual cost only, no gameplay number. fps_play = frame cap while a level or Bottle Shot plays; fps_menu = cap on the map, menus, result, revive, pause and age screen; menu_boost_s = seconds at fps_play after any touch in the menus (smooth scrolling and panel openings); end_full_s = seconds a finished level keeps fps_play (its burst and confetti); menu_3d_off = nothing 3D drawn while the map covers the street; menu_low_processor = Godot's low-processor mode in the menus (no frame drawn when nothing changed). render_width = the 3D scene's width in pixels before it is stretched to the screen (scale = render_width / screen width, clamped to render_scale_min..1; the 2D UI is always full size); scaling = bilinear or fsr. shadows = the sun casts shadows; shadow_mode = split2 (two cascades, as before 2026-11-13) or orthogonal (one: the crowds' shadows are drawn once a frame instead of twice); shadow_distance = metres of street with shadows; glow = the HDR bloom; spot_shadows = the Bottle Shot stash spotlights cast shadows; dof = low (Godot's default) or very_low (box bokeh) depth-of-field blur. low_end = the values a low-end phone uses instead (detect: RAM in GB at or below ram_gb_max, or a GPU name matching one of the patterns, * and ? wildcards).",
+  "fps_play": 60,
+  "fps_menu": 30,
+  "menu_boost_s": 1.5,
+  "end_full_s": 2.5,
+  "menu_3d_off": true,
+  "menu_low_processor": true,
+  "render_width": 810,
+  "render_scale_min": 0.6,
+  "scaling": "bilinear",
+  "shadows": true,
+  "shadow_mode": "orthogonal",
+  "shadow_distance": 70.0,
+  "glow": true,
+  "spot_shadows": true,
+  "dof": "low",
+  "low_end": {
+    "_note": "Overrides for a low-end phone (same keys as above).",
+    "detect": {"ram_gb_max": 3.0, "gpus": ["mali-4*", "mali-t*", "mali-g31*", "mali-g51*", "mali-g52*", "mali-g57*", "adreno*50?", "adreno*51?", "adreno*53?", "adreno*61?", "powervr*ge8*"]},
+    "render_width": 640,
+    "render_scale_min": 0.5,
+    "glow": false,
+    "spot_shadows": false,
+    "dof": "very_low"
+  }
+}
