@@ -41,6 +41,8 @@ var _ad_busy := false
 var _doubled := false
 var _station: Button
 var tip_room := ""             ## the loss tip's room; the Station opens on it
+var _tip_hand: PointerHand = null   # the menu hand on the tip's price (hidden while a panel covers the result)
+var _tip_cost := 0
 
 
 func _ready() -> void:
@@ -211,6 +213,7 @@ func show_loss(level: int, cause: String, progress := -1.0, peak := 0) -> void:
 	var tip_card: Control = null
 	if not tip.is_empty():
 		tip_room = String(tip["room"])
+		set_meta("tip_lv", _tip_level())
 		tip_card = _upgrade_tip(tip)
 		col.add_child(tip_card)
 	var row := HBoxContainer.new()
@@ -227,7 +230,8 @@ func show_loss(level: int, cause: String, progress := -1.0, peak := 0) -> void:
 	UiKit.set_alert(station, _station_alert())
 	if tip_card != null and bool(tip.get("affordable", false)):
 		# On the price, beside the room's icon and its number before ▸ after (spec v2 §11).
-		PointerHand.on(tip_card, Vector2(0.9, 0.6), 96.0).follow(tip_card.get_meta("price", tip_card), Vector2(0.5, 0.55))
+		_tip_hand = PointerHand.on(tip_card, Vector2(0.9, 0.6), 96.0).follow(tip_card.get_meta("price", tip_card), Vector2(0.5, 0.55))
+		_tip_cost = int(tip.get("cost", 0))
 	var retry := UiKit.icon_button("retry", "green", 140)
 	retry.custom_minimum_size.x = 220
 	retry.pressed.connect(func(): retry_pressed.emit())
@@ -359,6 +363,41 @@ func _ad_button(placement: String, text: String) -> Button:
 func refresh_alerts() -> void:
 	if is_instance_valid(_station):
 		UiKit.set_alert(_station, _station_alert())
+	cover(false)
+
+
+## A panel opened over the result (Armory or Station from the tip) hides the tip's hand: the
+## hand draws above its siblings, so it would sit on top of that panel. Uncovered, it comes
+## back only while the tip is still affordable and was not just bought.
+func cover(on: bool) -> void:
+	if not is_instance_valid(_tip_hand):
+		return
+	if on or _covered():
+		_tip_hand.visible = false
+	elif int(Game.save.get("coins", 0)) < _tip_cost or _tip_bought():
+		_tip_hand.queue_free()
+		_tip_hand = null
+	else:
+		_tip_hand.visible = true
+
+
+## Still under an Armory or Station panel (the Station's Armory button swaps one for the other).
+func _covered() -> bool:
+	var par := get_parent()
+	if par == null:
+		return false
+	for c in par.get_children():
+		if (c is ArmoryPanel or c is StationPanel) and not c.is_queued_for_deletion() and c.is_inside_tree():
+			return true
+	return false
+
+
+func _tip_bought() -> bool:
+	return has_meta("tip_lv") and _tip_level() != int(get_meta("tip_lv"))
+
+
+func _tip_level() -> int:
+	return Armory.index(Game.save, tip_room) if not Armory.track(tip_room).is_empty() else Game.room_level(tip_room)
 
 
 func _station_alert() -> bool:

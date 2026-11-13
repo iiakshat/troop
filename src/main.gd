@@ -346,6 +346,7 @@ func _open_tip_from_result() -> void:
 		var a := ArmoryPanel.new()
 		a.focus_id = result.tip_room
 		ui.add_child(a)
+		result.cover(true)
 		a.tree_exited.connect(func():
 			if is_instance_valid(result):
 				result.refresh_alerts())
@@ -358,6 +359,7 @@ func _open_station_from_result() -> void:
 	var p := StationPanel.new()
 	p.focus_room = result.tip_room if result.visible and Game.economy["station"].has(result.tip_room) else ""
 	ui.add_child(p)
+	result.cover(true)
 	p.tree_exited.connect(func():
 		if is_instance_valid(result):
 			result.refresh_alerts())
