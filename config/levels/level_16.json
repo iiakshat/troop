@@ -21,14 +21,14 @@
     {"at": 192, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": -7, "step": 5.8, "max": 8, "inc": 1}, {"lane": 1, "op": "num", "v": 11}, {"lane": 2, "op": "num", "v": -7, "step": 6.2, "max": 7, "inc": 1}]},
     {"at": 226, "type": "wave", "groups": [{"enemy": "knifer", "n": 18}, {"enemy": "sniper_foe", "n": 1, "gap": 14}]},
     {"at": 258, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 28}, {"lane": 1, "op": "recruit", "unit": "inspector", "n": 5}, {"lane": 2, "op": "weapon", "id": "pistol"}]},
-    {"at": 292, "type": "wave", "groups": [{"enemy": "biker", "n": 40}]},
+    {"at": 292, "type": "wave", "groups": [{"enemy": "biker", "n": 39}]},
     {"at": 324, "type": "gates", "gates": [{"lane": 1, "op": "recruit", "unit": "swat", "n": 5}, {"lane": 2, "op": "pct", "v": 30}]},
     {"at": 324, "type": "obstacle", "kind": "car", "lane": 0, "hp": 265, "dmg_pct": 30},
-    {"at": 358, "type": "cage", "lane": 2, "hostages": 24, "guards": {"enemy": "knifer", "n": 77}},
+    {"at": 358, "type": "cage", "lane": 2, "hostages": 24, "guards": {"enemy": "knifer", "n": 75}},
     {"at": 389, "type": "gates", "gates": [{"lane": 0, "op": "pct", "v": -40, "inc": 10, "step": 46.2, "max": 40}, {"lane": 1, "op": "num", "v": 55}, {"lane": 2, "op": "recruit", "unit": "swat", "n": 7}]},
     {"at": 423, "type": "cage", "lane": 2, "hostages": 50, "guards": {"enemy": "riot", "n": 30}},
     {"at": 453, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "swat", "n": 20}, {"lane": 1, "op": "pct", "v": -50, "inc": 10, "step": 115.2, "max": 20}, {"lane": 2, "op": "recruit", "unit": "inspector", "n": 28}]},
-    {"at": 487, "type": "wave", "groups": [{"enemy": "thug", "n": 845}, {"enemy": "riot", "n": 1072, "gap": 6}], "label": "LAST STAND"},
+    {"at": 487, "type": "wave", "groups": [{"enemy": "thug", "n": 881}, {"enemy": "riot", "n": 1117, "gap": 6}], "label": "LAST STAND"},
     {"at": 515, "type": "finish"}
   ]
 }

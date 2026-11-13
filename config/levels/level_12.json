@@ -11,7 +11,7 @@
   "charges": {"shield": 1, "bomb": 1},
   "look": "rush",
   "scroll_speed": 9.6,
-  "coin_ref": 411,
+  "coin_ref": 417,
   "route": [1, 1, 0, 1, 0, 0, 2, 0, 2, 1],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "inspector", "n": 2}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 5}, {"lane": 2, "op": "mul", "k": 2}]},
@@ -28,7 +28,7 @@
     {"at": 167, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 75, "block_reach": 12, "dmg_pct": 15},
     {"at": 175, "type": "gates", "gates": [{"lane": 0, "op": "mul", "k": 3}, {"lane": 1, "op": "num", "v": 16}]},
     {"at": 175, "type": "obstacle", "kind": "car", "lane": 2, "hp": 145, "dmg_pct": 30},
-    {"at": 202, "type": "wave", "groups": [{"enemy": "thug", "n": 24}, {"enemy": "knifer", "n": 98, "gap": 8}]},
+    {"at": 202, "type": "wave", "groups": [{"enemy": "thug", "n": 24}, {"enemy": "knifer", "n": 96, "gap": 8}]},
     {"at": 227, "type": "gates", "gates": [{"lane": 0, "op": "pct", "v": 30}, {"lane": 1, "op": "recruit", "unit": "sergeant", "n": 16}, {"lane": 2, "op": "pct", "v": -40, "inc": 10, "step": 64.4, "max": 20}]},
     {"at": 247, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "inspector", "n": 14}, {"lane": 2, "op": "pct", "v": 40}]},
     {"at": 247, "type": "obstacle", "kind": "barricade", "lane": 1, "hp": 445, "dmg_pct": 15},
@@ -39,9 +39,9 @@
     {"at": 308, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 485, "block_reach": 12, "dmg_pct": 10},
     {"at": 317, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "inspector", "n": 16}, {"lane": 2, "op": "num", "v": 55}]},
     {"at": 317, "type": "obstacle", "kind": "car", "lane": 1, "hp": 1100, "dmg_pct": 30},
-    {"at": 343, "type": "wave", "groups": [{"enemy": "thug", "n": 68}, {"enemy": "brute", "n": 43, "gap": 6}]},
+    {"at": 343, "type": "wave", "groups": [{"enemy": "thug", "n": 66}, {"enemy": "brute", "n": 41, "gap": 6}]},
     {"at": 368, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "inspector", "n": 30}, {"lane": 1, "op": "pct", "v": -50, "inc": 10, "step": 132.5, "max": 30}, {"lane": 2, "op": "recruit", "unit": "inspector", "n": 20}]},
-    {"at": 394, "type": "wave", "groups": [{"enemy": "thug", "n": 435}, {"enemy": "riot", "n": 1116, "gap": 6}], "label": "STREET WAR"},
+    {"at": 394, "type": "wave", "groups": [{"enemy": "thug", "n": 418}, {"enemy": "riot", "n": 1074, "gap": 6}], "label": "STREET WAR"},
     {"at": 422, "type": "finish"}
   ]
 }

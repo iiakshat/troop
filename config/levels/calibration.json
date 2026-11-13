@@ -19,7 +19,7 @@
  },
  "2": {
   "k": 0.3069,
-  "kf": 1.5,
+  "kf": 2.25,
   "best_ratio": 1.0,
   "win_rate": 0.79,
   "band": "tutorial",
@@ -39,7 +39,7 @@
  },
  "3": {
   "k": 0.2507,
-  "kf": 1.5,
+  "kf": 2.25,
   "best_ratio": 0.983,
   "win_rate": 0.73,
   "band": "tutorial",
@@ -58,11 +58,11 @@
  },
  "4": {
   "k": 0.0951,
-  "kf": 1.5,
-  "best_ratio": 0.937,
+  "kf": 2.25,
+  "best_ratio": 0.91,
   "win_rate": 0.8,
   "band": "tutorial",
-  "greedy_keep": 0.937,
+  "greedy_keep": 0.91,
   "noisy_fail": 0.0,
   "noad": true,
   "route": [
@@ -77,16 +77,16 @@
    1,
    0
   ],
-  "coin_ref": 281
+  "coin_ref": 273
  },
  "5": {
-  "k": 0.4548,
-  "kf": 1.168,
+  "k": 0.4958,
+  "kf": 1.3643,
   "best_ratio": 0.92,
-  "win_rate": 0.19,
+  "win_rate": 0.17,
   "band": "hard",
   "greedy_keep": 0.92,
-  "noisy_fail": 0.1,
+  "noisy_fail": 0.125,
   "noad": true,
   "route": [
    2,
@@ -104,9 +104,9 @@
  },
  "6": {
   "k": 0.5181,
-  "kf": 1.5,
+  "kf": 2.25,
   "best_ratio": 1.0,
-  "win_rate": 0.33,
+  "win_rate": 0.22,
   "band": "normal",
   "greedy_keep": 1.0,
   "noisy_fail": 0.1,
@@ -125,13 +125,13 @@
   "coin_ref": 300
  },
  "7": {
-  "k": 0.2644,
-  "kf": 1.5,
+  "k": 0.1645,
+  "kf": 2.25,
   "best_ratio": 1.0,
-  "win_rate": 0.17,
+  "win_rate": 0.22,
   "band": "normal",
   "greedy_keep": 1.0,
-  "noisy_fail": 0.15,
+  "noisy_fail": 0.1,
   "noad": true,
   "route": [
    0,
@@ -144,13 +144,13 @@
   "coin_ref": 300
  },
  "8": {
-  "k": 0.5742,
-  "kf": 1.3343,
-  "best_ratio": 0.937,
-  "win_rate": 0.24,
+  "k": 0.299,
+  "kf": 3.6867,
+  "best_ratio": 0.883,
+  "win_rate": 0.48,
   "band": "normal",
-  "greedy_keep": 0.923,
-  "noisy_fail": 0.075,
+  "greedy_keep": 0.87,
+  "noisy_fail": 0.05,
   "noad": true,
   "route": [
    0,
@@ -162,13 +162,13 @@
    0,
    0
   ],
-  "coin_ref": 281
+  "coin_ref": 265
  },
  "9": {
-  "k": 0.5508,
-  "kf": 2.8886,
+  "k": 0.3919,
+  "kf": 3.9643,
   "best_ratio": 0.865,
-  "win_rate": 0.08,
+  "win_rate": 0.07,
   "band": "hard",
   "greedy_keep": 0.862,
   "noisy_fail": 0.125,
@@ -187,34 +187,34 @@
   "coin_ref": 128
  },
  "10": {
-  "k": 1.0901,
-  "kf": 0.4,
-  "best_ratio": 0.423,
-  "win_rate": 0.06,
+  "k": 1.0487,
+  "kf": 0.16,
+  "best_ratio": 0.429,
+  "win_rate": 0.04,
   "band": "hard",
-  "greedy_keep": 0.421,
-  "noisy_fail": 0.175,
+  "greedy_keep": 0.416,
+  "noisy_fail": 0.2,
   "noad": true,
   "route": [
    0,
    1,
-   2,
+   1,
    1,
    1,
    0,
    1,
    1
   ],
-  "coin_ref": 63,
-  "boss_dps": 385.1
+  "coin_ref": 57,
+  "boss_dps": 387.7
  },
  "11": {
-  "k": 0.1386,
-  "kf": 6.5096,
-  "best_ratio": 0.911,
-  "win_rate": 0.85,
+  "k": 0.2802,
+  "kf": 3.1213,
+  "best_ratio": 0.896,
+  "win_rate": 0.17,
   "band": "normal",
-  "greedy_keep": 0.904,
+  "greedy_keep": 0.888,
   "noisy_fail": 0.0,
   "noad": true,
   "route": [
@@ -228,13 +228,13 @@
    0,
    0
   ],
-  "coin_ref": 246
+  "coin_ref": 240
  },
  "12": {
-  "k": 0.1377,
-  "kf": 5.0049,
+  "k": 0.134,
+  "kf": 4.948,
   "best_ratio": 0.97,
-  "win_rate": 0.38,
+  "win_rate": 0.4,
   "band": "normal",
   "greedy_keep": 0.967,
   "noisy_fail": 0.0,
@@ -251,16 +251,16 @@
    2,
    1
   ],
-  "coin_ref": 411
+  "coin_ref": 417
  },
  "13": {
-  "k": 0.6947,
-  "kf": 4.0005,
+  "k": 0.6468,
+  "kf": 5.1321,
   "best_ratio": 0.695,
-  "win_rate": 0.2,
+  "win_rate": 0.06,
   "band": "normal",
-  "greedy_keep": 0.707,
-  "noisy_fail": 0.075,
+  "greedy_keep": 0.567,
+  "noisy_fail": 0.4,
   "noad": true,
   "route": [
    1,
@@ -273,16 +273,16 @@
    2,
    1
   ],
-  "coin_ref": 146
+  "coin_ref": 132
  },
  "14": {
-  "k": 0.4097,
-  "kf": 5.0625,
-  "best_ratio": 0.801,
-  "win_rate": 0.24,
+  "k": 0.2793,
+  "kf": 11.6057,
+  "best_ratio": 0.714,
+  "win_rate": 0.05,
   "band": "normal",
-  "greedy_keep": 0.801,
-  "noisy_fail": 0.075,
+  "greedy_keep": 0.715,
+  "noisy_fail": 0.175,
   "noad": true,
   "route": [
    1,
@@ -295,16 +295,16 @@
    2,
    2
   ],
-  "coin_ref": 225
+  "coin_ref": 205
  },
  "15": {
-  "k": 0.0949,
-  "kf": 1.35,
+  "k": 0.1085,
+  "kf": 0.54,
   "best_ratio": 0.725,
-  "win_rate": 0.05,
+  "win_rate": 0.02,
   "band": "hard",
-  "greedy_keep": 0.656,
-  "noisy_fail": 0.075,
+  "greedy_keep": 0.651,
+  "noisy_fail": 0.1,
   "noad": true,
   "route": [
    0,
@@ -320,8 +320,8 @@
   "boss_dps": 875.4
  },
  "16": {
-  "k": 0.2015,
-  "kf": 5.9642,
+  "k": 0.1968,
+  "kf": 6.3647,
   "best_ratio": 0.941,
   "win_rate": 1.0,
   "band": "normal",
@@ -341,13 +341,13 @@
   "coin_ref": 250
  },
  "17": {
-  "k": 0.4478,
-  "kf": 4.6575,
-  "best_ratio": 0.941,
+  "k": 0.3287,
+  "kf": 6.9863,
+  "best_ratio": 0.927,
   "win_rate": 0.06,
   "band": "normal",
-  "greedy_keep": 0.944,
-  "noisy_fail": 0.1,
+  "greedy_keep": 0.93,
+  "noisy_fail": 0.125,
   "noad": true,
   "route": [
    0,
@@ -357,16 +357,16 @@
    2,
    0
   ],
-  "coin_ref": 576
+  "coin_ref": 573
  },
  "18": {
-  "k": 0.6418,
-  "kf": 5.0625,
-  "best_ratio": 0.943,
-  "win_rate": 0.12,
+  "k": 0.4712,
+  "kf": 7.5938,
+  "best_ratio": 0.944,
+  "win_rate": 0.15,
   "band": "normal",
-  "greedy_keep": 0.943,
-  "noisy_fail": 0.175,
+  "greedy_keep": 0.944,
+  "noisy_fail": 0.15,
   "noad": true,
   "route": [
    1,
@@ -380,16 +380,16 @@
    1,
    2
   ],
-  "coin_ref": 831
+  "coin_ref": 854
  },
  "19": {
-  "k": 0.8756,
-  "kf": 8.402,
-  "best_ratio": 0.944,
-  "win_rate": 0.08,
+  "k": 0.5036,
+  "kf": 13.3889,
+  "best_ratio": 0.943,
+  "win_rate": 0.09,
   "band": "hard",
-  "greedy_keep": 0.927,
-  "noisy_fail": 0.35,
+  "greedy_keep": 0.943,
+  "noisy_fail": 0.15,
   "noad": true,
   "route": [
    2,
@@ -401,15 +401,15 @@
    0,
    0
   ],
-  "coin_ref": 658
+  "coin_ref": 687
  },
  "20": {
-  "k": 0.641,
-  "kf": 1.35,
-  "best_ratio": 0.377,
+  "k": 0.6856,
+  "kf": 0.54,
+  "best_ratio": 0.381,
   "win_rate": 0.09,
   "band": "hard",
-  "greedy_keep": 0.387,
+  "greedy_keep": 0.446,
   "noisy_fail": 0.175,
   "noad": true,
   "route": [
@@ -423,11 +423,11 @@
    0
   ],
   "coin_ref": 60,
-  "boss_dps": 666.9
+  "boss_dps": 653.3
  },
  "21": {
-  "k": 0.4058,
-  "kf": 3.9421,
+  "k": 0.349,
+  "kf": 4.6045,
   "best_ratio": 0.918,
   "win_rate": 0.08,
   "band": "normal",
@@ -435,7 +435,7 @@
   "noisy_fail": 0.0,
   "noad": true,
   "route": [
-   2,
+   1,
    1,
    0,
    1,
@@ -444,15 +444,15 @@
    1,
    2
   ],
-  "coin_ref": 1292
+  "coin_ref": 1316
  },
  "22": {
-  "k": 0.1636,
-  "kf": 5.0625,
+  "k": 0.1104,
+  "kf": 7.5938,
   "best_ratio": 0.775,
-  "win_rate": 0.25,
+  "win_rate": 0.28,
   "band": "normal",
-  "greedy_keep": 0.775,
+  "greedy_keep": 0.774,
   "noisy_fail": 0.175,
   "noad": true,
   "route": [
@@ -467,38 +467,38 @@
    0,
    1
   ],
-  "coin_ref": 3786
+  "coin_ref": 3899
  },
  "23": {
-  "k": 0.1134,
-  "kf": 4.6575,
-  "best_ratio": 0.905,
-  "win_rate": 0.08,
+  "k": 0.1021,
+  "kf": 6.4273,
+  "best_ratio": 0.892,
+  "win_rate": 0.06,
   "band": "normal",
-  "greedy_keep": 0.905,
+  "greedy_keep": 0.892,
+  "noisy_fail": 0.125,
+  "noad": true,
+  "route": [
+   1,
+   1,
+   0,
+   0,
+   2,
+   1,
+   1
+  ],
+  "coin_ref": 2324
+ },
+ "24": {
+  "k": 0.0779,
+  "kf": 14.4126,
+  "best_ratio": 0.744,
+  "win_rate": 0.09,
+  "band": "normal",
+  "greedy_keep": 0.744,
   "noisy_fail": 0.15,
   "noad": true,
   "route": [
-   1,
-   1,
-   0,
-   0,
-   2,
-   1,
-   1
-  ],
-  "coin_ref": 2357
- },
- "24": {
-  "k": 0.1268,
-  "kf": 9.6084,
-  "best_ratio": 0.732,
-  "win_rate": 0.08,
-  "band": "normal",
-  "greedy_keep": 0.732,
-  "noisy_fail": 0.25,
-  "noad": true,
-  "route": [
    0,
    0,
    0,
@@ -508,16 +508,16 @@
    2,
    1
   ],
-  "coin_ref": 829
+  "coin_ref": 864
  },
  "25": {
-  "k": 0.6415,
-  "kf": 2.8566,
-  "best_ratio": 0.525,
-  "win_rate": 0.1,
+  "k": 0.9411,
+  "kf": 2.0464,
+  "best_ratio": 0.514,
+  "win_rate": 0.08,
   "band": "hard",
-  "greedy_keep": 0.526,
-  "noisy_fail": 0.2,
+  "greedy_keep": 0.516,
+  "noisy_fail": 0.225,
   "noad": true,
   "route": [
    2,
@@ -529,17 +529,17 @@
    2,
    2
   ],
-  "coin_ref": 190,
-  "boss_dps": 1159.9
+  "coin_ref": 179,
+  "boss_dps": 1145.9
  },
  "26": {
-  "k": 0.4722,
-  "kf": 5.0625,
-  "best_ratio": 0.844,
-  "win_rate": 0.48,
+  "k": 0.4767,
+  "kf": 7.9429,
+  "best_ratio": 0.776,
+  "win_rate": 0.26,
   "band": "normal",
-  "greedy_keep": 0.832,
-  "noisy_fail": 0.025,
+  "greedy_keep": 0.764,
+  "noisy_fail": 0.225,
   "noad": true,
   "route": [
    2,
@@ -553,19 +553,19 @@
    0,
    1
   ],
-  "coin_ref": 3433
+  "coin_ref": 3187
  },
  "27": {
-  "k": 0.8206,
-  "kf": 5.0625,
-  "best_ratio": 0.93,
+  "k": 0.5107,
+  "kf": 7.5938,
+  "best_ratio": 0.942,
   "win_rate": 0.12,
   "band": "normal",
-  "greedy_keep": 0.93,
-  "noisy_fail": 0.2,
+  "greedy_keep": 0.898,
+  "noisy_fail": 0.15,
   "noad": true,
   "route": [
-   1,
+   0,
    0,
    0,
    0,
@@ -575,13 +575,13 @@
   "coin_ref": 852
  },
  "28": {
-  "k": 0.0731,
-  "kf": 14.3673,
+  "k": 0.0396,
+  "kf": 24.4801,
   "best_ratio": 0.743,
-  "win_rate": 0.1,
+  "win_rate": 0.12,
   "band": "normal",
   "greedy_keep": 0.743,
-  "noisy_fail": 0.075,
+  "noisy_fail": 0.05,
   "noad": true,
   "route": [
    1,
@@ -594,19 +594,19 @@
    1,
    1
   ],
-  "coin_ref": 721
+  "coin_ref": 767
  },
  "29": {
-  "k": 0.2481,
-  "kf": 3.9554,
-  "best_ratio": 0.743,
-  "win_rate": 0.17,
+  "k": 0.218,
+  "kf": 4.5131,
+  "best_ratio": 0.742,
+  "win_rate": 0.21,
   "band": "hard",
-  "greedy_keep": 0.743,
+  "greedy_keep": 0.74,
   "noisy_fail": 0.05,
   "noad": true,
   "route": [
-   0,
+   2,
    0,
    2,
    0,
@@ -616,26 +616,39 @@
    2,
    2
   ],
-  "coin_ref": 321
+  "coin_ref": 362
  },
  "30": {
-  "k": 0.0025,
-  "kf": 1.7598,
-  "best_ratio": 0.273,
-  "win_rate": 0.0,
+  "k": 0.0029,
+  "kf": 0.7039,
+  "best_ratio": 0.472,
+  "win_rate": 0.01,
   "band": "hard",
-  "greedy_keep": 0.273,
-  "noisy_fail": 0.5,
-  "noad": false,
-  "boss_dps": 10962.3
+  "greedy_keep": 0.472,
+  "noisy_fail": 0.225,
+  "noad": true,
+  "route": [
+   1,
+   1,
+   2,
+   2,
+   0,
+   1,
+   0,
+   0,
+   0,
+   2
+  ],
+  "coin_ref": 3542,
+  "boss_dps": 17414.0
  },
  "31": {
-  "k": 0.4087,
-  "kf": 5.0625,
-  "best_ratio": 0.894,
+  "k": 0.3678,
+  "kf": 6.9862,
+  "best_ratio": 0.907,
   "win_rate": 0.12,
   "band": "normal",
-  "greedy_keep": 0.894,
+  "greedy_keep": 0.907,
   "noisy_fail": 0.1,
   "noad": true,
   "route": [
@@ -649,16 +662,16 @@
    0,
    0
   ],
-  "coin_ref": 14235
+  "coin_ref": 14320
  },
  "32": {
-  "k": 0.1701,
-  "kf": 5.0625,
-  "best_ratio": 0.881,
-  "win_rate": 0.18,
+  "k": 0.1249,
+  "kf": 7.5938,
+  "best_ratio": 0.869,
+  "win_rate": 0.13,
   "band": "normal",
-  "greedy_keep": 0.88,
-  "noisy_fail": 0.15,
+  "greedy_keep": 0.868,
+  "noisy_fail": 0.1,
   "noad": true,
   "route": [
    2,
@@ -672,19 +685,19 @@
    2,
    1
   ],
-  "coin_ref": 4883
+  "coin_ref": 4989
  },
  "33": {
-  "k": 0.2404,
-  "kf": 5.0625,
+  "k": 0.1346,
+  "kf": 13.4929,
   "best_ratio": 0.856,
-  "win_rate": 0.18,
+  "win_rate": 0.08,
   "band": "normal",
-  "greedy_keep": 0.855,
-  "noisy_fail": 0.125,
+  "greedy_keep": 0.832,
+  "noisy_fail": 0.325,
   "noad": true,
   "route": [
-   0,
+   2,
    2,
    2,
    2,
@@ -694,13 +707,13 @@
    0,
    1
   ],
-  "coin_ref": 2527
+  "coin_ref": 2637
  },
  "34": {
-  "k": 0.1077,
-  "kf": 23.1719,
+  "k": 0.0586,
+  "kf": 46.1446,
   "best_ratio": 0.931,
-  "win_rate": 0.49,
+  "win_rate": 0.48,
   "band": "normal",
   "greedy_keep": 0.931,
   "noisy_fail": 0.0,
@@ -717,16 +730,16 @@
    0,
    0
   ],
-  "coin_ref": 1458
+  "coin_ref": 1536
  },
  "35": {
-  "k": 0.333,
-  "kf": 3.375,
-  "best_ratio": 0.57,
-  "win_rate": 0.17,
+  "k": 1.4683,
+  "kf": 1.6975,
+  "best_ratio": 0.557,
+  "win_rate": 0.05,
   "band": "hard",
-  "greedy_keep": 0.444,
-  "noisy_fail": 0.125,
+  "greedy_keep": 0.376,
+  "noisy_fail": 0.225,
   "noad": true,
   "route": [
    2,
@@ -739,17 +752,17 @@
    1,
    2
   ],
-  "coin_ref": 2547,
-  "boss_dps": 14176.6
+  "coin_ref": 2115,
+  "boss_dps": 13555.0
  },
  "36": {
-  "k": 0.4304,
-  "kf": 5.3363,
+  "k": 0.2901,
+  "kf": 7.8638,
   "best_ratio": 0.714,
   "win_rate": 0.04,
   "band": "normal",
   "greedy_keep": 0.714,
-  "noisy_fail": 0.25,
+  "noisy_fail": 0.175,
   "noad": true,
   "route": [
    0,
@@ -760,19 +773,19 @@
    1,
    0,
    2,
-   1,
+   0,
    1
   ],
-  "coin_ref": 4485
+  "coin_ref": 4658
  },
  "37": {
-  "k": 0.9798,
-  "kf": 1.35,
-  "best_ratio": 0.369,
-  "win_rate": 0.12,
+  "k": 1.4651,
+  "kf": 0.6055,
+  "best_ratio": 0.405,
+  "win_rate": 0.05,
   "band": "normal",
-  "greedy_keep": 0.369,
-  "noisy_fail": 0.1,
+  "greedy_keep": 0.405,
+  "noisy_fail": 0.125,
   "noad": true,
   "route": [
    2,
@@ -782,13 +795,13 @@
    1,
    1
   ],
-  "coin_ref": 11191
+  "coin_ref": 11277
  },
  "38": {
-  "k": 0.0299,
-  "kf": 88.9246,
+  "k": 0.0362,
+  "kf": 75.2658,
   "best_ratio": 0.788,
-  "win_rate": 0.06,
+  "win_rate": 0.05,
   "band": "normal",
   "greedy_keep": 0.788,
   "noisy_fail": 0.075,
@@ -806,15 +819,15 @@
    1,
    2
   ],
-  "coin_ref": 4379
+  "coin_ref": 4355
  },
  "39": {
-  "k": 0.5647,
-  "kf": 2.8566,
-  "best_ratio": 0.592,
+  "k": 0.6185,
+  "kf": 2.4178,
+  "best_ratio": 0.569,
   "win_rate": 0.05,
   "band": "hard",
-  "greedy_keep": 0.499,
+  "greedy_keep": 0.475,
   "noisy_fail": 0.125,
   "noad": true,
   "route": [
@@ -831,26 +844,38 @@
    2,
    2
   ],
-  "coin_ref": 3267
+  "coin_ref": 3127
  },
  "40": {
-  "k": 0.0011,
-  "kf": 3.1035,
-  "best_ratio": 0.0,
-  "win_rate": 0.02,
+  "k": 0.0055,
+  "kf": 4.6552,
+  "best_ratio": 0.692,
+  "win_rate": 0.11,
   "band": "hard",
-  "greedy_keep": 0.451,
-  "noisy_fail": 0.525,
-  "noad": false,
-  "boss_dps": 1311.8
+  "greedy_keep": 0.828,
+  "noisy_fail": 0.075,
+  "noad": true,
+  "route": [
+   0,
+   1,
+   0,
+   2,
+   2,
+   0,
+   0,
+   0,
+   0
+  ],
+  "coin_ref": 2110,
+  "boss_dps": 6672.1
  },
  "41": {
-  "k": 0.783,
-  "kf": 1.35,
+  "k": 1.2764,
+  "kf": 0.54,
   "best_ratio": 0.321,
-  "win_rate": 0.14,
+  "win_rate": 0.13,
   "band": "normal",
-  "greedy_keep": 0.294,
+  "greedy_keep": 0.289,
   "noisy_fail": 0.1,
   "noad": true,
   "route": [
@@ -864,16 +889,16 @@
    2,
    2
   ],
-  "coin_ref": 2897
+  "coin_ref": 2580
  },
  "42": {
-  "k": 0.109,
-  "kf": 3.375,
-  "best_ratio": 0.429,
-  "win_rate": 0.41,
+  "k": 0.5448,
+  "kf": 1.35,
+  "best_ratio": 0.369,
+  "win_rate": 0.18,
   "band": "normal",
-  "greedy_keep": 0.425,
-  "noisy_fail": 0.0,
+  "greedy_keep": 0.334,
+  "noisy_fail": 0.05,
   "noad": true,
   "route": [
    1,
@@ -886,16 +911,16 @@
    1,
    1
   ],
-  "coin_ref": 10176
+  "coin_ref": 7319
  },
  "43": {
-  "k": 0.2308,
-  "kf": 5.0625,
-  "best_ratio": 0.843,
-  "win_rate": 0.23,
+  "k": 0.1293,
+  "kf": 15.086,
+  "best_ratio": 0.832,
+  "win_rate": 0.15,
   "band": "normal",
   "greedy_keep": 0.831,
-  "noisy_fail": 0.125,
+  "noisy_fail": 0.15,
   "noad": true,
   "route": [
    1,
@@ -906,7 +931,7 @@
    1,
    1
   ],
-  "coin_ref": 1917
+  "coin_ref": 2105
  },
  "44": {
   "k": 0.0795,
@@ -932,8 +957,8 @@
   "coin_ref": 110249
  },
  "45": {
-  "k": 0.0216,
-  "kf": 1.08,
+  "k": 0.0049,
+  "kf": 0.432,
   "best_ratio": 0.576,
   "win_rate": 0.04,
   "band": "hard",
@@ -952,8 +977,8 @@
    2,
    2
   ],
-  "coin_ref": 15336,
-  "boss_dps": 91847.6
+  "coin_ref": 15607,
+  "boss_dps": 93502.7
  },
  "46": {
   "k": 0.5023,
@@ -977,13 +1002,13 @@
   "coin_ref": 23618
  },
  "47": {
-  "k": 0.4644,
-  "kf": 10.1494,
+  "k": 0.1799,
+  "kf": 15.2241,
   "best_ratio": 0.755,
-  "win_rate": 0.17,
+  "win_rate": 0.27,
   "band": "normal",
   "greedy_keep": 0.755,
-  "noisy_fail": 0.175,
+  "noisy_fail": 0.125,
   "noad": true,
   "route": [
    2,
@@ -998,12 +1023,12 @@
   "coin_ref": 132175
  },
  "48": {
-  "k": 0.1321,
-  "kf": 8.0884,
+  "k": 0.0512,
+  "kf": 12.1326,
   "best_ratio": 0.777,
-  "win_rate": 0.15,
+  "win_rate": 0.26,
   "band": "normal",
-  "greedy_keep": 0.777,
+  "greedy_keep": 0.765,
   "noisy_fail": 0.15,
   "noad": true,
   "route": [
@@ -1018,16 +1043,16 @@
    0,
    1
   ],
-  "coin_ref": 26794
+  "coin_ref": 29210
  },
  "49": {
-  "k": 0.6547,
-  "kf": 4.6575,
-  "best_ratio": 0.932,
+  "k": 0.4337,
+  "kf": 7.1867,
+  "best_ratio": 0.946,
   "win_rate": 0.04,
   "band": "hard",
-  "greedy_keep": 0.907,
-  "noisy_fail": 0.15,
+  "greedy_keep": 0.919,
+  "noisy_fail": 0.1,
   "noad": true,
   "route": [
    0,
@@ -1042,17 +1067,29 @@
    0,
    0
   ],
-  "coin_ref": 147060
+  "coin_ref": 164748
  },
  "50": {
-  "k": 0.0012,
-  "kf": 10.1826,
-  "best_ratio": 0.108,
-  "win_rate": 0.0,
+  "k": 0.006,
+  "kf": 15.2739,
+  "best_ratio": 1.0,
+  "win_rate": 0.34,
   "band": "hard",
-  "greedy_keep": 0.0,
-  "noisy_fail": 0.975,
-  "noad": false,
-  "boss_dps": 50909.6
+  "greedy_keep": 1.0,
+  "noisy_fail": 0.025,
+  "noad": true,
+  "route": [
+   2,
+   0,
+   1,
+   0,
+   1,
+   0,
+   2,
+   0,
+   0
+  ],
+  "coin_ref": 200000,
+  "boss_dps": 737280.4
  }
 }

@@ -299,3 +299,48 @@ func test_burst_in_never_flies_through_the_heros_head() -> void:
 	_drop_node(k)
 	_drop_node(world)
 	_unboot()
+
+
+## Spec v2.1 §4.3 on the finale built at load: a guest level's resting finale is built (and
+## warmed) with the guest weapon, not the district's, so its model and set compile while the
+## level loads; woken, it hands the weapon over as a gift (the real weapon hidden until the gift
+## reaches the hand), then aims with it.
+func test_guest_level_rests_with_its_gift_weapon() -> void:
+	var cases := {4: "pistol", 13: "bow", 19: "sniper"}
+	for lv in cases:
+		var parts := _view(lv)
+		var view: LevelView = parts[0]
+		var warm: BottleShot = view._finale_warm
+		check(warm != null and warm.dormant, "L%d: a dormant finale is built at load" % lv)
+		if warm == null:
+			_drop(parts)
+			continue
+		_ready_by_hand(warm)
+		_ready_by_hand(warm.hud)
+		_ready_by_hand(warm._mode)
+		check(warm.logic.guest, "L%d: a guest level" % lv)
+		eq(warm.logic.weapon, cases[lv], "L%d: built with the guest weapon" % lv)
+		check(warm._mode != null and warm._mode.is_inside_tree(), "L%d: its weapon model is built at load" % lv)
+		for f in LevelView.WARM_FRAMES + 2:
+			view._process(1.0 / 60.0)
+		check(BottleShot.reusable(warm, lv) and not warm.visible, "L%d: rests hidden" % lv)
+		view._begin_strike()
+		check(view.finale == warm, "L%d: the squad bursts into it" % lv)
+		check(warm._gift != null, "L%d: the guest weapon comes as a gift" % lv)
+		if warm._gift == null:
+			_drop(parts)
+			continue
+		eq(warm._gift.weapon, cases[lv], "L%d: the gift is the guest weapon" % lv)
+		check(not warm._mode.visible, "L%d: the real weapon waits for the gift" % lv)
+		var states := {}
+		var secs := 0.0
+		while secs < BottleShot.INTRO + 2.5 and warm._state != "aim":
+			warm._process(1.0 / 60.0)
+			warm._gift._process(1.0 / 60.0)
+			states[warm._state] = true
+			secs += 1.0 / 60.0
+		check(states.has("gift"), "L%d: the gift plays after the burst-in" % lv)
+		eq(warm._state, "aim", "L%d: then aiming starts" % lv)
+		check(secs <= BottleShot.INTRO + 1.5 + 0.1, "L%d: within the intro and 1.5 s (%.2f s)" % [lv, secs])
+		check(warm._mode.visible, "L%d: the weapon is in the hand" % lv)
+		_drop(parts)

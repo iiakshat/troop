@@ -32,7 +32,7 @@
     {"at": 388, "type": "wave", "groups": [{"enemy": "knifer", "n": 30}, {"enemy": "gunman", "n": 4, "gap": 10}]},
     {"at": 422, "type": "gates", "gates": [{"lane": 1, "op": "num", "v": 40}, {"lane": 2, "op": "mul", "k": 2}]},
     {"at": 422, "type": "obstacle", "kind": "pothole", "lane": 0, "fall": 24},
-    {"at": 464, "type": "wave", "label": "CROSSFIRE", "groups": [{"enemy": "thug", "n": 68}, {"enemy": "gunman", "n": 8, "gap": 10}]},
+    {"at": 464, "type": "wave", "label": "CROSSFIRE", "groups": [{"enemy": "thug", "n": 102}, {"enemy": "gunman", "n": 11, "gap": 10}]},
     {"at": 498, "type": "finish"}
   ]
 }

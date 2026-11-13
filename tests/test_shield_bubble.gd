@@ -174,6 +174,74 @@ func test_level_view_bubble_follows_the_sim_shield() -> void:
 	vt._drop(parts)
 
 
+## The newest ripple's direction from the bubble's centre (its local unit vector).
+func _newest_ripple(b: ShieldBubble) -> Vector3:
+	var best := Vector4(0, 0, 0, INF)
+	for h in b._hits:
+		if h.w < best.w:
+			best = h
+	return Vector3(best.x, best.y, best.z)
+
+
+## Spec v2.1 fights x the polish round's bubble: every blocked hit ends on the bubble and
+## ripples it where it lands. A gang's return fire and the boss's gun fly about a second, so
+## their tracers end on the bubble's face towards the shooter and the ripple comes when they
+## land (not when they leave the gun); a telegraphed attack (grenade, firebomb, sniper round,
+## barrage) ripples it as it lands, from above or from the gang's side.
+func test_blocked_fight_events_ripple_the_bubble() -> void:
+	var vt = VIEW_TESTS.new()
+	var parts: Array = vt._view(vt._fight_level(), {"squad": 40})
+	var view: LevelView = parts[0]
+	var fx: Fx = parts[2]
+	var id: int = vt._first_gang(view)
+	check(id >= 0, "a gang came")
+	view.sim.charges["shield"] = 1
+	check(view.sim.use_power("shield"), "shield up")
+	view._handle_events(view.sim.drain())
+	for i in 30:
+		view._update_visuals(1.0 / 60.0)   # the bubble pops in (the sim is not stepped here)
+	var b: ShieldBubble = view.shield_bubble()
+	check(b.is_up(), "the bubble is up")
+	eq(b.active_hits(), 0, "no ripple yet")
+	var cases := [
+		{"ev": {"type": "return_fire", "horde": id, "x": 0.0, "z": -48.0, "shots": 3, "lost": 0, "blocked": true, "opening": true},
+			"what": "return fire"},
+		{"ev": {"type": "boss_shot", "horde": -5, "lost": 0, "blocked": true}, "what": "the boss's gun"}]
+	for c in cases:
+		for i in 40:
+			view._update_visuals(1.0 / 60.0)   # earlier ripples run out
+		eq(b.active_hits(), 0, "%s: no ripple left over" % c["what"])
+		view._handle_events([c["ev"]])
+		var im: Dictionary = view._impacts[-1]
+		var on := true
+		for p in im["points"]:
+			on = on and b.touches((p as Vector3) + Vector3(view._squad_x, 0, 0), 0.05)
+		check(on, "%s: every tracer ends on the bubble" % c["what"])
+		eq(b.active_hits(), 0, "%s: no ripple while the shots fly" % c["what"])
+		var landed := false
+		for i in 120:
+			view._update_visuals(1.0 / 60.0)
+			if b.active_hits() > 0:
+				landed = true
+				break
+		check(landed, "%s: the bubble ripples when the shots land" % c["what"])
+		check(_newest_ripple(b).z < 0.0, "%s: on the side facing the shooter (%s)" % [c["what"], _newest_ripple(b)])
+		eq(view._minus_label.visible, false, "%s: a blocked hit shows no -N" % c["what"])
+	for kind in ["grenade", "firebomb", "snipe", "barrage"]:
+		for i in 40:
+			view._update_visuals(1.0 / 60.0)
+		eq(b.active_hits(), 0, "%s: no ripple left over" % kind)
+		var lane: int = view.sim.lane
+		view._handle_events([{"type": "telegraph", "kind": kind, "lane": lane, "src": id, "x": 0.0, "z": -55.0,
+			"land_t": view.sim.time + 1.0}])
+		view._handle_events([{"type": "attack_land", "kind": kind, "lane": lane, "lost": 0, "blocked": true, "hit": true}])
+		check(b.active_hits() > 0, "%s: the landing ripples the bubble" % kind)
+		var r := _newest_ripple(b)
+		check(r.y > 0.0 or r.z < 0.0, "%s: from above or the gang's side (%s)" % [kind, r])
+		check(not view.lane_marked(lane), "%s: its mark is cleared" % kind)
+	vt._drop(parts)
+
+
 ## The HUD's shield button shows the shield draining while it is up (a ring around the
 ## button, full at the press, empty when the sim's shield ends), then nothing.
 func test_hud_shield_button_drains_while_up() -> void:

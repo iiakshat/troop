@@ -38,7 +38,7 @@
     {"at": 467, "type": "gates", "gates": [{"lane": 2, "op": "num", "v": 120}]},
     {"at": 467, "type": "obstacle", "kind": "pothole", "lane": 1, "fall_pct": 30},
     {"at": 467, "type": "obstacle", "kind": "barricade", "lane": 0, "hp": 1600, "dmg_pct": 20},
-    {"at": 501, "type": "wave", "groups": [{"enemy": "thug", "n": 859}, {"enemy": "brute", "n": 373, "gap": 6}], "label": "RUSH"},
+    {"at": 501, "type": "wave", "groups": [{"enemy": "thug", "n": 1288}, {"enemy": "brute", "n": 560, "gap": 6}], "label": "RUSH"},
     {"at": 529, "type": "finish"}
   ]
 }

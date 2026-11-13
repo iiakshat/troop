@@ -571,7 +571,8 @@ func _handle_events(events: Array) -> void:
 				tag = ":" + String((e["horde"] as Dictionary).get("enemy", ""))
 			perf_marks.append(String(e["type"]) + tag)
 		if _log_events and not String(e["type"]) in ["kill", "gate_tick", "boss_hit"]:
-			print("EV %d %s %s" % [Engine.get_process_frames(), e["type"], e["horde"].get("enemy", "") if e.get("horde") is Dictionary else ""])
+			print("EV %d %s %s%s%s" % [Engine.get_process_frames(), e["type"], e["horde"].get("enemy", "") if e.get("horde") is Dictionary else "",
+				(" " + String(e["kind"])) if e.has("kind") else "", (" lost=%d" % int(e["lost"])) if e.has("lost") else ""])
 		match String(e["type"]):
 			"row_spawn":
 				var v := GateRowView.new().setup(e["row"], font, LANE_X)
