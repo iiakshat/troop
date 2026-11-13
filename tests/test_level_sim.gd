@@ -83,15 +83,17 @@ func test_melee_trades_row_by_row() -> void:
 
 ## Spec v2.1 §1.4, the crowd clash (owner 2026-11-13): a gang that reaches the squad grinds
 ## into it at melee_cap_pct % of the squad it met per tick, 1:1, both numbers falling together;
-## a 10,000 gang still kills a 2,000 squad, over 20 ticks instead of one.
+## a 10,000 gang still kills a 2,000 squad, over a few seconds instead of one tick.
 func test_crowd_clash_is_paced_and_exact() -> void:
 	var cap := int(units["world"]["melee_cap_pct"])
-	eq(cap, 5, "melee_cap_pct 5")
+	check(cap >= 2 and cap <= 5, "melee_cap_pct %d in 2-5 (a few seconds)" % cap)
 	eq(LevelSim.clash_strikers(2000, 1000, 1, 5), 100, "5 % of 2,000")
 	eq(LevelSim.clash_strikers(2000, 60, 1, 5), 60, "never more than the row")
 	eq(LevelSim.clash_strikers(1, 9, 1, 5), 1, "at least one striker")
 	eq(LevelSim.clash_strikers(2000, 1000, 4, 5), 25, "a power-4 brute: 100 troops are 25 brutes")
 	eq(LevelSim.clash_strikers(2000, 1000, 1, 0), 1000, "cap 0: the whole row")
+	var per_tick := 2000 * cap / 100
+	var ticks := (2000 + per_tick - 1) / per_tick
 	var sim := _fight_sim([{"enemy": "thug", "n": 10000, "hp": 100000}], 2000)
 	var melees: Array = []
 	var counts: Array = []
@@ -105,19 +107,21 @@ func test_crowd_clash_is_paced_and_exact() -> void:
 		if sim.state != "run":
 			break
 	eq(sim.state, "lost", "10,000 thugs still beat 2,000 troops")
-	eq(melees.size(), 20, "over 20 ticks (%.1f s), not one" % (20 * float(units["world"]["melee_tick"])))
+	eq(melees.size(), ticks, "over %d ticks (%.1f s), not one" % [ticks, ticks * float(units["world"]["melee_tick"])])
 	var ok := true
-	for i in melees.size():
-		ok = ok and int(melees[i]["lost"]) == 100 and int(melees[i]["enemies"]) == 100
-	check(ok, "every tick 100 troops for 100 thugs (exact, 1:1)")
+	for i in melees.size() - 1:
+		ok = ok and int(melees[i]["lost"]) == per_tick and int(melees[i]["enemies"]) == per_tick
+	check(ok, "every tick %d troops for %d thugs (exact, 1:1)" % [per_tick, per_tick])
 	if counts.size() >= 2:
-		eq(counts[0] - counts[1], 100, "the gang's number falls with the squad's")
+		eq(counts[0] - counts[1], per_tick, "the gang's number falls with the squad's")
 	# The hero alone: one thug takes him (the opening lesson is unchanged).
 	var solo := _fight_sim([{"enemy": "thug", "n": 3, "hp": 100000}], 1)
 	var first := _until_event(solo, "melee")
 	eq(int(first.get("lost", -1)), 1, "a lone hero loses his one troop to the first striker")
 	eq(solo.state, "lost", "and falls")
-	# The shield: the whole front row breaks on it and nobody is lost.
+	# Two gangs in melee at once share the pace (the squad never loses 10 % a tick).
+	eq(LevelSim.clash_strikers(2000, 1000, 1, 5, 2), 50, "two gangs: 50 each")
+	# The shield: the strikers fall on it at the same pace and nobody is lost.
 	var sh := _fight_sim([{"enemy": "thug", "n": 500, "hp": 100000}], 400)
 	sh.charges["shield"] = 1
 	var guard := 0
@@ -131,7 +135,7 @@ func test_crowd_clash_is_paced_and_exact() -> void:
 		if not hit.is_empty():
 			check(bool(hit[0]["shielded"]), "the first strike meets the shield")
 			eq(int(hit[0]["lost"]), 0, "nobody lost on the shield")
-			eq(int(hit[0]["enemies"]), mini(500, 9 * 3), "the whole row (9 figures of 3) breaks")
+			eq(int(hit[0]["enemies"]), 400 * cap / 100, "the strikers fall on it at the clash pace (%d %% of 400)" % cap)
 			break
 
 
@@ -1191,11 +1195,15 @@ func test_huge_gang_is_drawn_and_fought_in_capped_rows() -> void:
 	_step_until(sim, func(): return not sim.hordes.is_empty())
 	var h: Dictionary = sim.hordes[0]
 	eq(int(h.get("per", 0)), 100, "100 people per figure")
+	# Spec v2.1 §1.4: the crowd closes ranks, so a walking gang's living front keeps its pace
+	# while whole rows fall (the rows behind step up); its depth shrinks by a row instead.
 	var z0 := LevelSim.front_z(h)
 	sim._kill(h, 900)
-	check(absf(LevelSim.front_z(h) - (z0 - float(h["row_gap"]))) < 0.001, "900 down = one row back")
+	eq(LevelSim.killed_rows(h), 1, "900 down = one row gone")
+	check(absf(LevelSim.front_z(h) - z0) < 0.001, "the rows behind step up: the front keeps its place")
 	sim._kill(h, 899)
-	check(absf(LevelSim.front_z(h) - (z0 - float(h["row_gap"]))) < 0.001, "a part row keeps the front")
+	eq(LevelSim.killed_rows(h), 1, "a part row is still a row")
+	check(absf(LevelSim.front_z(h) - z0) < 0.001, "a part row keeps the front")
 	_step_until(sim, func(): return sim.state != "run")
 	eq(sim.state, "strike", "25K troops beat 18K thugs")
 	check(sim.squad.total() > 10000, "and keep most of the squad (%d)" % sim.squad.total())

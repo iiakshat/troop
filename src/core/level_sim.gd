@@ -28,7 +28,8 @@ extends RefCounted
 ## barrel or a car. Snipers are the one exception: they shoot the toughest gang in range.
 ##
 ## Gangs are blocks of rows. Bullets always kill from the front, so the gang's front is its
-## frontmost *living* row. Its body only hurts the squad once that front physically reaches
+## frontmost *living* row; the rows behind close ranks as it falls, so a walking gang's front
+## keeps its pace (_kill). Its body only hurts the squad once that front physically reaches
 ## it; then the two crowds clash (melee, spec v2.1 §1.4, owner 2026-11-13): every melee_tick
 ## at most world.melee_cap_pct % of the squad it met (in troops, at least one enemy) of the
 ## front row strikes, each enemy taking `power` troops and falling, so both numbers tick down
@@ -868,12 +869,12 @@ func _move(dt: float) -> void:
 			# fell back with every dead row; past fire_range while the squad held short of the
 			# HQ, nothing moved and the gang shot an untouchable squad until it died.)
 			var line := -float(h["stop"]) + killed_rows(h) * float(h["row_gap"])
-			if front_z(h) < -fire_range:
-				# Stopped beyond the squad's reach: it stands on the street, which carries the
-				# squad to it (no standoff out there, spec v2.1 §1.2).
-				h["z"] = float(h["z"]) + S * dt
-			elif float(h["z"]) < line:
+			if float(h["z"]) < line - 1e-9:
 				h["z"] = minf(line, float(h["z"]) + float(h["vrel"]) * dt)
+			elif front_z(h) < -fire_range:
+				# Its stop line is beyond the squad's reach: it stands on the street, which
+				# carries the squad to it (no standoff out there, spec v2.1 §1.2).
+				h["z"] = float(h["z"]) + S * dt
 			continue
 		h["z"] = float(h["z"]) + float(h["vrel"]) * dt
 		if float(h["stop"]) > 0.0 and front_z(h) >= -float(h["stop"]):
@@ -1043,7 +1044,13 @@ func _explode(b: Dictionary, extra: Dictionary = {}) -> void:
 func _kill(h: Dictionary, k: int) -> void:
 	if k <= 0:
 		return
+	var rows0 := killed_rows(h)
 	h["count"] = int(h["count"]) - k
+	# The crowd closes ranks (spec v2.1 §1.4): a walking gang's rows behind keep coming as its
+	# front rows fall, so its living front reaches the squad on time with what is left of it
+	# (a stopped gang walks up to its stop line, a gang in melee stays on the squad: _move).
+	if not h["melee"] and not h["stopped"] and not h["boss"] and not h.has("cage"):
+		h["z"] = float(h["z"]) + (killed_rows(h) - rows0) * float(h["row_gap"])
 	kills += k
 	kills_by[String(h["enemy"])] = int(kills_by.get(String(h["enemy"]), 0)) + k
 	out.append({"type": "kill", "horde": h["id"], "n": k, "left": h["count"]})
@@ -1339,12 +1346,12 @@ static func share_loss_pm(total: int, pm: int, base := -1) -> int:
 
 ## The crowd clash (spec v2.1 §1.4): how many of a front row of `row` strike in one melee
 ## tick against a squad that had `met` troops when the gang reached it: cap_pct % of them in
-## troops, each striker taking `power` (at least one striker, never more than the row).
-## cap_pct 0 = the whole row (the old one-tick strike).
-static func clash_strikers(met: int, row: int, power: int, cap_pct: int) -> int:
+## troops, shared by the `gangs` in melee at once, each striker taking `power` (at least one
+## striker, never more than the row). cap_pct 0 = the whole row (the old one-tick strike).
+static func clash_strikers(met: int, row: int, power: int, cap_pct: int, gangs := 1) -> int:
 	if cap_pct <= 0 or row <= 0:
 		return maxi(row, 0)
-	return clampi(met * cap_pct / 100 / maxi(power, 1), 1, row)
+	return clampi(met * cap_pct / 100 / maxi(power, 1) / maxi(gangs, 1), 1, row)
 
 
 ## Return fire and the boss's gun never take the hero while the squad never had a follower
@@ -1357,11 +1364,16 @@ func _spare_hero(n: int) -> int:
 
 ## The crowd clash (spec v2.1 §1.4, owner 2026-11-13). A gang whose living front reaches the
 ## squad grinds into it: every melee_tick clash_strikers of its front row strike (melee_cap_pct
-## % of the squad it met, in troops), each taking `power` troops and falling; the rest of the
-## row waits for the next tick, so both numbers fall together for a few seconds. On the shield
-## the whole row breaks and nobody is lost. A boss swings with his own fists and never falls to
-## them. Event `melee` {horde, enemies (strikers), lost, shielded}.
+## % of the squad it met, in troops, shared by every gang in melee at once), each taking
+## `power` troops and falling; the rest of the row waits for the next tick, so both numbers
+## fall together for a few seconds. On the shield the strikers fall at the same pace and
+## nobody is lost. A boss swings with his own fists and never falls to them. Event `melee`
+## {horde, enemies (strikers), lost, shielded}.
 func _contacts(dt: float) -> void:
+	var gangs := 0
+	for h in hordes:
+		if not h["boss"] and int(h["count"]) > 0 and (h["melee"] or front_z(h) >= contact_z):
+			gangs += 1
 	for h in hordes.duplicate():
 		if not h["melee"]:
 			if front_z(h) < contact_z:
@@ -1377,8 +1389,8 @@ func _contacts(dt: float) -> void:
 		var row := mini(row_size(h), int(h["count"]))
 		var shielded := shield_t > 0.0
 		var strikers := row
-		if not shielded and not h["boss"]:
-			strikers = clash_strikers(int(h.get("met", squad.total())), row, int(h["power"]), melee_cap_pct)
+		if not h["boss"]:
+			strikers = clash_strikers(int(h.get("met", squad.total())), row, int(h["power"]), melee_cap_pct, gangs)
 		var lost := 0
 		if not shielded:
 			lost = _hurt(strikers * int(h["power"]), String(h["enemy"]), h["id"], false)

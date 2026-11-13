@@ -112,12 +112,12 @@ def boss_pm(pct: int, boss_k: float) -> int:
     return int(math.floor(pct * 10.0 * boss_k + 0.5))
 
 
-def clash_strikers(met: int, row: int, power: int, cap_pct: int = MELEE_CAP) -> int:
-    """LevelSim.clash_strikers: cap_pct % of the squad the gang met, in troops of `power` each
-    (at least 1, at most the row; cap_pct 0 = the whole row)."""
+def clash_strikers(met: int, row: int, power: int, cap_pct: int = MELEE_CAP, gangs: int = 1) -> int:
+    """LevelSim.clash_strikers: cap_pct % of the squad the gang met, shared by the gangs in
+    melee at once, in troops of `power` each (at least 1, at most the row; 0 = the whole row)."""
     if cap_pct <= 0 or row <= 0:
         return max(row, 0)
-    return min(max(met * cap_pct // 100 // max(power, 1), 1), row)
+    return min(max(met * cap_pct // 100 // max(power, 1) // max(gangs, 1), 1), row)
 
 
 def boss_hp(d: int, dps: float, lieutenant: bool = False) -> int:
@@ -471,7 +471,11 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05, fire_k: float = 1.0, bos
         k = min(int(h["acc"] // h["hp"]), h["n"])
         if k > 0:
             h["acc"] -= k * h["hp"]
+            rows0 = (h["start"] - h["n"]) // row_size(h)
             h["n"] -= k
+            if not h["melee"] and not h["stopped"] and not h["boss"]:
+                # The crowd closes ranks (LevelSim._kill): a walking gang keeps its pace.
+                h["z"] += ((h["start"] - h["n"]) // row_size(h) - rows0) * h["gap"]
 
     t = 0.0
     while t < 120.0 and sq.alive():
@@ -487,10 +491,10 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05, fire_k: float = 1.0, bos
             if h["stopped"]:
                 # The rows behind walk up to the stop line as the front falls (LevelSim._move).
                 line = -h["stop"] + ((h["start"] - h["n"]) // row_size(h)) * h["gap"]
-                if front(h) < -FIRE:
-                    h["z"] += speed * dt   # beyond reach: the street carries the squad to it
-                elif h["z"] < line:
+                if h["z"] < line - 1e-9:
                     h["z"] = min(line, h["z"] + (speed + h["v"]) * dt)
+                elif front(h) < -FIRE:
+                    h["z"] += speed * dt   # stop line beyond reach: the street carries the squad to it
                 continue
             h["z"] += (speed + h["v"]) * dt
             if h["stop"] > 0 and front(h) >= -h["stop"]:
@@ -557,6 +561,7 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05, fire_k: float = 1.0, bos
         for p in [p for p in pending if p[0] <= t + 1e-9]:
             pending.remove(p)
             sq.lose(share_loss_pm(sq.total(), p[2], p[1]))
+        gangs = sum(1 for h in hs if h["n"] > 0 and not h["boss"] and (h["melee"] or front(h) >= CONTACT))
         for h in hs:
             if h["n"] <= 0:
                 continue
@@ -572,7 +577,7 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05, fire_k: float = 1.0, bos
             h["mt"] = float(W["melee_tick"])
             row = min(row_size(h), h["n"])
             # The crowd clash (LevelSim._contacts): a capped share of the squad it met strikes.
-            strikers = row if h["boss"] else clash_strikers(h["met"], row, h["power"])
+            strikers = row if h["boss"] else clash_strikers(h["met"], row, h["power"], MELEE_CAP, gangs)
             sq.lose(strikers * h["power"])
             if not h["boss"]:
                 h["n"] -= strikers

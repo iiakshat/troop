@@ -72,6 +72,8 @@ var fixed_upgrades := {} # upgrades=k,s,q (legacy station rooms) when no pace is
 var fit_k := [0.05, 40.0]  # k range the v2.1 keep fit may try (relative; k_max=)
 var fit_kf := [0.3, 12.0]  # ... and the last wave's kf (kf_max=)
 var dodge_share := GreedyPilot.DODGE_P  # profile=greedy|noisy: telegraphs dodged (dodge_p=)
+var cal_all := {}        # config/levels/calibration.json (the current k and kf of every level)
+var _weak := {}          # weak_units() cache
 static var boss_hp_fixed := false  # units.json has the v2.1 boss rule: boss hp is not scaled
 
 # ---- spec v2.1 §2 targets (plan v2.1 Task 7)
@@ -96,10 +98,19 @@ const BARRAGES_MIN := 2         # guard: barrages each boss or lieutenant fires,
 const KEEP_SLACK := 0.05        # the greedy keep guard allows this much either side of the band
 # ---- the keep fit (calibrate=1 with profile=greedy|noisy)
 const FIT_PROBES := 30          # greedy runs the fit may spend on one level (about 1 s each)
-const FIT_K_PROBES := 8         # ... one fire_k fit may take this many
-const WALKER_STEPS := 5         # fire_k fits at k, then k x WALKER_STEP ... while a floor breaks
-const WALKER_STEP := 0.8
-const FIRE_K := [0.25, 6.0]     # the level fire intensity range the fit may use (absolute)
+const AXIS_PROBES := 9          # ... one dial may take this many
+const FIRE_K := [0.5, 2.0]      # the level fire intensity range the fit may use (absolute; advisor R2)
+const BOSS_K := [0.6, 0.8, 1.0, 1.25, 1.5]  # the boss/lieutenant gun and barrage steps (advisor R4)
+const K_ABS := [0.1, 8.0]       # every gang's scale the fit may use (absolute, calibration.json k)
+const KF_ABS := [0.25, 4.0]     # the last wave's extra scale (absolute; advisor A5: no kf above 4)
+const LOST_SLACK := 0.15        # lost ÷ peak may be at most 1 - band low + this (advisor R5)
+const SLOW_GRACE := 20.0        # a win slower than MAX_TIME fades to keep 0 over this many s (R5)
+const WEAK_FP := 0.75           # the A2 floor: the greedy player wins normal levels at this firepower
+const STRONG_FP := 1.25         # ... and keeps at most the band's top + 15 points at this one
+const SWEEP_STEPS := [0.8, 0.9, 1.0, 1.1, 1.2, 1.4]  # sweep=1: k and kf steps (advisor A1)
+const SWEEP_JUMP := 0.15        # ... the most the keep may move between two steps
+const GAP_MIN := 0.9            # checks: the median gap between telegraphs (s), at least (A3)
+const AIR_MAX := 2              # ... and never more marks in the air than this
 const FIT_TOL := 0.025          # a probe this close to the band's midpoint ends the fit
 const VALID_ROUTES := 100       # random routes the floor is validated on (the report's sample)
 const VALID_NOISY := 20         # noisy runs the fit reports (measured, not fitted)
@@ -117,9 +128,12 @@ func _initialize() -> void:
 	var k_eval := 1.0
 	var kf_eval := 1.0
 	var fk_eval := 1.0
+	var bk_eval := 1.0
 	var pace_path := "res://_local/pace.json"
 	var zero := false
 	var full := false
+	var sweep := false
+	var fp := 1.0
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("pace="):
 			pace_path = a.substr(5)
@@ -174,6 +188,10 @@ func _initialize() -> void:
 			checks = true
 		elif a == "full=1":
 			full = true
+		elif a == "sweep=1":
+			sweep = true
+		elif a.begins_with("fp="):
+			fp = float(a.substr(3))
 		elif a.begins_with("dodge_p="):
 			dodge_share = float(a.substr(8))
 		elif a.begins_with("kf_max="):
@@ -186,11 +204,24 @@ func _initialize() -> void:
 			kf_eval = float(a.substr(3))
 		elif a.begins_with("fk="):
 			fk_eval = float(a.substr(3))
+		elif a.begins_with("bk="):
+			bk_eval = float(a.substr(3))
 	units = Config.units()
+	if absf(fp - 1.0) > 1e-9:
+		units = scaled_units(units, fp)   # fp=0.75: every fire rate x fp (advisor A2)
 	boss_hp_fixed = has_boss_rule(units)
+	var cal_text := FileAccess.get_file_as_string("res://config/levels/calibration.json")
+	var cal_v: Variant = JSON.parse_string(cal_text) if cal_text != "" else {}
+	if cal_v is Dictionary:
+		cal_all = cal_v
 	var harder := profile == "greedy" or profile == "noisy"
 	if (profile == "paced" or harder) and not zero:
 		pace = load_pace(pace_path)
+	if sweep:
+		if not zero and pace.is_empty():
+			pace = load_pace(pace_path)
+		quit(1 if run_sweep(lo, hi, only) > 0 else 0)
+		return
 	if checks:
 		if profile == "paced":
 			run_checks(lo, hi, only)
@@ -205,7 +236,7 @@ func _initialize() -> void:
 	print("profile %s%s, tap_rate %.1f, powers %s%s" % [profile if profile != "" else "plain", " zero upgrades" if zero else "",
 		tap_rate, "on" if use_powers else "off", ", dodge_p %.2f" % dodge_share if harder else ""])
 	if harder:
-		print("level | band     | greedy keeps (band)    | noisy fails (soft)  | random wins | no-ad | best troops/peak | time s | halt s | k / kf / fire_k | guards")
+		print("level | band     | greedy keeps (band)    | lost/peak, melee/rf % | noisy fails (soft)  | random wins | no-ad | best troops/peak | time s | halt s | k / kf / fire_k / boss_k | guards")
 	else:
 		print("level | rows | wins/total | target | no-pow best | best troops/peak | stars | time s | k / kf")
 	if only.is_empty():
@@ -215,7 +246,7 @@ func _initialize() -> void:
 		upgrades = level_upgrades(n)
 		var r: Dictionary
 		if harder:
-			r = calibrate_harder(n, level) if calibrate else evaluate_harder(n, level, k_eval, kf_eval, NOISY_RUNS, fk_eval)
+			r = calibrate_harder(n, level) if calibrate else evaluate_harder(n, level, k_eval, kf_eval, NOISY_RUNS, fk_eval, bk_eval)
 		else:
 			r = calibrate_level(n, level) if calibrate else evaluate(n, level, k_eval, kf_eval)
 		r["target_ratio"] = float(level.get("target_ratio", -1.0))
@@ -492,10 +523,13 @@ func _fit_ratio(base: Dictionary, k: float, want: float) -> float:
 ## Every gang's size (bosses: hp) and barrel blast times k, the last wave times kf more;
 ## rounded the same way as tools/gen_levels.py. With the v2.1 boss rule (boss_hp_fixed) a
 ## boss's or lieutenant's hp is designed in seconds of damage and never scaled.
-static func scaled_level(base: Dictionary, k: float, kf := 1.0, fk := 1.0) -> Dictionary:
-	if absf(k - 1.0) < 1e-9 and absf(kf - 1.0) < 1e-9 and absf(fk - 1.0) < 1e-9:
+static func scaled_level(base: Dictionary, k: float, kf := 1.0, fk := 1.0, bk := 1.0) -> Dictionary:
+	if absf(k - 1.0) < 1e-9 and absf(kf - 1.0) < 1e-9 and absf(fk - 1.0) < 1e-9 and absf(bk - 1.0) < 1e-9:
 		return base
 	var lv: Dictionary = base.duplicate(true)
+	if absf(bk - 1.0) > 1e-9:
+		# The boss's or lieutenant's gun and barrage scale (LevelSim.boss_k), relative like k.
+		lv["boss_k"] = float(base.get("boss_k", 1.0)) * bk
 	if absf(fk - 1.0) > 1e-9:
 		# The level's enemy fire intensity (LevelSim.fire_k), relative like k (gen_levels.py
 		# --merge multiplies calibration.json fire_k by it).
@@ -692,7 +726,14 @@ static func noisy_seed(n: int, i: int) -> int:
 # ---- watching a run for the guard checks
 
 static func new_watch() -> Dictionary:
-	return {"hordes": {}, "armed": {}, "fired": {}, "enemy_lost": 0, "bosses": {}, "max_squad": 0, "solo_shot": ""}
+	return {"hordes": {}, "armed": {}, "fired": {}, "enemy_lost": 0, "bosses": {}, "max_squad": 0, "solo_shot": "",
+		# troops enemies took, by kind (advisor A4): the clash, return fire, telegraphed attacks,
+		# the boss's gun and barrage, anything else; and every telegraph's sim time (A3)
+		"mix": {"melee": 0, "rf": 0, "tele": 0, "boss": 0, "other": 0}, "marks": [], "max_air": 0}
+
+
+static func _mix(w: Dictionary, key: String, n: int) -> void:
+	w["mix"][key] = int(w["mix"][key]) + n
 
 
 ## Reads one tick's events. `squad` is the squad before the tick: a hero who never had a
@@ -725,11 +766,13 @@ static func watch_events(w: Dictionary, events: Array, squad: int) -> void:
 				if int(e.get("shots", 1)) > 0:
 					_fired(w, int(e.get("horde", -1)))
 				w["enemy_lost"] = int(w["enemy_lost"]) + int(e.get("lost", 0))
+				_mix(w, "rf", int(e.get("lost", 0)))
 			"blocked", "snipe_aim", "firebomb_throw":
 				_fired(w, int(e.get("horde", -1)))
 			"snipe", "boss_shot":
 				_fired(w, int(e.get("horde", -1)))
 				w["enemy_lost"] = int(w["enemy_lost"]) + int(e.get("lost", 0))
+				_mix(w, "boss" if String(e["type"]) == "boss_shot" else "tele", int(e.get("lost", 0)))
 			"telegraph":
 				var src := int(e.get("src", -1))
 				_fired(w, src)
@@ -737,11 +780,16 @@ static func watch_events(w: Dictionary, events: Array, squad: int) -> void:
 					w["bosses"][src]["barrages"] = int(w["bosses"][src]["barrages"]) + 1
 			"attack_land", "firebomb_hit", "melee":
 				w["enemy_lost"] = int(w["enemy_lost"]) + int(e.get("lost", 0))
+				var key := "melee" if String(e["type"]) == "melee" else "tele"
+				if ["barrage", "lt_barrage"].has(String(e.get("kind", ""))):
+					key = "boss"
+				_mix(w, key, int(e.get("lost", 0)))
 			"hurt":
 				var src := int(e.get("source", -1))
 				if w["hordes"].has(src):
 					_fired(w, src)
 					w["enemy_lost"] = int(w["enemy_lost"]) + int(e.get("n", 0))
+					_mix(w, "other", int(e.get("n", 0)))
 			"lost":
 				var src := int(e.get("source", -1))
 				if int(w["max_squad"]) <= 1 and w["hordes"].has(src) and not melee.has(src) and not dodgeable \
@@ -755,13 +803,15 @@ static func _fired(w: Dictionary, id: int) -> void:
 		w["armed"][id] = true  # whatever fired was armed
 
 
-## Seconds each boss or lieutenant holds the street (alive while the squad stands its ground).
+## Seconds each boss or lieutenant holds the street (alive within his halt while the squad
+## stands its ground), and the most telegraphs in the air at once.
 static func watch_sim(w: Dictionary, sim: LevelSim, dt: float) -> void:
+	w["max_air"] = maxi(int(w["max_air"]), sim.attacks.size())
 	if not sim.halted:
 		return
 	for h in sim.hordes:
 		var id := int(h["id"])
-		if w["bosses"].has(id) and int(h["count"]) > 0:
+		if w["bosses"].has(id) and int(h["count"]) > 0 and LevelSim.front_z(h) >= -sim.boss_halt:
 			w["bosses"][id]["halt"] = float(w["bosses"][id]["halt"]) + dt
 
 
@@ -775,7 +825,11 @@ static func play_watched(sim: LevelSim, pilot: Autopilot, opening_only := false)
 		pilot.drive(sim)
 		var before := sim.squad.total()
 		sim.step(DT)
-		watch_events(w, sim.drain(), before)
+		var evs := sim.drain()
+		for e in evs:
+			if e["type"] == "telegraph":
+				w["marks"].append(sim.time)
+		watch_events(w, evs, before)
 		watch_sim(w, sim, DT)
 		guard += 1
 	w["result"] = Autopilot.result(sim)
@@ -797,8 +851,22 @@ static func watch_greedy(n: int, level: Dictionary, units_cfg: Dictionary, up: D
 			fired += 1
 	return {"level": n, "band": band(n, level), "state": res["state"], "cause": res["cause"],
 		"troops": res["troops"], "peak": res["peak"], "time": res["time"], "stars": res["stars"],
-		"keep": _ratio(res), "armed": w["armed"].size(), "fired": fired, "enemy_lost": w["enemy_lost"],
+		"keep": keep_of(res), "armed": w["armed"].size(), "fired": fired, "enemy_lost": w["enemy_lost"],
+		"lost": float(w["enemy_lost"]) / maxf(float(res["peak"]), 1.0), "mix": w["mix"],
+		"gap_med": median_gap(w["marks"]), "max_air": w["max_air"], "marks": (w["marks"] as Array).size(),
 		"bosses": w["bosses"].values(), "solo_shot": w["solo_shot"], "route": pilot.choices.duplicate()}
+
+
+## The median gap (s) between consecutive telegraphs; -1 with fewer than two.
+static func median_gap(times: Array) -> float:
+	if times.size() < 2:
+		return -1.0
+	var gaps: Array = []
+	for i in range(1, times.size()):
+		gaps.append(float(times[i]) - float(times[i - 1]))
+	gaps.sort()
+	var m := gaps.size() / 2
+	return float(gaps[m]) if gaps.size() % 2 == 1 else (float(gaps[m - 1]) + float(gaps[m])) * 0.5
 
 
 ## Spec v2.1 §2 guard checks on a watch_greedy result: one line per failure ([] = all pass).
@@ -826,6 +894,11 @@ static func guard_failures(r: Dictionary) -> Array:
 			out.append("L%d %s fired %d barrages (want %d)" % [n, who, int(bo["barrages"]), BARRAGES_MIN])
 	if String(r.get("solo_shot", "")) != "":
 		out.append("L%d the hero alone was one-shot (%s)" % [n, r["solo_shot"]])
+	# Advisor A3: a human can read the marks (one at a time, about a second apart).
+	if float(r.get("gap_med", -1.0)) >= 0.0 and int(r.get("marks", 0)) >= 3 and float(r["gap_med"]) < GAP_MIN - 1e-6:
+		out.append("L%d telegraphs %.2f s apart (median, want %.1f)" % [n, float(r["gap_med"]), GAP_MIN])
+	if int(r.get("max_air", 0)) > AIR_MAX:
+		out.append("L%d %d marks in the air at once (want %d)" % [n, int(r["max_air"]), AIR_MAX])
 	return out
 
 
@@ -920,11 +993,12 @@ func noad(n: int, level: Dictionary, stored: Array = [], beam_first := true) -> 
 	return first
 
 
-## The v2.1 report of level n at scale k / kf: the greedy keep share and the guard checks, the
-## noisy first-try fail rate, random-route wins, the no-ad route (stored by `--merge` from a
-## plain run) and the best route with powers (its share sets the star thresholds).
-func evaluate_harder(n: int, base: Dictionary, k: float, kf := 1.0, noisy_runs := NOISY_RUNS, fk := 1.0) -> Dictionary:
-	var level := scaled_level(base, k, kf, fk)
+## The v2.1 report of level n at scales k / kf / fire_k / boss_k (relative to the files): the
+## greedy keep and lost shares, its loss mix and the guard checks, the noisy first-try fail
+## rate, random-route wins, the no-ad route (stored by `--merge` from a plain run) and the best
+## route with powers (its share sets the star thresholds).
+func evaluate_harder(n: int, base: Dictionary, k: float, kf := 1.0, noisy_runs := NOISY_RUNS, fk := 1.0, bk := 1.0) -> Dictionary:
+	var level := scaled_level(base, k, kf, fk, bk)
 	var rows := Autopilot.gate_row_count(level)
 	var g := watch_greedy(n, level, units, upgrades, dodge_share, tap_rate, use_powers)
 	var causes := {}
@@ -941,8 +1015,9 @@ func evaluate_harder(n: int, base: Dictionary, k: float, kf := 1.0, noisy_runs :
 	for bo in g["bosses"]:
 		halt = float(bo["halt"]) if halt < 0.0 else minf(halt, float(bo["halt"]))
 	var won: bool = nr["state"] == "strike"
-	return {"level": n, "rows": rows, "k": k, "kf": kf, "fire_k": fk, "band": g["band"],
-		"greedy_keep": g["keep"], "greedy_win": g["state"] == "strike", "greedy_time": g["time"],
+	return {"level": n, "rows": rows, "k": k, "kf": kf, "fire_k": fk, "boss_k": bk, "band": g["band"],
+		"greedy_keep": g["keep"], "greedy_lost": g["lost"], "greedy_mix": g["mix"], "gap_med": g["gap_med"],
+		"max_air": g["max_air"], "greedy_win": g["state"] == "strike", "greedy_time": g["time"],
 		"greedy_route": g["route"], "guards": guard_failures(g), "boss_halt": halt,
 		"noisy_fail": fail, "wins": int(round(share * routes.size())), "total": routes.size(), "win_rate": share,
 		"target": RANDOM_FLOOR, "noad": na["ok"], "np_win": na["ok"],
@@ -957,117 +1032,157 @@ static func harder_row(r: Dictionary) -> String:
 	var keep := float(r["greedy_keep"])
 	var fail := float(r["noisy_fail"])
 	var halt := float(r.get("boss_halt", -1.0))
-	return "%5d | %-8s | %-4s %3.0f%% (%2.0f-%2.0f%%) %s | %3.0f%% (%2.0f-%2.0f%%) %s | %3.0f%% %s | %-5s | %5d/%-5d %3.0f%% | %6.1f | %5s | %.3f / %.3f / %.3f | %s" % [
+	var mix: Dictionary = r.get("greedy_mix", {})
+	return "%5d | %-8s | %-4s %3.0f%% (%2.0f-%2.0f%%) %s | %3.0f%% %s m%3.0f r%3.0f | %3.0f%% (%2.0f-%2.0f%%) %s | %3.0f%% %s | %-5s | %5d/%-5d %3.0f%% | %6.1f | %5s | %.3f / %.3f / %.3f / %.2f | %s" % [
 		r["level"], r["band"], "win" if r["greedy_win"] else "LOSE", keep * 100.0,
 		float(b["keep"][0]) * 100.0, float(b["keep"][1]) * 100.0, "ok" if r["greedy_win"] and in_band(keep, b["keep"], KEEP_SLACK) else "!!",
+		float(r.get("greedy_lost", 0.0)) * 100.0, "ok" if float(r.get("greedy_lost", 0.0)) <= lost_max(b) + 1e-9 else "!!",
+		mix_share(mix, "melee") * 100.0, mix_share(mix, "rf") * 100.0,
 		fail * 100.0, float(b["fail"][0]) * 100.0, float(b["fail"][1]) * 100.0, "ok" if in_band(fail, b["fail"]) else "~",
 		float(r["win_rate"]) * 100.0, "ok" if float(r["win_rate"]) >= RANDOM_FLOOR - 1e-9 else "!!",
 		"ok" if r["noad"] else "LOSE", r["best_troops"], r["best_peak"], float(r["best_ratio"]) * 100.0,
 		float(r["greedy_time"]), "-" if halt < 0.0 else "%.1f" % halt, r["k"], r["kf"], float(r.get("fire_k", 1.0)),
-		"ok" if (r["guards"] as Array).is_empty() else "; ".join(r["guards"])]
+		float(r.get("boss_k", 1.0)), "ok" if (r["guards"] as Array).is_empty() else "; ".join(r["guards"])]
 
 
-## The v2.1 keep fit (plan v2.1 Task 8, third method). Only the greedy player's end ÷ peak
-## squad is fitted, one deterministic run per probe, aimed at the band's midpoint. Losses must be
-## graded for that: a gang that reaches the squad trades 1:1, and the squad's fire cuts down
-## many enemies per troop on the way in, so scaling the gangs (k) mostly flips a clean win into
-## a wipe-out within a few percent (a cliff). The level's enemy fire intensity fire_k
-## (LevelSim.fire_k: return-fire shots and special attacks, every one a capped share of the
-## squad) costs troops in proportion instead, so it is fitted first: walked out from the
-## current value in growing steps until the keep crosses the midpoint, then narrowed (secant
-## inside the bracket, bisection when one end lost), within FIRE_K. Too easy even at the most
-## fire (few armed gangs): k, then the last wave's kf, are fitted the same way. Then the floors
-## are checked once: the no-ad guarantee (the stored, greedy or best no-power route wins at the
-## pace without powers, stepping out of telegraphs) and the random floor (RANDOM_FLOOR of
-## VALID_ROUTES random routes win). If one breaks (a weaker route or player walks into a gang
-## that wipes it out) or the level is too hard even at the least fire, every gang shrinks
-## (k x WALKER_STEP) and fire_k is refitted from where it was, up to WALKER_STEPS times, so the
-## losses come from fire with room to spare; failing that it backs off toward easier scales.
+## The most of its peak the greedy player may lose to enemies over a level of band `b` (advisor
+## R5: lost ÷ peak beside end ÷ peak, so early attrition the end/peak share cannot see counts).
+static func lost_max(b: Dictionary) -> float:
+	return 1.0 - float(b["keep"][0]) + LOST_SLACK
+
+
+## A loss-mix share: `key`'s troops over everything enemies took (0 when they took nothing).
+static func mix_share(mix: Dictionary, key: String) -> float:
+	var total := 0
+	for k in mix:
+		total += int(mix[k])
+	return float(mix.get(key, 0)) / float(total) if total > 0 else 0.0
+
+
+## The v2.1 keep fit (plan v2.1 Task 8; advisor R3, 2026-11-13). Only the greedy player is
+## fitted, one deterministic run per probe: its end ÷ peak squad (keep) aimed at the band's
+## midpoint, with lost ÷ peak (every troop enemies took) at most lost_max. Since the crowd clash
+## (spec v2.1 §1.4) losses are graded: a gang that reaches the squad grinds into it 1:1 at a
+## capped pace, so the keep falls smoothly as the gangs grow. The dials, in order (_axes): the
+## last wave's size kf (the end/peak dial), every gang's size k (the visible crowd number), the
+## level's fire intensity fire_k within FIRE_K (the "they shoot at me" texture) and, on boss and
+## lieutenant levels, boss_k in BOSS_K steps (his gun and barrage). Each is fitted from the best
+## point so far (_fit_axis: walk out to bracket the midpoint, then secant or bisection; at most
+## AXIS_PROBES), the next only while the keep is still outside the band. Then the floors once
+## (_floors): the no-ad guarantee, the random floor and, on normal levels, a greedy win at
+## WEAK_FP of the pace's firepower (advisor A2); if one breaks it backs off toward easier scales.
 ## The noisy fail rate is only measured and reported. A level stops after LEVEL_CAP_S.
 func calibrate_harder(n: int, base: Dictionary) -> Dictionary:
 	var t0 := Time.get_ticks_msec()
-	var b: Dictionary = BANDS[band(n, base)]
+	var bname := band(n, base)
+	var b: Dictionary = BANDS[bname]
 	var want := band_mid(b["keep"])
 	var probes: Array = []
-	var fk0 := float(base.get("fire_k", 1.0))
-	var sc := {"k": 1.0, "kf": 1.0, "fk": 1.0}
+	# Stale values from before the fire_k bounds are clamped into them first.
+	var sc := {"k": _clamp_rel(n, base, "k", 1.0), "kf": _clamp_rel(n, base, "kf", 1.0),
+		"fk": _clamp_rel(n, base, "fk", 1.0), "bk": _clamp_rel(n, base, "bk", 1.0)}
+	var best := _probe(n, base, sc, probes)
 	var chosen := {}
-	var last := {}
-	# Already inside the band with both floors: nothing to fit (passes converge).
-	var p0 := _probe(n, base, sc, probes)
-	if bool(p0["win"]) and in_band(float(p0["keep"]), b["keep"]) and _floors(n, base, sc)["ok"]:
-		chosen = p0
-	for step in WALKER_STEPS:
-		if not chosen.is_empty():
-			break
-		if _over(t0) or probes.size() >= FIT_PROBES:
-			break
-		var fit := _fit_axis(n, base, "fk", sc, want, FIT_K_PROBES, probes, t0)
-		var best: Dictionary = fit["best"]
-		# Too easy even at the most fire (few armed gangs): the gangs grow (k), then the last
-		# wave (kf), the old way; only from the current files' size.
-		if step == 0 and bool(best["win"]) and float(best["keep"]) > float(b["keep"][1]):
-			for axis in ["k", "kf"]:
-				if in_band(float(best["keep"]), b["keep"]) or probes.size() >= FIT_PROBES or _over(t0):
-					break
-				var from: Dictionary = fit["easy"] if not fit["easy"].is_empty() else best
-				var room := FIT_PROBES - probes.size()
-				var f2 := _fit_axis(n, base, axis, _scales(from), want, room / 2 if axis == "k" else room, probes, t0)
-				if _closer(f2["best"], best, want):
-					best = f2["best"]
-		last = best
-		var too_hard := not bool(best["win"]) or float(best["keep"]) < float(b["keep"][0]) - KEEP_SLACK
-		if not too_hard and _floors(n, base, _scales(best))["ok"]:
-			chosen = best
-			break
-		if step == 0 and not too_hard:
-			# The hardest point toward easier that holds the floors: good enough when its keep
-			# is still inside the band (± the guard's slack).
-			var bo := _back_off(n, base, _scales(best), t0)
-			if not bo.is_empty() and bool(bo["win"]) and in_band(float(bo["keep"]), b["keep"], KEEP_SLACK):
-				chosen = bo
+	if _fits(best, b) and _floors(n, base, sc)["ok"]:
+		chosen = best   # already in band with the floors: nothing to fit (passes converge)
+	else:
+		var from := best   # where the next dial starts: the easy end of the last bracket
+		for axis in _axes(base):
+			if _fits(best, b) or _over(t0) or probes.size() >= FIT_PROBES:
 				break
-		# A floor broke (a weaker route or player walks into a gang that wipes it out) or the
-		# level is too hard even at the least fire: fewer enemies in every gang, and the fire
-		# refitted from where it was, so the losses come from fire (graded) with room to spare.
-		sc = {"k": float(best["k"]) * WALKER_STEP, "kf": float(best["kf"]), "fk": float(best["fk"])}
-	if chosen.is_empty():
-		chosen = _back_off(n, base, _scales(last), t0)
+			var f := _fit_axis(n, base, axis, _scales(from), want, mini(AXIS_PROBES, FIT_PROBES - probes.size()), probes, t0)
+			if _closer(f["best"], best, want):
+				best = f["best"]
+			from = best
+			if not (f["easy"] as Dictionary).is_empty() and not (f["hard"] as Dictionary).is_empty() 					and float(f["easy"]["keep"]) > float(b["keep"][1]):
+				from = f["easy"]   # the crossing is just past it: the next dial finishes the job
+		if _floors(n, base, _scales(best))["ok"]:
+			chosen = best
+		else:
+			chosen = _back_off(n, base, _scales(best), t0)
+			# The floors bind (a weaker route walks into a gang sized for the greedy squad): the
+			# rest comes from fire, a share of whatever squad it hits, so a weaker route pays the
+			# same share. fire_k (then boss_k) up toward the band, the floors checked again.
+			for axis in ["fk", "bk"]:
+				if chosen.is_empty() or not bool(chosen["win"]) or float(chosen["keep"]) <= float(b["keep"][1]) or _over(t0):
+					break
+				if axis == "bk" and not _axes(base).has("bk"):
+					break
+				var f2 := _fit_axis(n, base, axis, _scales(chosen), want, AXIS_PROBES, probes, t0)
+				var cand: Dictionary = f2["best"]
+				if _closer(cand, chosen, want) and _floors(n, base, _scales(cand))["ok"]:
+					chosen = cand
+				elif not (f2["easy"] as Dictionary).is_empty() and _closer(f2["easy"], chosen, want) 						and _floors(n, base, _scales(f2["easy"]))["ok"]:
+					chosen = f2["easy"]
 	var fin := _scales(chosen)
 	if verbose:
-		print("      L%d fit k %.3f kf %.3f fire_k %.3f (x%.3f) keep %.0f%% (%s, want %.0f%%) in %d probes" % [n,
-			fin["k"], fin["kf"], fk0 * float(fin["fk"]), fin["fk"], float(chosen.get("keep", -1.0)) * 100.0, band(n, base),
-			want * 100.0, probes.size()])
-	var r := evaluate_harder(n, base, fin["k"], fin["kf"], VALID_NOISY, fin["fk"])
+		print("      L%d fit k %.3f kf %.3f fire_k x%.3f boss_k x%.3f keep %.0f%% lost %.0f%% (%s, want %.0f%%) in %d probes" % [n,
+			fin["k"], fin["kf"], fin["fk"], fin["bk"], float(chosen.get("keep", -1.0)) * 100.0,
+			float(chosen.get("lost", -1.0)) * 100.0, bname, want * 100.0, probes.size()])
+	var r := evaluate_harder(n, base, fin["k"], fin["kf"], VALID_NOISY, fin["fk"], fin["bk"])
 	r["probes"] = probes.size()
 	r["fit_s"] = (Time.get_ticks_msec() - t0) / 1000.0
 	return r
 
 
+## The dials the fit turns, in order (advisor R3): kf; k when kf alone cannot get there, then
+## kf again from that point (k brings a far-too-easy level to where its last wave bites, kf
+## sets it); fire_k; and boss_k on a level with a boss or lieutenant.
+static func _axes(base: Dictionary) -> Array:
+	var out: Array = ["kf", "k", "kf", "fk"]
+	for e in base.get("events", []):
+		if e["type"] == "wave":
+			for g in e["groups"]:
+				if _is_boss_group(g):
+					out.append("bk")
+					return out
+	return out
+
+
+## A probe meets the band: a win, keep inside the band, lost inside lost_max.
+static func _fits(p: Dictionary, b: Dictionary) -> bool:
+	return bool(p["win"]) and in_band(float(p["keep"]), b["keep"]) and float(p.get("lost", 0.0)) <= lost_max(b) + 1e-9
+
+
 static func _scales(p: Dictionary) -> Dictionary:
-	return {"k": float(p["k"]), "kf": float(p["kf"]), "fk": float(p["fk"])}
+	return {"k": float(p["k"]), "kf": float(p["kf"]), "fk": float(p["fk"]), "bk": float(p.get("bk", 1.0))}
+
+
+## A run's keep share: end ÷ peak squad, 0 for a loss. A win slower than MAX_TIME fades over
+## SLOW_GRACE s instead of dropping to 0 (advisor R5: no holes for the fit to fall into).
+static func keep_of(r: Dictionary) -> float:
+	var k := _ratio(r)
+	var t := float(r["time"])
+	if t > MAX_TIME:
+		k *= clampf((MAX_TIME + SLOW_GRACE - t) / SLOW_GRACE, 0.0, 1.0)
+	return k
 
 
 ## The greedy player's run at this level plus the lanes it took: one probe of the keep fit.
-## A loss, or a win that takes longer than MAX_TIME, keeps nothing.
-func greedy_probe(n: int, level: Dictionary) -> Dictionary:
+## `ucfg` = other units (the weaker squad of the A2 floor); {} = the run's own.
+func greedy_probe(n: int, level: Dictionary, ucfg := {}) -> Dictionary:
 	var s := noisy_seed(n, 1000)
 	seed(s)
 	var pilot := GreedyPilot.new(tap_rate, use_powers, 0.0, s, dodge_share)
-	var r := Autopilot.play(LevelSim.new(level, units, upgrades), pilot, DT)
+	var w := play_watched(LevelSim.new(level, units if ucfg.is_empty() else ucfg, upgrades), pilot)
+	var r: Dictionary = w["result"]
 	r["route"] = pilot.choices.duplicate()
-	r["keep"] = _ratio(r) if float(r["time"]) <= MAX_TIME else 0.0
+	r["keep"] = keep_of(r)
+	r["lost"] = float(w["enemy_lost"]) / maxf(float(r["peak"]), 1.0)
+	r["mix"] = w["mix"]
 	return r
 
 
 func _probe(n: int, base: Dictionary, sc: Dictionary, probes: Array) -> Dictionary:
-	var r := greedy_probe(n, scaled_level(base, sc["k"], sc["kf"], sc["fk"]))
-	var p := {"k": sc["k"], "kf": sc["kf"], "fk": sc["fk"], "keep": float(r["keep"]), "win": r["state"] == "strike",
-		"time": float(r["time"])}
+	var r := greedy_probe(n, scaled_level(base, sc["k"], sc["kf"], sc["fk"], sc.get("bk", 1.0)))
+	var p := {"k": sc["k"], "kf": sc["kf"], "fk": sc["fk"], "bk": sc.get("bk", 1.0), "keep": float(r["keep"]),
+		"lost": float(r["lost"]), "win": r["state"] == "strike", "time": float(r["time"])}
+	p["over"] = maxf(float(p["lost"]) - lost_max(BANDS[band(n, base)]), 0.0)
 	probes.append(p)
 	if verbose:
-		print("        probe k %.4f kf %.4f fk %.4f -> %s keep %.1f%% %.0fs" % [sc["k"], sc["kf"], sc["fk"], r["state"],
-			float(p["keep"]) * 100.0, float(p["time"])])
+		print("        probe k %.4f kf %.4f fk %.4f bk %.3f -> %s keep %.1f%% lost %.1f%% %.0fs (m%.0f r%.0f)" % [sc["k"], sc["kf"],
+			sc["fk"], sc.get("bk", 1.0), r["state"], float(p["keep"]) * 100.0, float(p["lost"]) * 100.0, float(p["time"]),
+			mix_share(r["mix"], "melee") * 100.0, mix_share(r["mix"], "rf") * 100.0])
 	return p
 
 
@@ -1075,41 +1190,60 @@ func _over(t0: int) -> bool:
 	return (Time.get_ticks_msec() - t0) / 1000.0 > LEVEL_CAP_S
 
 
-## Whether probe a is a better fit than b: a win beats a loss, then the keep nearer `want`;
-## within a point of each other, the one nearer the current files (a scale that changes
-## nothing is not worth taking: a boss level's keep hardly moves with the gangs' fire).
+## Whether probe a is a better fit than b: a win beats a loss, then the keep nearer `want`
+## (a probe over lost_max counts as LOST_SLACK further away); within a point of each other,
+## the one nearer the current files.
 static func _closer(a: Dictionary, b: Dictionary, want: float) -> bool:
 	if b.is_empty():
 		return true
 	if bool(a["win"]) != bool(b["win"]):
 		return bool(a["win"])
-	var da := absf(float(a["keep"]) - want)
-	var db := absf(float(b["keep"]) - want)
+	var da := absf(float(a["keep"]) - want) + float(a.get("over", 0.0))
+	var db := absf(float(b["keep"]) - want) + float(b.get("over", 0.0))
 	if absf(da - db) < 0.01 and a.has("fk") and b.has("fk"):
 		return _moved(a) < _moved(b)
 	return da < db
 
 
 static func _moved(p: Dictionary) -> float:
-	return absf(log(float(p["k"]))) + absf(log(float(p["kf"]))) + absf(log(float(p["fk"])))
+	return absf(log(float(p["k"]))) + absf(log(float(p["kf"]))) + absf(log(float(p["fk"]))) + absf(log(float(p.get("bk", 1.0))))
 
 
-## The relative range one axis may try: fit_k / fit_kf, and for fire_k the absolute FIRE_K
-## range over the level's current fire_k.
-func _axis_range(base: Dictionary, axis: String) -> Array:
-	if axis == "fk":
-		var fk0 := maxf(float(base.get("fire_k", 1.0)), 1e-6)
-		return [float(FIRE_K[0]) / fk0, float(FIRE_K[1]) / fk0]
-	return fit_k if axis == "k" else fit_kf
+## The level's current value of a dial (its files: calibration.json k, kf; the level's fire_k
+## and boss_k).
+func _current(n: int, base: Dictionary, axis: String) -> float:
+	match axis:
+		"fk":
+			return maxf(float(base.get("fire_k", 1.0)), 1e-6)
+		"bk":
+			return maxf(float(base.get("boss_k", 1.0)), 1e-6)
+	var c: Dictionary = cal_all.get(str(n), {})
+	return maxf(float(c.get(axis, 1.0)), 1e-6)
 
 
-## One scale (`axis`: "fk" fire intensity, "k" every gang, "kf" the last wave) fitted from
-## `sc` so the greedy keep is `want` (the keep falls as the scale grows). Returns {best: the
-## probe closest to want, a win if any won; easy: the hardest probe that kept more; hard: the
-## easiest that kept less} ({} when there is none).
+## The relative range one dial may try: its absolute bounds (K_ABS, KF_ABS, FIRE_K, BOSS_K)
+## over the level's current value.
+func _axis_range(n: int, base: Dictionary, axis: String) -> Array:
+	var lim: Array = {"k": K_ABS, "kf": KF_ABS, "fk": FIRE_K, "bk": [BOSS_K[0], BOSS_K[BOSS_K.size() - 1]]}[axis]
+	var cur := _current(n, base, axis)
+	return [float(lim[0]) / cur, float(lim[1]) / cur]
+
+
+## `x` (relative) clamped into the dial's range.
+func _clamp_rel(n: int, base: Dictionary, axis: String, x: float) -> float:
+	var r := _axis_range(n, base, axis)
+	return clampf(x, float(r[0]), float(r[1]))
+
+
+## One dial (`axis`: "kf" the last wave, "k" every gang, "fk" fire intensity, "bk" the boss)
+## fitted from `sc` so the greedy keep is `want` (the keep falls as the dial grows). Returns
+## {best: the probe closest to want, a win if any won; easy: the hardest probe that kept more;
+## hard: the easiest that kept less} ({} when there is none). boss_k takes BOSS_K steps.
 func _fit_axis(n: int, base: Dictionary, axis: String, sc: Dictionary, want: float, budget: int,
 		probes: Array, t0: int) -> Dictionary:
-	var lims := _axis_range(base, axis)
+	if axis == "bk":
+		return _fit_steps(n, base, sc, want, budget, probes, t0)
+	var lims := _axis_range(n, base, axis)
 	var lo_lim := log(float(lims[0]))
 	var hi_lim := log(float(lims[1]))
 	var x := clampf(log(float(sc[axis])), lo_lim, hi_lim)
@@ -1122,7 +1256,7 @@ func _fit_axis(n: int, base: Dictionary, axis: String, sc: Dictionary, want: flo
 		easy = {"x": x, "keep": p["keep"], "p": p}
 	else:
 		hard = {"x": x, "keep": p["keep"], "p": p}
-	var step := log(2.0)
+	var step := log(1.6)
 	# Walk out until the keep crosses want.
 	while mine.size() < budget and absf(float(p["keep"]) - want) > FIT_TOL and (easy.is_empty() or hard.is_empty()) and not _over(t0):
 		var nx := clampf(x + (step if hard.is_empty() else -step), lo_lim, hi_lim)
@@ -1158,43 +1292,98 @@ func _fit_axis(n: int, base: Dictionary, axis: String, sc: Dictionary, want: flo
 	return {"best": best, "easy": easy.get("p", {}), "hard": hard.get("p", {})}
 
 
+## boss_k in BOSS_K steps (coarse, advisor R4: a fourth dial invites overfitting): from the
+## step nearest `sc`, one step at a time toward the band's midpoint until the keep crosses it.
+func _fit_steps(n: int, base: Dictionary, sc: Dictionary, want: float, budget: int, probes: Array, t0: int) -> Dictionary:
+	var cur := _current(n, base, "bk")
+	var steps: Array = []
+	for v in BOSS_K:
+		steps.append(float(v) / cur)
+	var i := 0
+	for j in steps.size():
+		if absf(log(float(steps[j]) / float(sc["bk"]))) < absf(log(float(steps[i]) / float(sc["bk"]))):
+			i = j
+	var s2 := sc.duplicate()
+	s2["bk"] = steps[i]
+	var p := _probe(n, base, s2, probes)
+	var mine: Array = [p]
+	var dir := 1 if float(p["keep"]) > want else -1
+	while mine.size() < budget and not _over(t0) and absf(float(p["keep"]) - want) > FIT_TOL:
+		i += dir
+		if i < 0 or i >= steps.size():
+			break
+		s2 = sc.duplicate()
+		s2["bk"] = steps[i]
+		p = _probe(n, base, s2, probes)
+		mine.append(p)
+		if (float(p["keep"]) > want) != (dir > 0):
+			break   # crossed the midpoint
+	var best := {}
+	for q in mine:
+		if _closer(q, best, want):
+			best = q
+	return {"best": best, "easy": {}, "hard": {}}
+
+
 static func _with(sc: Dictionary, axis: String, x: float) -> Dictionary:
 	var s2 := sc.duplicate()
 	s2[axis] = exp(x)
 	return s2
 
 
-## The two floors at these scales: the random-route floor and the no-ad guarantee.
+## The floors at these scales: the random-route floor, the no-ad guarantee and, on normal
+## levels, the greedy player still wins with WEAK_FP of the pace's firepower (advisor A2).
 func _floors(n: int, base: Dictionary, sc: Dictionary) -> Dictionary:
-	var lv := scaled_level(base, sc["k"], sc["kf"], sc["fk"])
+	var lv := scaled_level(base, sc["k"], sc["kf"], sc["fk"], sc.get("bk", 1.0))
 	var routes := sample_routes(n, Autopilot.gate_row_count(lv), VALID_ROUTES)
 	var share := _win_share(lv, routes, int(ceil(RANDOM_FLOOR * routes.size() - 1e-9)))
 	var floor_ok := share >= RANDOM_FLOOR - 1e-9
-	var ok := floor_ok and bool(noad(n, lv, base.get("route", []), false)["ok"])
+	var weak_ok := true
+	if floor_ok and band(n, base) == "normal":
+		weak_ok = greedy_probe(n, lv, weak_units())["state"] == "strike"
+	var ok := floor_ok and weak_ok and bool(noad(n, lv, base.get("route", []), false)["ok"])
 	if verbose:
-		print("        floors k %.4f kf %.4f fk %.4f: random wins %.0f%%, no-ad %s" % [sc["k"], sc["kf"], sc["fk"],
-			share * 100.0, ("ok" if ok else "LOSE") if floor_ok else "-"])
+		print("        floors k %.4f kf %.4f fk %.4f bk %.3f: random wins %.0f%%, weak %s, no-ad %s" % [sc["k"], sc["kf"], sc["fk"],
+			sc.get("bk", 1.0), share * 100.0, "ok" if weak_ok else "LOSE", ("ok" if ok else "LOSE") if floor_ok and weak_ok else "-"])
 	return {"ok": ok, "share": share}
 
 
+## The units with every ally's and hero weapon's fire rate x WEAK_FP (cached): the pace minus
+## about one Armory tier (advisor A2).
+func weak_units() -> Dictionary:
+	if _weak.is_empty():
+		_weak = scaled_units(units, WEAK_FP)
+	return _weak
+
+
+## `u` with every ally's and hero weapon's rate x fp (firepower; a one-hit kill stays one hit).
+static func scaled_units(u: Dictionary, fp: float) -> Dictionary:
+	var out: Dictionary = u.duplicate(true)
+	for table in ["allies", "hero_weapons"]:
+		for key in out.get(table, {}):
+			var d: Variant = out[table][key]
+			if d is Dictionary and (d as Dictionary).has("rate"):
+				d["rate"] = float(d["rate"]) * fp
+	return out
+
+
 ## Backs off from scales that broke a floor toward ones that hold them: easier steps from the
-## fit (k and fire_k x0.8, kf x0.9) until the floors hold and the greedy player still wins,
-## then BACKOFF_STEPS bisections in log scale between the two. Returns the probe it settled on.
+## fit (_easier) until the floors hold and the greedy player still wins, then BACKOFF_STEPS
+## bisections in log scale between the two. Returns the probe it settled on.
 func _back_off(n: int, base: Dictionary, sc: Dictionary, t0: int) -> Dictionary:
-	var ga := _easier(sc, base)
+	var ga := _easier(n, sc, base)
 	var good_p := {}
 	for j in 6:
 		var p := _probe(n, base, ga, [])
 		if bool(p["win"]) and _floors(n, base, ga)["ok"]:
 			good_p = p
 			break
-		ga = _easier(ga, base)
+		ga = _easier(n, ga, base)
 		if _over(t0):
 			break
 	if good_p.is_empty():
-		print("      !! L%d no scale tried holds the floors; kept k %.3f kf %.3f fk %.3f" % [n, ga["k"], ga["kf"], ga["fk"]])
-		var p0 := _probe(n, base, ga, [])
-		return p0
+		print("      !! L%d no scale tried holds the floors; kept k %.3f kf %.3f fk %.3f bk %.3f" % [n, ga["k"], ga["kf"], ga["fk"], ga["bk"]])
+		return _probe(n, base, ga, [])
 	var good := 0.0
 	var bad := 1.0
 	for i in BACKOFF_STEPS:
@@ -1211,17 +1400,76 @@ func _back_off(n: int, base: Dictionary, sc: Dictionary, t0: int) -> Dictionary:
 	return good_p
 
 
-## One step easier: every gang x0.8, the last wave x0.9, fire_k x0.8 (not below FIRE_K).
-func _easier(sc: Dictionary, base: Dictionary) -> Dictionary:
-	var lo := float(_axis_range(base, "fk")[0])
-	return {"k": float(sc["k"]) * 0.8, "kf": float(sc["kf"]) * 0.9, "fk": maxf(float(sc["fk"]) * 0.8, lo)}
+## One step easier: the last wave x0.85, every gang x0.9 (not below their bounds); fire_k and
+## boss_k x0.85 but not below the files' value (the fire is the floors' friend, _back_off's
+## caller turns it up again).
+func _easier(n: int, sc: Dictionary, base: Dictionary) -> Dictionary:
+	return {"k": maxf(float(sc["k"]) * 0.9, float(_axis_range(n, base, "k")[0])),
+		"kf": maxf(float(sc["kf"]) * 0.85, float(_axis_range(n, base, "kf")[0])),
+		"fk": maxf(float(sc["fk"]) * 0.85, minf(float(sc["fk"]), 1.0)),
+		"bk": maxf(float(sc.get("bk", 1.0)) * 0.85, minf(float(sc.get("bk", 1.0)), 1.0))}
 
 
 static func _lerp_scales(a: Dictionary, b: Dictionary, t: float) -> Dictionary:
 	var out := {}
-	for key in ["k", "kf", "fk"]:
-		out[key] = exp(lerpf(log(float(a[key])), log(float(b[key])), t))
+	for key in ["k", "kf", "fk", "bk"]:
+		out[key] = exp(lerpf(log(float(a.get(key, 1.0))), log(float(b.get(key, 1.0))), t))
 	return out
+
+
+## sweep=1 (advisor A1 and A2): per level, the greedy keep at the files' scales x SWEEP_STEPS for
+## k and for kf (every adjacent step within SWEEP_JUMP, no win -> loss within ±10 %), and at the
+## pace's firepower x WEAK_FP (normal levels must win) and x STRONG_FP (keep at most the band's
+## top + 15 points). Returns the number of failures.
+func run_sweep(lo: int, hi: int, only: Array) -> int:
+	if only.is_empty():
+		only = range(lo, hi + 1)
+	print("sweep (advisor A1/A2): greedy keep %% at k and kf x %s; firepower x%.2f / x%.2f" % [str(SWEEP_STEPS), WEAK_FP, STRONG_FP])
+	var fails: Array = []
+	var strong := scaled_units(units, STRONG_FP)
+	for n in only:
+		var base := Config.level(n)
+		upgrades = level_upgrades(n)
+		var b: Dictionary = BANDS[band(n, base)]
+		var line := "%5d | %-8s" % [n, band(n, base)]
+		for axis in ["k", "kf"]:
+			var keeps: Array = []
+			var wins: Array = []
+			for s in SWEEP_STEPS:
+				var sc := {"k": 1.0, "kf": 1.0, "fk": 1.0, "bk": 1.0}
+				sc[axis] = s
+				var p := _probe(n, base, sc, [])
+				keeps.append(float(p["keep"]))
+				wins.append(bool(p["win"]))
+			var cells := ""
+			var jump := 0.0
+			for i in keeps.size():
+				cells += "%s%3.0f" % [" " if wins[i] else "x", float(keeps[i]) * 100.0]
+				if i > 0:
+					jump = maxf(jump, absf(float(keeps[i]) - float(keeps[i - 1])))
+			line += " | %s %s (jump %2.0f)" % [axis, cells, jump * 100.0]
+			if jump > SWEEP_JUMP + 1e-9:
+				fails.append("L%d %s: keep jumps %.0f points in one step" % [n, axis, jump * 100.0])
+			var mid := SWEEP_STEPS.find(1.0)
+			if mid >= 0 and wins[mid]:
+				for i in SWEEP_STEPS.size():
+					if absf(float(SWEEP_STEPS[i]) - 1.0) <= 0.1 + 1e-9 and not wins[i]:
+						fails.append("L%d %s x%.1f: the win flips to a loss" % [n, axis, float(SWEEP_STEPS[i])])
+		var lv := base
+		var wk := greedy_probe(n, lv, scaled_units(units, WEAK_FP))
+		var st := greedy_probe(n, lv, strong)
+		line += " | fp x%.2f %s %3.0f%% | x%.2f %s %3.0f%%" % [WEAK_FP, "win" if wk["state"] == "strike" else "LOSE",
+			float(wk["keep"]) * 100.0, STRONG_FP, "win" if st["state"] == "strike" else "LOSE", float(st["keep"]) * 100.0]
+		if band(n, base) == "normal" and wk["state"] != "strike":
+			fails.append("L%d loses at x%.2f firepower" % [n, WEAK_FP])
+		if float(st["keep"]) > float(b["keep"][1]) + 0.15 + 1e-9:
+			fails.append("L%d keeps %.0f%% at x%.2f firepower (band top + 15 = %.0f%%)" % [n, float(st["keep"]) * 100.0,
+				STRONG_FP, (float(b["keep"][1]) + 0.15) * 100.0])
+		print(line)
+	print("sweep: %d failed" % fails.size())
+	for f in fails:
+		print("  FAIL " + String(f))
+	return fails.size()
 
 
 ## checks=1 (spec v2.1 §2 guard checks): per level the greedy player at the pace (keep share
@@ -1235,7 +1483,7 @@ func run_guard_checks(lo: int, hi: int, only: Array, full: bool) -> int:
 		only = range(lo, hi + 1)
 	print("guard checks (spec v2.1 §2): greedy at the pace, tap %.1f/s, powers %s, dodge_p %.2f" % [tap_rate,
 		"on" if use_powers else "off", dodge_share])
-	print("level | band     | greedy keeps         | fired/armed | enemy cost | bosses (halt s/barrages) | no-ad | extra")
+	print("level | band     | greedy keeps         | lost  melee rf | gap s air | fired/armed | enemy cost | bosses (halt s/barrages) | no-ad | extra")
 	var fails: Array = []
 	for n in only:
 		var lv := Config.level(n)
@@ -1260,8 +1508,10 @@ func run_guard_checks(lo: int, hi: int, only: Array, full: bool) -> int:
 			var nf := noisy_fail(n, lv)
 			extra += ", noisy fails %.0f%% (soft %.0f-%.0f%%)%s" % [nf * 100.0, float(bd["fail"][0]) * 100.0,
 				float(bd["fail"][1]) * 100.0, "" if in_band(nf, bd["fail"]) else " ~"]
-		print("%5d | %-8s | %-4s %3.0f%% %5d/%-5d | %4d/%-6d | %10d | %-24s | %-5s | %s%s" % [n, r["band"],
+		print("%5d | %-8s | %-4s %3.0f%% %5d/%-5d | %3.0f%% %3.0f%% %3.0f%% | %4.2f %d | %4d/%-6d | %10d | %-24s | %-5s | %s%s" % [n, r["band"],
 			"win" if r["state"] == "strike" else "LOSE", float(r["keep"]) * 100.0, int(r["troops"]), int(r["peak"]),
+			float(r["lost"]) * 100.0, mix_share(r["mix"], "melee") * 100.0, mix_share(r["mix"], "rf") * 100.0,
+			float(r["gap_med"]), int(r["max_air"]),
 			int(r["fired"]), int(r["armed"]), int(r["enemy_lost"]), bosses, "ok" if na else "LOSE", extra,
 			"" if f.is_empty() else "  !! %d" % f.size()])
 		fails.append_array(f)
