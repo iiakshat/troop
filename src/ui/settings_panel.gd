@@ -21,6 +21,8 @@ Analytics: Godotx Firebase by Paulo Coutinho (MIT),
 Google Firebase"""
 
 
+const PRIVACY_URL := "https://iiakshat.github.io/troop/privacy/"   # docs/privacy/index.html on GitHub Pages
+
 func _ready() -> void:
 	UiKit.full_rect(self)
 	var dim := ColorRect.new()
@@ -47,11 +49,15 @@ func _ready() -> void:
 	head.add_child(close)
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 22)
+	row.add_theme_constant_override("separation", 16)
 	col.add_child(row)
-	row.add_child(toggle_button("sound", "sound", "sound_off"))
-	row.add_child(toggle_button("music", "music", "music_off"))
-	row.add_child(toggle_button("vibration", "vibrate", "vibrate_off"))
+	row.add_child(toggle_button("sound", "sound", "sound_off", 124))
+	row.add_child(toggle_button("music", "music", "music_off", 124))
+	row.add_child(toggle_button("vibration", "vibrate", "vibrate_off", 124))
+	# The privacy policy (Play asks for it in the app as well as on the store page).
+	var privacy := UiKit.icon_button("privacy", "blue", 124)
+	privacy.pressed.connect(func(): OS.shell_open(PRIVACY_URL))
+	row.add_child(privacy)
 	# Credits scroll inside the panel, so the panel always fits the screen.
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(580, 400)

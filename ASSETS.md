@@ -15,6 +15,7 @@ Research notes, verified URLs and checks are in `docs/ASSET_SOURCES.md`. Everyth
 | `assets/env/bits/*` (hydrant, bench, bins, bush, box) | Kay Lousberg, *KayKit City Builder Bits 1.0*, GitHub KayKit-Game-Assets @63976910 | CC0 1.0 (`LICENSE.txt`) |
 | `assets/ui/*.png` (glossy buttons, stars) | Kenney, *UI Pack 2.0*, OGA kenney_ui-pack.zip | CC0 1.0 |
 | `assets/icons/*.svg` | game-icons.net by Lorc, Delapouite, Skoll, Sbed, Andy Meneely, Guard13007 (`LICENSE-game-icons.txt`) | CC BY 3.0: **credit required** (in-game credits) |
+| `assets/icons/privacy.svg` (Settings: the privacy policy link) | Drawn by us (a page with a padlock), 2026-11-13 | Our own |
 | `assets/fonts/LuckiestGuy-Regular.ttf` | Google Fonts (apache/luckiestguy), Astigmatic | Apache 2.0 (`LICENSE-LuckiestGuy.txt`) |
 | `assets/fonts/LilitaOne-Regular.ttf` | Google Fonts (ofl/lilitaone), Juan Montoreano | SIL OFL 1.1 (`OFL-LilitaOne.txt`) |
 | `assets/audio/tap, upgrade, error, banner, recruit, swoosh, tick` | Kenney, *Interface Sounds*, OGA kenney_interfaceSounds.zip | CC0 1.0 |
