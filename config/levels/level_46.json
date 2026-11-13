@@ -7,9 +7,11 @@
   "archetype": "rescue",
   "target_win": 0.22,
   "target_ratio": 0.4,
-  "stars": {"star2": 29, "star3": 55},
+  "stars": {"star2": 16, "star3": 30},
   "charges": {"shield": 1, "bomb": 1},
-  "coin_ref": 23618,
+  "fire_k": 3.013,
+  "coin_ref": 20049,
+  "route": [0, 2, 2, 2, 0, 1, 0, 2],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 380}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 5}, {"lane": 2, "op": "weapon", "id": "pistol"}]},
     {"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 1654}]},

@@ -7,9 +7,11 @@
   "archetype": "gauntlet",
   "target_win": 0.62,
   "target_ratio": 0.58,
-  "stars": {"star2": 40, "star3": 76},
+  "stars": {"star2": 21, "star3": 39},
   "charges": {"shield": 1, "bomb": 1},
-  "coin_ref": 240,
+  "fire_k": 4.3055,
+  "coin_ref": 86,
+  "route": [2, 1, 2, 1, 0, 0, 2, 0, 0],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "recruit", "unit": "inspector", "n": 3}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 5}, {"lane": 2, "op": "mul", "k": 3}]},
     {"at": 62, "type": "hint", "id": "return_fire", "icon": "thug", "enemy": "thug"},

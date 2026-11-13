@@ -47,7 +47,7 @@ extends RefCounted
 ## ints; a huge gang fights in capped rows.
 ## A level's `fire_k` (calibration.json, default 1) is how hard its gangs fire: return-fire
 ## shots (the rate, and the opening volley when fire_k > 1) x fire_k, and specials attack
-## fire_k x as often.
+## fire_k x as often (their first attack never later than usual).
 ## Not the level's first gang (the opening, sized for the squad it starts with), nor bosses and
 ## lieutenants (units.json's numbers). Every shot and attack is still capped.
 
@@ -765,7 +765,7 @@ func _spawn_horde(sp: Dictionary, early := false) -> void:
 	var fk := fire_k if int(sp["wave"]) != 0 and not boss else 1.0
 	if every > 0.0 and fk > 0.0:
 		every /= fk   # specials attack fk x as often
-		first /= fk
+		first /= maxf(fk, 1.0)   # (a calmer level never delays the first attack)
 	var h := {
 		"id": _new_id(), "wave": sp["wave"], "enemy": grp["enemy"], "label": sp["label"],
 		"count": int(grp["n"]), "start": int(grp["n"]),

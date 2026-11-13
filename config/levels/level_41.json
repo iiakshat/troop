@@ -7,9 +7,11 @@
   "archetype": "gauntlet",
   "target_win": 0.3,
   "target_ratio": 0.4,
-  "stars": {"star2": 14, "star3": 27},
+  "stars": {"star2": 10, "star3": 20},
   "charges": {"shield": 1, "bomb": 1},
-  "coin_ref": 2580,
+  "fire_k": 1.1645,
+  "coin_ref": 9009,
+  "route": [0, 0, 2, 0, 0, 0, 1, 2, 2],
   "events": [
     {"at": 36, "type": "gates", "gates": [{"lane": 0, "op": "num", "v": 720}, {"lane": 1, "op": "num", "v": -1, "step": 0.5, "max": 4}, {"lane": 2, "op": "num", "v": 550}]},
     {"at": 70, "type": "wave", "groups": [{"enemy": "thug", "n": 2625}]},

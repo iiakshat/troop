@@ -10,6 +10,7 @@
   "stars": {"star2": 36, "star3": 68},
   "charges": {},
   "coin_ref": 195,
+  "route": [2, 2, 1, 1, 2],
   "events": [
     {"at": 30, "type": "wave", "fixed": true, "groups": [{"enemy": "thug", "n": 5}, {"enemy": "thug", "n": 5, "gap": 30}]},
     {"at": 34, "type": "hint", "id": "swipe", "icon": "swipe"},

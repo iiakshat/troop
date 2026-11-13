@@ -401,7 +401,7 @@ def fight(sq: Sq, groups: list[dict], dt: float = 0.05, fire_k: float = 1.0) -> 
         first = float(d.get("first_shot", every))
         if not boss and every > 0 and fire_k > 0:
             every /= fire_k
-            first /= fire_k
+            first /= max(fire_k, 1.0)
         rf = d.get("return_fire", {})
         rf_on = sq.d >= int(rf.get("from_district", RF.get("from_district", 2)))
         hs.append({"n": n, "start": n, "hp": float(d["hp"]), "armour": int(d["armour"]),
@@ -564,6 +564,23 @@ MAX_COUNT = {"thug": 600, "knifer": 500, "gunman": 400, "brute": 240, "biker": 4
 
 def mix_ok(name: str, level: int) -> bool:
     return all(int(ENEMIES[e]["unlock"]) <= level for e, _, _ in MIXES[name])
+
+
+# Calibration v2.1: a level's losses are fitted through its gangs' fire (LevelSim.fire_k), which
+# needs gangs that fire. In district 1 only gunmen and the specials do (thugs and bikers from
+# district 2), so from ARMED_FROM on a district-1 level gets at least ARMED_MIN armed gangs.
+ARMED_FROM = 4
+ARMED_MIN = 3
+
+
+def mix_armed(name: str, level: int) -> bool:
+    """True when a gang of mix `name` fires at the squad in `level` (return fire or an attack)."""
+    for e, _, _ in MIXES[name]:
+        d = ENEMIES[e]
+        rf = d.get("return_fire")
+        if d.get("attack") or (rf and district(level) >= int(rf.get("from_district", RF.get("from_district", 2)))):
+            return True
+    return False
 
 
 def max_count(enemy: str, d: int) -> int:
@@ -1222,6 +1239,7 @@ def generate(level: int) -> dict:
     if R.get("cages"):
         cage_beats = set(rng.sample(range(2, beats - 1), min(int(R["cages"]), max(beats - 3, 0))))
     beat = 0
+    armed_n = 0
     prev_kinds: list[str] = []
     prev_add = None
     last_arrival = pos
@@ -1239,6 +1257,13 @@ def generate(level: int) -> dict:
             mix_name = rng.choice(hard or mixes)
         else:
             mix_name = pick_mix(rng, mixes, newest_enemy, R, need)
+        armed_left = ARMED_MIN - armed_n
+        if (d == 1 and level >= ARMED_FROM and not boss and beat > 0 and not cage and armed_left > 0
+                and beats - beat <= armed_left and not mix_armed(mix_name, level)):
+            # Not enough armed gangs yet for the rest of the level: this one fires.
+            mix_name = rng.choice([m for m in mixes if mix_armed(m, level)] or [mix_name])
+        if mix_armed(mix_name, level):
+            armed_n += 1
         mix = MIXES[mix_name]
         ctx["next_armour"] = any(int(ENEMIES[e]["armour"]) > 0 for e, _, _ in mix) and not cage
 
