@@ -129,7 +129,7 @@
     "per_day": 3,
     "bonus_chest": "missions",
     "pool": [
-      { "id": "kill",        "stat": "kill",        "icon": "fist",         "goal": [300, 500], "step": 50, "per_level": 0.02, "coins": 120, "weight": 3, "min_level": 1 },
+      { "id": "kill",        "stat": "kill",        "icon": "gang_split",   "goal": [300, 500], "step": 50, "per_level": 0.02, "coins": 120, "weight": 3, "min_level": 1 },
       { "id": "kill_thug",   "stat": "kill_thug",   "icon": "thug",         "goal": [150, 300], "step": 25, "per_level": 0.02, "coins": 100, "weight": 2, "min_level": 1 },
       { "id": "kill_gunman", "stat": "kill_gunman", "icon": "pistol",       "goal": [20, 40],   "step": 5,  "per_level": 0.02, "coins": 120, "weight": 1, "min_level": 3 },
       { "id": "kill_brute",  "stat": "kill_brute",  "icon": "brute",        "goal": [10, 20],   "step": 5,  "per_level": 0.02, "coins": 150, "weight": 1, "min_level": 5 },

@@ -2,9 +2,10 @@ class_name RankUnlockPanel
 extends RetentionPanel
 ## New Rank card (v1.1 item 1): full screen, once per rank, before the level that unlocks it
 ## (main.gd asks Game.rank_card_due(level)). A big glossy rank icon on turning rays, the
-## rank's one-word name (allowed here, spec v1.1), damage, rate, special icons, the "= N"
-## value vs a constable (the Codex's numbers), and the recruit gate it comes from (a green
-## gate with "+1" and the rank's icon). One green button closes; main.gd then opens the
+## rank's one-word name (allowed here, spec v1.1), damage per hit, rate /s, special icons, the
+## lightning firepower of one troop (the Codex's numbers, with the player's Armory upgrades;
+## owner play-test 2026-11-13 replaced the "= N constables" box), and the recruit gate it comes
+## from (a green gate with "+1" and the rank's icon). Every stat explains itself on a tap. One green button closes; main.gd then opens the
 ## level's boosters. No other words.
 ##   RankUnlockPanel.new("sergeant")
 
@@ -16,7 +17,7 @@ func _init(u := "sergeant") -> void:
 
 
 func _ready() -> void:
-	var allies: Dictionary = Game.units.get("allies", {})
+	var allies: Dictionary = Game.upgraded_allies()
 	var u: Dictionary = allies.get(unit, {})
 	var col := _frame(first_icon(["badge", "station"]), 0, "", false, Color("23407f"))
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -44,7 +45,7 @@ func _ready() -> void:
 	# The rank's weapon, big, in front of its icon: what actually makes this rank different.
 	var wid := CodexPanel.weapon_icon(unit)
 	if wid != "":
-		var wpn := icon_safe(wid, 200)
+		var wpn := CodexPanel.weapon_art(unit, 200)
 		wpn.size = Vector2(200, 200)
 		wpn.position = Vector2(330, 150)
 		wpn.pivot_offset = Vector2(100, 100)
@@ -64,27 +65,33 @@ func _ready() -> void:
 	stats.add_theme_constant_override("separation", 12)
 	stats.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(stats)
-	for s in [["fist", CodexPanel.number(float(u.get("dmg", 1)))], [CodexPanel.RATE_ICON, CodexPanel.number(float(u.get("rate", 1.0)))]]:
-		stats.add_child(icon_safe(String(s[0]), 64))
-		stats.add_child(UiKit.label(String(s[1]), 56, Color.WHITE, 10))
+	var ctx := CodexPanel.tip_ctx(allies, unit)
+	for s in [[CodexPanel.DMG_ICON, CodexPanel.number(float(u.get("dmg", 1))), "damage"],
+			[CodexPanel.RATE_ICON, CodexPanel.number(float(u.get("rate", 1.0))) + "/s", "rate"]]:
+		var pair := HBoxContainer.new()
+		pair.add_theme_constant_override("separation", 4)
+		pair.add_child(icon_safe(String(s[0]), 64))
+		pair.add_child(UiKit.label(String(s[1]), 56, Color.WHITE, 10))
+		StatTip.attach(pair, String(s[2]), ctx)
+		stats.add_child(pair)
 	for sp in CodexPanel.specials(u):
-		stats.add_child(icon_safe(sp, 64))
+		var spair := HBoxContainer.new()
+		spair.add_theme_constant_override("separation", 2)
+		spair.add_child(icon_safe(sp, 64))
+		var t := CodexPanel.special_text(sp, u)
+		if t != "":
+			spair.add_child(UiKit.label(t, 48, Color.WHITE, 10))
+		StatTip.attach(spair, String(CodexPanel.SPECIAL_TIPS.get(sp, sp)), ctx)
+		stats.add_child(spair)
 
 	var bottom := HBoxContainer.new()
 	bottom.alignment = BoxContainer.ALIGNMENT_CENTER
 	bottom.add_theme_constant_override("separation", 26)
 	bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(bottom)
-	var v := CodexPanel.value_text(allies, unit)
-	if v != "":
-		var vb := card_box(UiKit.YELLOW, 8, 22, 5)
-		var vr := HBoxContainer.new()
-		vr.add_theme_constant_override("separation", 6)
-		vr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		vb.add_child(vr)
-		vr.add_child(UiKit.label(v, 56, Color.WHITE, 10))
-		vr.add_child(CodexPanel.constable_ref(64))
-		bottom.add_child(vb)
+	var vb := CodexPanel.dps_box(float(ctx["dps"]), -1.0, 64)
+	StatTip.attach(vb, "power", ctx)
+	bottom.add_child(vb)
 	bottom.add_child(gate_icon(unit))
 
 	var go := UiKit.icon_button("play", "green", 140)

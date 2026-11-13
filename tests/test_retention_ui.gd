@@ -62,12 +62,21 @@ func test_codex_value_lines() -> void:
 		"commando": {"dmg": 2, "rate": 0.96, "splash": 5},
 		"odd": {"dmg": 1, "rate": 2.4},
 	}
-	eq(CodexPanel.value_text(stats, "constable"), "= 1", "constable is the unit")
-	eq(CodexPanel.value_text(stats, "sergeant"), "= 2", "double damage")
-	eq(CodexPanel.value_text(stats, "swat"), "= 4", "burst counts")
-	eq(CodexPanel.value_text(stats, "commando"), "= 6", "splash counts")
-	eq(CodexPanel.value_text(stats, "odd"), "= 1.5", "fractions keep one decimal")
-	eq(CodexPanel.value_text(stats, "hero"), "", "hero has no value line")
+	# Owner play-test 2026-11-13: the headline is one troop's firepower (damage x rate x enemies
+	# hit), the lightning unit of Squad Power; the old "= N constables" is the same ratio.
+	check(is_equal_approx(CodexPanel.troop_dps(stats, "constable"), 1.6), "constable: 1 x 1.6")
+	check(is_equal_approx(CodexPanel.troop_dps(stats, "sergeant"), 3.2), "double damage")
+	check(is_equal_approx(CodexPanel.troop_dps(stats, "swat"), 6.4), "burst counts")
+	check(is_equal_approx(CodexPanel.troop_dps(stats, "commando"), 9.6), "splash counts")
+	eq(CodexPanel.troop_dps(stats, "nobody"), 0.0, "unknown rank: 0")
+	check(is_equal_approx(CodexPanel.value_of(stats, "odd"), 1.5), "value_of is dps / constable dps")
+	eq(CodexPanel.special_text("bomb", stats["commando"]), "×5", "splash shows its x N")
+	eq(CodexPanel.special_text("gang_split", stats["swat"]), "×2", "burst shows its x N")
+	eq(CodexPanel.special_text("aim", stats["swat"]), "", "aim has no number")
+	# The lightning per troop adds up to Squad Power (hero + starting constables).
+	var allies0: Dictionary = Config.units()["allies"]
+	var sum := CodexPanel.troop_dps(allies0, "hero") + 2.0 * CodexPanel.troop_dps(allies0, "constable")
+	check(absf(Economy.squad_power({"squad": 2}) - sum) < 0.001, "hero + 2 constables = Squad Power")
 	eq(CodexPanel.specials({"pierce": true, "target": "toughest"}), ["aim", "armour_pierce"], "sniper specials")
 	eq(CodexPanel.unlock_level({"unlock": 21}), 21, "unlock level from config")
 	eq(CodexPanel.unlock_level({}), 1, "default unlock")

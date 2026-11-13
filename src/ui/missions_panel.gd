@@ -58,7 +58,10 @@ func _row(i: int, m: Dictionary) -> PanelContainer:
 	row.add_theme_constant_override("separation", 12)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(row)
-	var ic := icon_safe(String(m.get("icon", "star_icon")), 104)
+	# The kill mission showed a fist-bump that read as "join" (owner play-test 2026-11-13); saves
+	# from before keep "fist" in today's list, so it is drawn as the defeated-gang skull too.
+	var mi := String(m.get("icon", "star_icon"))
+	var ic := icon_safe("gang_split" if mi == "fist" else mi, 104)
 	row.add_child(ic)
 	var mid := VBoxContainer.new()
 	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL

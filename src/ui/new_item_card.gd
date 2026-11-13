@@ -235,7 +235,8 @@ func _fill(fx: Array) -> void:
 
 
 ## The effect row for `id`: [{icon, text}], numbers read from the bound object `obj`, then
-## config/units.json, then the Codex value with `stats` (the level's upgraded stats).
+## config/units.json, then the Codex value with `stats` (the level's upgraded stats): "value.<rank>"
+## = worth N constables, "dps.<rank>" = one troop's lightning firepower (the Codex headline).
 static func effects(id: String, obj: Dictionary, stats: Dictionary) -> Array:
 	var out: Array = []
 	for e in item(id).get("effects", []):
@@ -262,6 +263,9 @@ static func effects(id: String, obj: Dictionary, stats: Dictionary) -> Array:
 				"value":
 					var s: Dictionary = stats if stats.has(parts[1]) else Game.units.get("allies", {})
 					v = CodexPanel.number(CodexPanel.value_of(s, parts[1]))
+				"dps":
+					var s2: Dictionary = stats if stats.has(parts[1]) else Game.upgraded_allies()
+					v = Economy.fmt_power(CodexPanel.troop_dps(s2, parts[1]))
 			if v != null:
 				if fmt.contains("%d"):
 					v = int(round(float(v)))

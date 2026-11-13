@@ -7,6 +7,11 @@ extends Control
 ## evolves the weapon: the evolve celebration flashes, swaps in the new tier's art with sparks
 ## and pops the new name. A locked card is greyed with a lock and level pin + unlock level.
 ## Squad Power pill counts up after a buy (weapons add power; Bottle Shot handling does not).
+## Owner play-test 2026-11-13: a squad weapon's first row is the lightning firepower of ONE troop
+## carrying it (damage × rate × enemies hit, now ▸ next), then damage per hit (the bullet-into-
+## burst icon) and rate "/s"; a badge on the art shows who carries it (the rank's portrait, the
+## hero's cap for knives, a bottle for the Bottle Shot weapons); every stat icon explains itself
+## on a tap (StatTip), and after a buy the new numbers flash.
 ## Frees itself on close and emits `closed`. focus_id (set before adding) scrolls to and
 ## flashes that card (the loss tip). Icons and numbers only; weapon names and calibres are
 ## the spec's exception.
@@ -31,11 +36,13 @@ const FALLBACK := {
 ## Stat rows: icon, and whether a smaller number is better. Squad weapons show dmg and rate;
 ## Bottle Shot weapons their handling keys from finale.json (key without _add / _mult).
 const STATS := {
-	"dmg": ["fist", false], "rate": ["fire_rate", false], "mag": ["pistol", false],
+	"dps": ["power", false], "dmg": ["damage", false], "rate": ["fire_rate", false], "mag": ["pistol", false],
 	"reload_s": ["clock", true], "draw_s": ["clock", true], "cycle_s": ["clock", true],
 	"kick_deg": ["aim", true], "shake_deg": ["aim", true], "sway_deg": ["aim", true],
 	"steady_s": ["shield", false], "swipe_fast": ["swipe", true], "ricochet_len": ["broken_bottle", false],
 }
+## StatTip key of each squad stat row (a Bottle Shot handling row shows its first ▸ last value).
+const TIPS := {"dps": "power", "dmg": "damage", "rate": "rate"}
 const TIER_TINT := [Color("8a94a6"), Color("4f8de0"), Color("f2b73a"), Color("ffd75a")]
 const BAR_W := 104.0
 
@@ -55,6 +62,7 @@ func _ready() -> void:
 	p.offset_bottom = 600
 	p.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	add_child(p)
+	UiKit.fit_center(p, 600)  # clear of a notch / gesture bar on short screens
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 12)
 	p.add_child(col)
@@ -132,6 +140,7 @@ func _card(id: String) -> Control:
 	art.pivot_offset = art.size * 0.5
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art_box.add_child(art)
+	art_box.add_child(user_badge(id, 60))   # who carries it
 	var tiers := HBoxContainer.new()
 	tiers.alignment = BoxContainer.ALIGNMENT_CENTER
 	tiers.add_theme_constant_override("separation", 6)
@@ -163,7 +172,9 @@ func _card(id: String) -> Control:
 		var srow := HBoxContainer.new()
 		srow.add_theme_constant_override("separation", 6)
 		mid.add_child(srow)
-		srow.add_child(RetentionPanel.icon_safe(String(STATS.get(key, ["star_icon"])[0]), 34))
+		var sic := RetentionPanel.icon_safe(String(STATS.get(key, ["star_icon"])[0]), 34)
+		srow.add_child(sic)
+		StatTip.attach(sic, String(TIPS.get(key, STATS.get(key, ["star_icon"])[0])), tip_ctx.bind(id, String(key)))
 		var bar := Control.new()
 		bar.custom_minimum_size = Vector2(BAR_W, 20)
 		bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -181,12 +192,12 @@ func _card(id: String) -> Control:
 		fill.add_theme_stylebox_override("panel", UiKit.flat_box(UiKit.GREEN, 8, 3))
 		bar.add_child(fill)
 		srow.add_child(bar)
-		var txt := UiKit.label("", 24, Color.WHITE, 7)
+		var txt := UiKit.label("", 28 if key == "dps" else 24, Color.WHITE, 7)
 		srow.add_child(txt)
 		var arrow := RetentionPanel.icon_safe("play", 20, UiKit.YELLOW)
 		arrow.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		srow.add_child(arrow)
-		var nxt := UiKit.label("", 24, UiKit.YELLOW, 7)
+		var nxt := UiKit.label("", 28 if key == "dps" else 24, UiKit.YELLOW, 7)
 		srow.add_child(nxt)
 		stats.append({"key": key, "fill": fill, "ghost": ghost, "text": txt, "arrow": arrow, "next": nxt})
 	var pips := HBoxContainer.new()
@@ -239,10 +250,11 @@ func _card(id: String) -> Control:
 	return card
 
 
-## Stat rows a track shows: dmg and rate for squad weapons, else its handling keys (up to 3).
+## Stat rows a track shows: one troop's firepower, dmg and rate for squad weapons, else its
+## handling keys (up to 3).
 static func stat_keys(id: String) -> Array:
 	if not Armory.is_finale(id):
-		return ["dmg", "rate"]
+		return ["dps", "dmg", "rate"]
 	var out := []
 	for k in Armory.tier_info(id, Armory.tier_count(id)).get("extra", {}):
 		var key := String(k).trim_suffix("_add").trim_suffix("_mult")
@@ -256,6 +268,11 @@ static func stat_keys(id: String) -> Array:
 ## (finale.json base, plus _add or times _mult).
 static func stat_value(id: String, key: String, s: Dictionary) -> float:
 	var owner := String(Armory.track(id).get("owner", ""))
+	if key == "dps":
+		var u2: Dictionary = Config.units()["allies"].get(owner, {}).duplicate()
+		u2["dmg"] = float(u2.get("dmg", 1)) * float(s.get("dmg_mult", 1.0))
+		u2["rate"] = float(u2.get("rate", 1.0)) * float(s.get("rate_mult", 1.0))
+		return CodexPanel.troop_dps({owner: u2}, owner)
 	if key == "dmg" or key == "rate":
 		var u: Dictionary = Config.units()["allies"].get(owner, {})
 		return float(u.get(key, 1.0)) * float(s.get(key + "_mult", 1.0))
@@ -276,6 +293,52 @@ static func _finale_cfg() -> Dictionary:
 	if _finale.is_empty():
 		_finale = Config.load_json("res://config/finale.json")
 	return _finale
+
+
+## A stat row's text: firepower as Squad Power prints it, the rate with "/s".
+static func stat_text(id: String, key: String, s: Dictionary) -> String:
+	var v := stat_value(id, key, s)
+	match key:
+		"dps":
+			return Economy.fmt_power(v)
+		"rate":
+			return fmt(v) + "/s"
+	return fmt(v)
+
+
+## The numbers a stat row's tip shows, read when tapped (they change with every buy).
+static func tip_ctx(id: String, key: String) -> Dictionary:
+	var s := Armory.stats(Game.save, id)
+	if Armory.is_finale(id):
+		var top := Armory.at_index(id, Armory.total_buys(id))
+		return {"now": stat_text(id, key, s), "lo": stat_text(id, key, Armory.stats_at(id, 1, 0)),
+			"hi": stat_text(id, key, Armory.stats_at(id, top.x, top.y))}
+	var owner := String(Armory.track(id).get("owner", ""))
+	var u: Dictionary = Config.units()["allies"].get(owner, {})
+	return {"dmg": stat_value(id, "dmg", s), "rate": stat_value(id, "rate", s), "hits": CodexPanel.hits_of(u),
+		"dps": stat_value(id, "dps", s)}
+
+
+## Who carries a track: the rank's portrait (the hero's cap for knives) or, for a Bottle Shot
+## weapon, the bottle; on a small round badge over the art's corner.
+static func user_icon(id: String) -> String:
+	if Armory.is_finale(id):
+		return "bottle"
+	return CodexPanel.rank_icon(String(Armory.track(id).get("owner", "constable")))
+
+
+static func user_badge(id: String, px: int) -> Control:
+	var b := Panel.new()
+	b.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.size = Vector2(px, px)
+	b.position = Vector2(-10, -10)
+	b.add_theme_stylebox_override("panel", UiKit.flat_box(UiKit.CREAM, px / 2, 4))
+	var ic := RetentionPanel.icon_safe(user_icon(id), px - 8)
+	ic.position = Vector2(4, 4)
+	ic.size = Vector2(px - 8, px - 8)
+	b.add_child(ic)
+	b.name = "User"
+	return b
 
 
 static func fmt(v: float) -> String:
@@ -314,15 +377,16 @@ static func art_icon(id: String, size := 84) -> TextureRect:
 	return t
 
 
-## A track's headline number after `i` purchases: a squad weapon's dps per troop as a percent of
-## tier 1 (100%, 106%...), a Bottle Shot weapon's first handling value.
+## A track's headline number after `i` purchases: a squad weapon's lightning firepower per troop
+## (the Armory card's first row and the Codex headline; was a percent of tier 1 until the owner
+## play-test 2026-11-13), a Bottle Shot weapon's first handling value.
 static func index_text(id: String, i: int) -> String:
 	if Armory.track(id).is_empty():
 		return str(i)
 	var l := Armory.at_index(id, i)
 	var s := Armory.stats_at(id, l.x, l.y)
 	if not Armory.is_finale(id):
-		return "%d%%" % int(round(float(s["dmg_mult"]) * float(s["rate_mult"]) * 100.0))
+		return stat_text(id, "dps", s)
 	return fmt(stat_value(id, String(stat_keys(id)[0]), s))
 
 
@@ -358,8 +422,8 @@ func refresh() -> void:
 			(st["fill"] as Control).size.x = f
 			var g := f if nx.is_empty() else stat_fill(id, key, nx) * BAR_W
 			(st["ghost"] as Control).size.x = g
-			(st["text"] as Label).text = fmt(stat_value(id, key, s))
-			(st["next"] as Label).text = "" if nx.is_empty() else fmt(stat_value(id, key, nx))
+			(st["text"] as Label).text = stat_text(id, key, s)
+			(st["next"] as Label).text = "" if nx.is_empty() else stat_text(id, key, nx)
 			(st["arrow"] as Control).visible = not nx.is_empty()
 		var maxed := Armory.is_maxed(Game.save, id)
 		var per := Armory.steps_per_tier(id)
@@ -436,6 +500,7 @@ func buy(id: String) -> void:
 		_evolve(id)
 	else:
 		UiKit.pop(_cards[id]["card"], 0.9)
+	_flash_stats(id)
 	if absf(after - before) >= 0.05:
 		_power_delta.add(after - before)
 	if after >= before + 0.05:
@@ -488,6 +553,15 @@ func _evolve(id: String) -> void:
 		t3.tween_property(ray, "rotation", ray.rotation + 0.8, 0.7)
 		t3.tween_property(ray, "modulate:a", 0.0, 0.7)
 		t3.chain().tween_callback(ray.queue_free)
+
+
+## After a buy the new "now" numbers flash green and bump: what the coins just bought.
+func _flash_stats(id: String) -> void:
+	for st in _cards[id]["stats"]:
+		var l: Label = st["text"]
+		l.modulate = Color(0.5, 2.0, 0.5)
+		l.create_tween().tween_property(l, "modulate", Color.WHITE, 0.9)
+		UiKit.bump(l, 1.25)
 
 
 func _float_gain(id: String, n: float) -> void:

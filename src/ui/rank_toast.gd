@@ -2,7 +2,8 @@ class_name RankToast
 extends RefCounted
 ## Corner card when a rank joins the squad for the first time (sim event rank_join with
 ## first_time): slides in at the top left, holds, slides out; 2.5 s in all (config-free UI
-## timing). Icon + name + damage + rate + "= N" value line, the same numbers as the Codex.
+## timing). Icon + name + damage + rate /s + the lightning firepower of one troop, the same
+## numbers as the Codex (owner play-test 2026-11-13: no more "= N" constables line).
 ## Never takes taps (the level keeps playing under it). RankToast is only the factory (a
 ## static show() cannot live on a CanvasItem, which has its own show()); the card is a
 ## PanelContainer that frees itself.
@@ -17,7 +18,7 @@ const WIDTH := 430.0
 static func show(parent: Node, unit: String) -> PanelContainer:
 	if parent == null or not is_instance_valid(parent):
 		return null
-	var allies: Dictionary = Game.units.get("allies", {})
+	var allies: Dictionary = Game.upgraded_allies()
 	if not allies.has(unit):
 		return null
 	var t := build(unit, allies[unit], allies)
@@ -51,16 +52,20 @@ static func build(unit: String, u: Dictionary, allies: Dictionary) -> PanelConta
 	stats.add_theme_constant_override("separation", 8)
 	stats.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(stats)
-	for s in [["fist", CodexPanel.number(float(u.get("dmg", 1)))], [CodexPanel.RATE_ICON, CodexPanel.number(float(u.get("rate", 1.0)))]]:
+	for s in [[CodexPanel.DMG_ICON, CodexPanel.number(float(u.get("dmg", 1)))], [CodexPanel.RATE_ICON, CodexPanel.number(float(u.get("rate", 1.0))) + "/s"]]:
 		stats.add_child(RetentionPanel.icon_safe(String(s[0]), 40))
 		stats.add_child(UiKit.label(String(s[1]), 34, Color.WHITE, 8))
 	for sp in CodexPanel.specials(u):
 		stats.add_child(RetentionPanel.icon_safe(sp, 40))
-	var v := CodexPanel.value_text(allies, unit)
-	if v != "":
-		var l := UiKit.label(v, 40, Color.WHITE, 9)
-		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		col.add_child(l)
+		if CodexPanel.special_text(sp, u) != "":
+			stats.add_child(UiKit.label(CodexPanel.special_text(sp, u), 30, Color.WHITE, 8))
+	# One troop's firepower, the lightning of Squad Power and the HUD.
+	var pw := HBoxContainer.new()
+	pw.add_theme_constant_override("separation", 2)
+	pw.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pw.add_child(RetentionPanel.icon_safe("power", 44))
+	pw.add_child(UiKit.label(Economy.fmt_power(CodexPanel.troop_dps(allies, unit)), 40, UiKit.YELLOW, 9))
+	col.add_child(pw)
 	return card
 
 

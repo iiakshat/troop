@@ -24,8 +24,12 @@ extends Node
 ##   compiled, events; the worst level frames are printed when the level ends; perf=path)
 ##   boot=1 (play the brand boot screens even with debug args; boot=0 skips them)
 ##   shield_at=N (press the shield at frame N, with a charge if the squad has none: screenshots)
+##   safe_top=N safe_bottom=N (pretend the phone has a notch / gesture bar N UI px high: the
+##         layout under a cut-out, on a PC)
 ##   panel=station|armory|style|settings|daily|missions|spin|codex|booster|chest|welcome|revive|
 ##         liberation|map   (open that screen over the map; map = the map alone)
+##   panel=rank unit=sergeant (the New Rank card)  tab=enemies (panel=codex: that tab)  tip=<stat key> tip_n=N (tap the N-th stat icon with that
+##         StatTip key after 0.8 s: damage, rate, power, pierce, splash, melee...)
 ## Autoplay skips boosters, the revive offer, the ad popups and the tutorials.
 
 var world: World
@@ -82,6 +86,9 @@ func _ready() -> void:
 		Game.set_meta("debug_save", true)
 	if _args.has("reset") or _args.has("real_reset"):
 		Game.reset_progress()
+	if _args.has("safe_top") or _args.has("safe_bottom"):
+		UiKit.debug_safe = Vector2(float(_args.get("safe_top", "0")), float(_args.get("safe_bottom", "0")))
+		_fake_cutout(UiKit.debug_safe.x)
 	if _args.has("coins"):
 		Game.save["coins"] = int(_args["coins"])
 		Game.save["unlocked"] = Config.LEVEL_COUNT
@@ -295,7 +302,11 @@ func _debug_panel(name: String) -> void:
 		"spin":
 			lobby.open_panel(SpinPanel.new())
 		"codex":
-			lobby.open_panel(CodexPanel.new())
+			var cp := CodexPanel.new()
+			cp.start_tab = String(_args.get("tab", "ranks"))
+			lobby.open_panel(cp)
+		"rank":
+			lobby.open_panel(RankUnlockPanel.new(String(_args.get("unit", "sergeant"))))
 		"booster":
 			_open_boosters(lv)
 		"chest":
@@ -314,6 +325,25 @@ func _debug_panel(name: String) -> void:
 			Ads.show_interstitial("between_levels")
 		"map", _:
 			pass
+	if _args.has("tip"):
+		_after(0.8, _debug_tip.bind(String(_args["tip"]), int(_args.get("tip_n", "0"))))
+
+
+## tip=<stat key> [tip_n=N]: taps the N-th stat icon with that StatTip key on the open panel.
+func _debug_tip(key: String, nth: int) -> void:
+	var found: Array = []
+	for c in lobby.find_children("*", "Control", true, false):
+		if String((c as Control).get_meta("stat_tip", "")) == key:
+			found.append(c)
+	if nth >= found.size():
+		return
+	var c: Control = found[nth]
+	for down in [true, false]:
+		var ev := InputEventMouseButton.new()
+		ev.button_index = MOUSE_BUTTON_LEFT
+		ev.pressed = down
+		ev.position = c.size * 0.5
+		c.gui_input.emit(ev)
 
 
 ## Boosters before a level (skipped under autoplay). Over the result screen for Retry.
@@ -802,3 +832,20 @@ func _exit_tree() -> void:
 		if not _perf_done:
 			_perf_report()
 		_perf.close()
+
+
+## safe_top=N: a punch-hole camera drawn over everything in the middle of the fake cut-out, so a
+## PC screenshot shows what sits under it.
+func _fake_cutout(inset: float) -> void:
+	if inset <= 0.0:
+		return
+	var layer := CanvasLayer.new()
+	layer.layer = 120
+	add_child(layer)
+	var hole := Control.new()
+	hole.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	UiKit.full_rect(hole)
+	hole.draw.connect(func():
+		var w := hole.get_viewport_rect().size.x
+		hole.draw_circle(Vector2(w * 0.5, inset * 0.5), minf(inset * 0.28, 22.0), Color.BLACK))
+	layer.add_child(hole)

@@ -1,14 +1,21 @@
 class_name CodexPanel
 extends RetentionPanel
 ## Codex: two tabs (ranks / enemies) of cards built from config/units.json, so the numbers are
-## always the real ones. Rank card: icon, name (1-3 words, the Codex allows it), damage, rate,
-## a special icon (pierces armour, burst, splash, picks the toughest) and the value line
-## "= N" (DPS relative to a constable: Squad.value_vs_constable when the sim has it, else the
-## same nominal formula here). Ranks not unlocked yet are dark with a lock, the district and the
-## level that unlocks them. Enemy card: icon, name, hp, armour, speed, its threat icon and
-## melee power. Enemies you have not reached yet are hidden behind a lock too.
+## always the real ones. Rank card: see the 2026-11-13 note below (value_of, the old "= N"
+## constables, still sorts the cards: it is the same firepower relative to a constable). Ranks
+## not unlocked yet are dark with a lock and the level that unlocks them. Enemy card: icon,
+## name, hp, speed, troops one takes in a clash (-N and the troop figure), its threat icons.
+## Enemies you have not reached yet are hidden behind a lock too.
 ## v1.1: rank cards are sorted by their "= N" value (hero first), and every screen that shows a
 ## rank (Codex, RankToast, New Rank card, gates) uses rank_icon() so the icons match.
+## Owner play-test 2026-11-13 ("the characters' power is unclear, what weapon, why a join
+## symbol and 16?"): a rank card is now portrait + its weapon (the Armory art of its track, drawn
+## big) + name, damage per hit (DMG_ICON, a bullet into an impact burst, never the fist-bump)
+## and rate "/s", its specials with their "×N", and ONE headline on the right: the lightning
+## firepower of one troop (troop_dps: damage × rate × enemies hit, the same unit as Squad
+## Power), with a bar against the strongest rank so the order reads at a glance. All numbers are
+## the player's upgraded ones (units.json × Armory). Every stat icon explains itself on a tap
+## (StatTip). The "= N constables" box is gone (the lightning already ranks them).
 
 ## Preferred icons per rank, first that exists wins (the v1.1 headgear set first).
 const RANK_ICONS := {
@@ -23,28 +30,101 @@ const RANK_WEAPONS := {
 	"swat": "smg", "sniper": "sniper", "commando": "weapon_launcher",
 }
 const RATE_ICON := "fire_rate"     ## shots per second (the sneaker stays for enemy speed)
+const DMG_ICON := "damage"         ## damage per hit: a bullet into an impact burst
 const PIERCE_ICON := "armour_pierce"
+## StatTip key of each special icon.
+const SPECIAL_TIPS := {"aim": "toughest", "armour_pierce": "pierce", "gang_split": "burst", "bomb": "splash"}
+## StatTip key of each enemy threat icon.
+const THREAT_TIPS := {"boss_crown": "boss_crown", "fire": "fire", "aim": "shooter", "pistol": "shooter",
+	"armour": "armour", "riot": "riot"}
 
 
 static func weapon_icon(id: String) -> String:
 	return String(RANK_WEAPONS.get(id, ""))
 
 
-## "= N constables": a plain figure plus a pistol, so it never reads as the rank's own cap.
-static func constable_ref(px: int) -> Control:
-	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", -int(px * 0.3))
-	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	h.add_child(icon_safe("person", px, Color("1d2b55")))
-	var g := icon_safe("pistol", int(px * 0.7))
-	g.size_flags_vertical = Control.SIZE_SHRINK_END
-	h.add_child(g)
-	return h
+## Firepower of ONE troop of `rank` with stats `stats` (the lightning unit of Squad Power and the
+## HUD): damage × rate × enemies one shot hits (burst, splash), vs a plain crowd.
+static func troop_dps(stats: Dictionary, rank: String) -> float:
+	if not stats.has(rank):
+		return 0.0
+	return Squad.hit_value(stats[rank], 0, 1.0, 1 << 30, true)
+
+
+## Enemies one shot of `u` hits at best (burst × splash), 1 for a plain gun.
+static func hits_of(u: Dictionary) -> float:
+	return maxf(float(u.get("multi", 1)) * float(u.get("splash", 1)), 1.0)
+
+
+## The numbers a rank's tips use: {dmg, rate, hits, dps}.
+static func tip_ctx(stats: Dictionary, rank: String) -> Dictionary:
+	var u: Dictionary = stats.get(rank, {})
+	return {"dmg": float(u.get("dmg", 1)), "rate": float(u.get("rate", 1.0)), "hits": hits_of(u),
+		"dps": troop_dps(stats, rank)}
+
+
+## The "×N" a special icon carries (burst and splash), else "".
+static func special_text(icon_name: String, u: Dictionary) -> String:
+	match icon_name:
+		"gang_split":
+			return "×" + number(float(u.get("multi", 1)))
+		"bomb":
+			return "×" + number(float(u.get("splash", 1)))
+	return ""
+
+
+## The weapon a rank carries, drawn big: the current tier's Armory art of its track (so an
+## upgrade that evolves it shows here too), else the plain weapon icon.
+static func weapon_art(rank: String, px: int) -> TextureRect:
+	var track := Armory.track_of(rank)
+	if track != "":
+		return ArmoryPanel.art_icon(track, px)
+	return icon_safe(weapon_icon(rank) if weapon_icon(rank) != "" else "pistol", px)
+
+
+## The lightning headline: icon + one troop's firepower, a bar against the strongest (0..1).
+static func dps_box(dps: float, fill: float, px := 44) -> PanelContainer:
+	var vb := card_box(UiKit.YELLOW, 6, 18, 4)
+	vb.custom_minimum_size = Vector2(px * 3.3, 0)
+	var col := VBoxContainer.new()
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 2)
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.add_child(col)
+	var r := HBoxContainer.new()
+	r.alignment = BoxContainer.ALIGNMENT_CENTER
+	r.add_theme_constant_override("separation", 0)
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(r)
+	r.add_child(icon_safe("power", px))
+	var l := UiKit.label(Economy.fmt_power(dps), int(px * 0.95), Color.WHITE, 9)
+	l.name = "Dps"
+	r.add_child(l)
+	if fill >= 0.0:
+		var bar := Control.new()
+		bar.custom_minimum_size = Vector2(px * 2.6, 14)
+		bar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var bg := Panel.new()
+		bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bg.add_theme_stylebox_override("panel", UiKit.flat_box(Color(0, 0, 0, 0.35), 7, 3))
+		UiKit.full_rect(bg)
+		bar.add_child(bg)
+		var fl := Panel.new()
+		fl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		fl.add_theme_stylebox_override("panel", UiKit.flat_box(Color("ff8a1f"), 7, 3))
+		fl.anchor_bottom = 1.0
+		fl.anchor_right = clampf(fill, 0.08, 1.0)
+		bar.add_child(fl)
+		col.add_child(bar)
+	return vb
+
 
 var start_tab := "ranks"
 var _tab := ""
 var _list: VBoxContainer
 var _tabs := {}
+var _dps: Dictionary = {}   # rank -> its lightning label (tests)
 
 
 func _ready() -> void:
@@ -82,11 +162,16 @@ func _show_tab(t: String) -> void:
 			b.add_theme_stylebox_override(st, UiKit._tex_box(colr, "square"))
 	for c in _list.get_children():
 		c.queue_free()
+	_dps.clear()
 	if t == "ranks":
 		# v2 rule 6: values and numbers compare the player's upgraded stats (Armory).
 		var allies: Dictionary = Game.upgraded_allies()
+		var top := 0.0
+		for id in allies:
+			if not _locked(allies[id], String(id), true):
+				top = maxf(top, troop_dps(allies, String(id)))
 		for id in ranks_by_value(allies):
-			_list.add_child(_rank_card(String(id), allies[id]))
+			_list.add_child(_rank_card(String(id), allies, top))
 	else:
 		var enemies: Dictionary = Game.units.get("enemies", {})
 		for id in enemies:
@@ -134,16 +219,6 @@ static func value_of(stats: Dictionary, rank: String) -> float:
 static func _nominal(u: Dictionary) -> float:
 	var hits := maxf(float(u.get("multi", 1)) * float(u.get("splash", 1)), 1.0)
 	return float(u.get("dmg", 1)) * float(u.get("rate", 1.0)) * hits
-
-
-## "= 4", "= 2.5" (value line text). Hero has none.
-static func value_text(stats: Dictionary, rank: String) -> String:
-	if rank == "hero":
-		return ""
-	var v := value_of(stats, rank)
-	if absf(v - round(v)) < 0.05:
-		return "= %d" % int(round(v))
-	return "= %.1f" % v
 
 
 ## Level that unlocks a unit (units.json "unlock", default 1).
@@ -203,48 +278,77 @@ func _base_card(locked: bool) -> Array:
 	return [card, row]
 
 
-func _rank_card(id: String, u: Dictionary) -> Control:
+## A rank card: portrait, its weapon big, name / damage and rate / specials, and the lightning
+## firepower of one troop with a bar against the strongest rank (`top`).
+func _rank_card(id: String, allies: Dictionary, top: float) -> Control:
+	var u: Dictionary = allies[id]
 	var locked := _locked(u, id, true)
 	var parts := _base_card(locked)
 	var row: HBoxContainer = parts[1]
-	var ic := icon_safe(rank_icon(id), 104)
+	row.add_theme_constant_override("separation", 6)
+	(parts[0] as Control).custom_minimum_size.y = 136   # one even row height, locked or not
+	var ic := icon_safe(rank_icon(id), 84)
+	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var wp := weapon_art(id, 96)
+	wp.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	if locked:
 		ic.modulate = Color(0, 0, 0, 0.85)
+		wp.modulate = Color(0, 0, 0, 0.6)
 	row.add_child(ic)
+	row.add_child(wp)
 	var mid := VBoxContainer.new()
 	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mid.alignment = BoxContainer.ALIGNMENT_CENTER
-	mid.add_theme_constant_override("separation", 0)
+	mid.add_theme_constant_override("separation", 2)
 	mid.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(mid)
-	var title := UiKit.label(String(u.get("name", id.capitalize())).to_upper(), 36, UiKit.YELLOW if not locked else Color(1, 1, 1, 0.6), 9)
+	var title := UiKit.label(String(u.get("name", id.capitalize())).to_upper(), 32, UiKit.YELLOW if not locked else Color(1, 1, 1, 0.6), 9)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	title.clip_text = true
 	mid.add_child(title)
 	if locked:
 		mid.add_child(_lock_row(unlock_level(u)))
 		return parts[0]
+	var ctx := tip_ctx(allies, id)
 	var stats := HBoxContainer.new()
-	stats.add_theme_constant_override("separation", 8)
+	stats.add_theme_constant_override("separation", 10)
 	stats.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	mid.add_child(stats)
-	_stat(stats, "knife_power" if id == "hero" else "fist", number(float(u.get("dmg", 1))))
-	_stat(stats, RATE_ICON, number(float(u.get("rate", 1.0))))
-	if weapon_icon(id) != "":
-		stats.add_child(icon_safe(weapon_icon(id), 46))
-	for s in specials(u):
-		stats.add_child(icon_safe(s, 46))
-	var v := value_text(Game.units.get("allies", {}), id)
-	if v != "":
-		var vb := card_box(UiKit.YELLOW, 6, 18, 4)
-		vb.custom_minimum_size = Vector2(118, 0)
-		var vr := HBoxContainer.new()
-		vr.add_theme_constant_override("separation", 2)
-		vr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		vb.add_child(vr)
-		vr.add_child(UiKit.label(v, 40, Color.WHITE, 9))
-		vr.add_child(constable_ref(40))
-		row.add_child(vb)
+	_stat(stats, DMG_ICON, number(float(u.get("dmg", 1))), "damage", ctx)
+	_stat(stats, RATE_ICON, number(float(u.get("rate", 1.0))) + "/s", "rate", ctx)
+	var sp := specials(u)
+	if id == "hero":
+		sp.push_front("hand")   # tapping heats him up: the tip shows idle vs steady tapping
+	if not sp.is_empty():
+		var srow := HBoxContainer.new()
+		srow.add_theme_constant_override("separation", 10)
+		srow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		mid.add_child(srow)
+		for s in sp:
+			var key := "tap" if s == "hand" else String(SPECIAL_TIPS.get(s, s))
+			var tctx := ctx.duplicate()
+			if s == "hand":
+				tctx = hero_tap_ctx()
+			_stat(srow, String(s), special_text(String(s), u), key, tctx)
+	var box := dps_box(float(ctx["dps"]), float(ctx["dps"]) / top if top > 0.0 else 1.0)
+	box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	StatTip.attach(box, "power", ctx)
+	row.add_child(box)
+	_dps[id] = box.find_child("Dps", true, false)
 	return parts[0]
+
+
+## The lightning number on a rank's card as shown ("" when locked or not on screen; tests).
+func dps_text(rank: String) -> String:
+	var l: Variant = _dps.get(rank)
+	return (l as Label).text if l is Label and is_instance_valid(l) else ""
+
+
+## The hero's tap numbers for his tip: idle share of his rate and the taps/s that hold it full.
+static func hero_tap_ctx() -> Dictionary:
+	var tap: Dictionary = Game.units.get("hero", {}).get("tap", {})
+	var per := maxf(float(tap.get("per_tap", 0.3)) * float(tap.get("decay_s", 1.0)), 0.01)
+	return {"auto": float(tap.get("auto_rate", 0.4)), "taps": ceilf(1.0 / per)}
 
 
 func _enemy_card(id: String, u: Dictionary) -> Control:
@@ -273,23 +377,53 @@ func _enemy_card(id: String, u: Dictionary) -> Control:
 	stats.add_theme_constant_override("separation", 8)
 	stats.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	mid.add_child(stats)
-	_stat(stats, "heart", number(float(u.get("hp", 1))))
-	_stat(stats, "speed", number(float(u.get("speed", 1.0))))
+	_stat(stats, "heart", number(float(u.get("hp", 1))), "heart", {"v": float(u.get("hp", 1))})
+	_stat(stats, "speed", number(float(u.get("speed", 1.0))), "speed", {"v": float(u.get("speed", 1.0))})
 	var power := int(u.get("power", 1))
 	if power < 100:
-		_stat(stats, "fist", str(power))
+		# Troops one of them takes in a clash: the HUD's troop figure with a red minus.
+		_stat(stats, "person", "-%d" % power, "melee", {"v": power, "who": first_icon(names)}, UiKit.RED)
+	var tstats := HBoxContainer.new()
+	tstats.add_theme_constant_override("separation", 10)
+	tstats.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for s in threats(u):
-		stats.add_child(icon_safe(s, 46))
+		_stat(tstats, String(s), "", String(THREAT_TIPS.get(s, s)), threat_ctx(String(s), u))
+	if tstats.get_child_count() > 0:
+		mid.add_child(tstats)
+	else:
+		tstats.free()
 	return parts[0]
 
 
-func _stat(where: HBoxContainer, icon_name: String, text: String) -> void:
+## The number a threat's tip shows: troops a firebomb burns, a shot takes, riot-shield hp, boss hp.
+static func threat_ctx(icon_name: String, u: Dictionary) -> Dictionary:
+	match icon_name:
+		"fire":
+			return {"v": float(u.get("burn", 2))}
+		"aim", "pistol":
+			return {"v": float(u.get("shot_dmg", 1))}
+		"riot":
+			return {"v": float(u.get("shield", 4))}
+		"boss_crown":
+			return {"v": float(u.get("hp", 360))}
+		"armour":
+			return {"dmg": 4.0}
+	return {}
+
+
+## An icon + number pair; a tap on it explains it (StatTip `tip` with `ctx`).
+func _stat(where: HBoxContainer, icon_name: String, text: String, tip := "", ctx := {}, color := Color.WHITE) -> void:
 	var c := HBoxContainer.new()
 	c.add_theme_constant_override("separation", 2)
 	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	c.add_child(icon_safe(icon_name, 44))
-	c.add_child(UiKit.label(text, 36, Color.WHITE, 8))
+	c.add_child(icon_safe(icon_name, 42))
+	if text != "":
+		c.add_child(UiKit.label(text, 32, color, 8))
 	where.add_child(c)
+	if tip != "":
+		var tctx := ctx.duplicate()
+		tctx["icon"] = icon_name
+		StatTip.attach(c, tip, tctx)
 
 
 ## Lock + the level that unlocks it (no district number: on the Station, lock + N means
